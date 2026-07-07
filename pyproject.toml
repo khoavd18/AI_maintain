@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-maintenance-copilot"
+version = "0.1.0"
+description = "Predictive maintenance intelligence platform with a RAG-based technician assistant."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "streamlit>=1.36,<2.0",
+    "httpx>=0.27,<1.0",
+    "pandas>=2.2,<3.0",
+    "numpy>=1.26,<3.0",
+    "scikit-learn>=1.5,<2.0",
+    "sqlalchemy>=2.0,<3.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "qdrant-client>=1.10,<2.0",
+    "pydantic-settings>=2.4,<3.0",
+    "python-dotenv>=1.0,<2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2,<9.0",
+    "ruff>=0.5,<1.0",
+]
+rag = [
+    "sentence-transformers>=3.0,<4.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
