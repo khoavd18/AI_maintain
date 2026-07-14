@@ -37,5 +37,4 @@ flowchart LR
 
 ## Trạng Thái Triển Khai
 
-Các bước asset data, operational analysis, anomaly/risk calculation, manager prioritization và SOP retrieval đã có implementation chính. Upcoming schedule, recurring issue reporting, maintenance KPI và maintenance-result contract vẫn là future milestones trong phạm vi MVP.
-
+Các bước asset data, operational analysis, anomaly/risk calculation, preventive status, recurring issue calculation, KPI snapshot, manager prioritization và SOP retrieval đã có implementation chính. FastAPI và bốn Streamlit views phục vụ workflow manager; hệ thống vẫn chưa có production scheduler, authentication, audit logging hoặc deployment hardening.

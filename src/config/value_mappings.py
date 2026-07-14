@@ -77,6 +77,15 @@ MAINTENANCE_RESULT_VI_TO_CODE = {
     value: key for key, value in MAINTENANCE_RESULT_CODE_TO_VI.items()
 }
 
+MAINTENANCE_STATUS_CODE_TO_VI = {
+    "not_due": "Chưa đến hạn",
+    "due_soon": "Sắp đến hạn",
+    "overdue": "Quá hạn",
+}
+MAINTENANCE_STATUS_VI_TO_CODE = {
+    value: key for key, value in MAINTENANCE_STATUS_CODE_TO_VI.items()
+}
+
 DOCUMENT_TYPE_CODE_TO_VI = {
     "sop": "Quy trình vận hành chuẩn",
     "checklist": "Danh sách kiểm tra",

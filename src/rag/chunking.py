@@ -10,13 +10,15 @@ from typing import Iterable
 from src.rag.document_loader import MaintenanceDocument
 
 SECTION_MARKERS = [
+    "Phạm vi:",
+    "An toàn:",
     "Triệu chứng:",
     "Nguyên nhân có thể:",
     "Các bước kiểm tra:",
     "Hành động khuyến nghị:",
-    "Khi nào cần escalated:",
-    "Khi nào cần escalation:",
+    "Khi nào cần hỗ trợ chuyên môn:",
     "Khi nào cần chuyển cấp:",
+    "Giới hạn:",
 ]
 
 
@@ -31,17 +33,29 @@ class DocumentChunk:
     asset_type: str
     source: str
     text: str
+    failure_category: str = ""
+    version: str = "1.0"
+    effective_date: str = ""
+    chunk_index: int = 0
 
-    def to_payload(self) -> dict[str, str]:
+    def to_payload(self) -> dict[str, str | int]:
         """Return a Qdrant payload for this chunk."""
 
-        return asdict(self)
+        payload: dict[str, str | int] = asdict(self)
+        payload.update(
+            {
+                "document_id": self.doc_id,
+                "document_type": self.doc_type,
+                "content": self.text,
+            }
+        )
+        return payload
 
 
 def chunk_documents(
     documents: Iterable[MaintenanceDocument],
     max_chars: int = 800,
-    overlap: int = 120,
+    overlap: int = 80,
 ) -> list[DocumentChunk]:
     """Chunk all documents while preserving metadata."""
 
@@ -54,11 +68,11 @@ def chunk_documents(
 def chunk_document(
     document: MaintenanceDocument,
     max_chars: int = 800,
-    overlap: int = 120,
+    overlap: int = 80,
 ) -> list[DocumentChunk]:
     """Chunk one document using Vietnamese section markers with fallback splitting."""
 
-    sections = _split_by_section_markers(document.clean_text)
+    sections = _split_by_section_markers(document.content)
     text_chunks: list[str] = []
     for section in sections:
         text_chunks.extend(_split_long_text(section, max_chars=max_chars, overlap=overlap))
@@ -75,13 +89,17 @@ def chunk_document(
                 asset_type=document.asset_type,
                 source=document.source,
                 text=text,
+                failure_category=document.failure_category,
+                version=document.version,
+                effective_date=document.effective_date,
+                chunk_index=index,
             )
         )
     return chunks
 
 
 def _split_by_section_markers(text: str) -> list[str]:
-    normalized = " ".join(text.split())
+    normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip())
     if not normalized:
         return []
 
@@ -104,6 +122,10 @@ def _split_by_section_markers(text: str) -> list[str]:
 
 
 def _split_long_text(text: str, max_chars: int, overlap: int) -> list[str]:
+    if max_chars <= 0:
+        raise ValueError("max_chars must be greater than zero.")
+    if overlap < 0:
+        raise ValueError("overlap must not be negative.")
     if len(text) <= max_chars:
         return [text]
 

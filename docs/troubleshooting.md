@@ -1,80 +1,116 @@
-# Troubleshooting
+# Xử Lý Sự Cố
 
-## Qdrant Not Running
+## Qdrant Không Chạy Hoặc Không Kết Nối Được
 
-Symptoms:
+Dấu hiệu:
 
-- `make index-documents` fails with a Qdrant connection error.
-- `/copilot/ask` returns a service unavailable error mentioning Qdrant.
+- `make index-documents` báo lỗi kết nối Qdrant.
+- Copilot trả `retrieval_status=unavailable` và không có sources.
+- Dashboard hiển thị safe fallback nhưng các trang manager vẫn hoạt động.
 
-Fix:
+Cách xử lý:
 
 ```bash
 docker compose up -d qdrant
 ```
 
-Check Qdrant:
+Kiểm tra Qdrant:
 
 ```bash
 curl http://localhost:6333
 ```
 
-## sentence-transformers Not Installed
+Không cần khởi động PostgreSQL. `GET /health` chỉ phản ánh raw/analytics availability và không phụ thuộc Qdrant.
 
-Symptoms:
+## Collection Thiếu Hoặc Trống
 
-- `make index-documents` fails with a message saying `sentence-transformers is not installed`.
-- `make rag-query` or `/copilot/ask` cannot create the embedding provider.
+Dấu hiệu:
 
-Fix:
+- Copilot trả fallback vì collection chưa tồn tại hoặc không có active chunks.
+- Qdrant đang chạy nhưng `sources` và `retrieved_chunks` rỗng.
 
-```bash
-python -m pip install -e ".[dev,rag]"
-```
-
-The default model is `intfloat/multilingual-e5-small`. The first run may download model files.
-
-## Documents Not Indexed
-
-Symptoms:
-
-- The copilot answers that no SOP/checklist chunks were retrieved.
-- Qdrant is running, but sources are empty.
-
-Fix:
+Cách xử lý:
 
 ```bash
 make index-documents
 ```
 
-Then ask again:
+Default indexing report phải cho biết 6 documents, 30 chunks, collection `maintenance_knowledge`, embedding implementation và vector dimensions. Indexer luôn rebuild collection; chạy lại không tạo duplicate.
+
+## Vector Dimension Không Khớp
+
+Dấu hiệu:
+
+- Copilot yêu cầu index lại kho tài liệu sau khi đổi embedding model.
+- Index/search từ chối collection có vector size khác provider hiện tại.
+
+Cách xử lý:
+
+```bash
+make index-documents
+```
+
+Không sửa vector size trực tiếp. Full rebuild là synchronization path canonical của MVP.
+
+## sentence-transformers Chưa Được Cài Đặt
+
+Dấu hiệu:
+
+- `make index-documents` báo chưa cài `sentence-transformers`.
+- `make rag-query` hoặc `/copilot/ask` không khởi tạo được embedding provider.
+
+Cách xử lý:
+
+```bash
+python -m pip install -e ".[dev,rag]"
+```
+
+Default model là `intfloat/multilingual-e5-small`. Lần chạy đầu có thể tải model miễn phí. Unit tests dùng deterministic hash embeddings và không cần model download.
+
+## Copilot Trả Safe Fallback
+
+Dấu hiệu:
+
+- `retrieval_status` là `empty`, `low_relevance`, `unrelated`, `unsupported_asset_type` hoặc `missing_asset_context`.
+- Response không có sources và không tạo checklist chi tiết.
+
+Cách xử lý:
+
+- Chọn asset thuộc HVAC, pump hoặc generator.
+- Đặt câu hỏi bảo trì cụ thể, ví dụ `Máy bơm rung bất thường thì kiểm tra những bước nào?`.
+- Xác nhận `asset_type`, `document_type` và `failure_category` filters phù hợp.
+- Chạy lại `make index-documents` nếu source documents vừa thay đổi.
+
+Hỏi lại:
 
 ```bash
 make rag-query QUESTION="Vì sao GENERATOR_002 đang rủi ro cao?" ASSET_ID=GENERATOR_002
 ```
 
-## API Not Reachable From Dashboard
+Không hạ relevance threshold chỉ để buộc Copilot trả lời. Threshold `0.55` của sentence-transformer là safety gate MVP, chưa phải calibrated probability.
 
-Symptoms:
+## Dashboard Không Kết Nối Được API
 
-- Streamlit shows `Could not connect to FastAPI`.
-- Dashboard pages do not load data.
+Dấu hiệu:
 
-Fix:
+- Streamlit báo không kết nối được FastAPI.
+- Các trang dashboard không tải được dữ liệu.
 
-Start the API in one terminal:
+Cách xử lý:
+
+Khởi động API trong terminal thứ nhất:
 
 ```bash
 make run-api
 ```
 
-Start the dashboard in another terminal:
+Khởi động dashboard trong terminal thứ hai:
 
 ```bash
 make run-dashboard
 ```
 
-If the API is on another host or port, set `API_BASE_URL`:
+Nếu API dùng host hoặc port khác, cấu hình `API_BASE_URL`:
 
 ```bash
 API_BASE_URL=http://localhost:8000 make run-dashboard
@@ -87,16 +123,16 @@ $env:API_BASE_URL = "http://localhost:8000"
 make run-dashboard
 ```
 
-## Processed CSV Files Missing
+## Thiếu Processed CSV
 
-Symptoms:
+Dấu hiệu:
 
-- `/summary` returns a processed data file error.
-- Risk or anomaly dashboard tables are empty because files are missing.
+- `/summary` báo thiếu hoặc stale processed data.
+- Bảng risk/anomaly trống do thiếu file.
 
-Fix:
+Cách xử lý:
 
-Regenerate the pipeline:
+Chạy lại pipeline:
 
 ```bash
 make generate-data
@@ -105,20 +141,20 @@ make detect-anomalies
 make score-risk
 ```
 
-Expected outputs:
+Outputs cần có:
 
 - `data/processed/asset_daily_features.csv`
 - `data/processed/anomaly_results.csv`
 - `data/processed/risk_scores.csv`
 
-## Database Load Fails
+## Optional Database Load Bị Lỗi
 
-Symptoms:
+Dấu hiệu:
 
 - `make load-data` cannot connect to PostgreSQL.
 - Database connection errors mention localhost port `5432`.
 
-Fix:
+Cách xử lý:
 
 ```bash
 make services-up
@@ -126,16 +162,16 @@ make init-db
 make load-data
 ```
 
-For quick tests without PostgreSQL, the database scripts also support SQLite URLs:
+Để thử optional database path không cần PostgreSQL, scripts hỗ trợ SQLite URL:
 
 ```bash
 python -m src.database.init_db --database-url sqlite:///maintenance_demo.db --drop-existing
 python -m src.ingestion.load_data --database-url sqlite:///maintenance_demo.db --replace
 ```
 
-## Regenerate Data And Rerun The Primary CSV Pipeline
+## Chạy Lại Toàn Bộ Primary CSV Pipeline
 
-Use this when the raw or processed files are stale:
+Dùng khi raw hoặc processed files bị stale:
 
 ```bash
 make generate-data
@@ -146,7 +182,7 @@ docker compose up -d qdrant
 make index-documents
 ```
 
-PostgreSQL is optional and is not required for this primary pipeline. To test the experimental database-loading path separately, run:
+PostgreSQL là optional và không cần cho primary pipeline. Để thử experimental database path riêng:
 
 ```bash
 docker compose up -d postgres
@@ -154,23 +190,23 @@ make init-db
 make load-data
 ```
 
-Then run the app:
+Sau đó chạy ứng dụng:
 
 ```bash
 make run-api
 make run-dashboard
 ```
 
-## Ruff Or Pytest Failures
+## Ruff Hoặc Pytest Bị Lỗi
 
-Run:
+Chạy:
 
 ```bash
 make lint
 make test
 ```
 
-If failures reference missing optional RAG dependencies, install:
+Nếu lỗi liên quan optional RAG dependencies, cài:
 
 ```bash
 python -m pip install -e ".[dev,rag]"

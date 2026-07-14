@@ -52,19 +52,12 @@ Synthetic demo scope được khóa ở ba loại asset: `Máy lạnh` (HVAC), `
 - daily feature engineering;
 - canonical anomaly detection;
 - canonical explainable risk scoring;
-- CSV-backed FastAPI;
-- Streamlit risk/anomaly dashboard;
+- preventive maintenance status, recurring issue và maintenance KPI processed outputs;
+- CSV-backed FastAPI cho asset, ticket, logs và analytics workflow;
+- Streamlit manager dashboard với bốn views canonical;
 - Qdrant-based SOP/checklist retrieval và deterministic Copilot response.
 
-Thuộc phạm vi MVP nhưng chưa hoàn thiện trong behavior hiện tại:
-
-- asset/ticket/maintenance-log API views;
-- upcoming maintenance view;
-- recurring issue analysis;
-- maintenance-process KPI dashboard;
-- API/dashboard reporting riêng cho recurring issues và maintenance-process KPI.
-
-Các mục này là future milestones. Tài liệu không được mô tả chúng như capability đã chạy nếu code và test chưa tồn tại.
+Các production concerns ngoài behavior hiện tại gồm scheduler, authentication, audit logging, observability, deployment hardening và browser regression testing. Đây không phải current capabilities của portfolio MVP.
 
 ## Ngoài Phạm Vi
 

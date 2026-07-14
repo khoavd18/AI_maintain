@@ -64,6 +64,22 @@ def test_anomaly_results_have_required_columns(
 
     assert isinstance(results, pd.DataFrame)
     assert list(results.columns) == ANOMALY_OUTPUT_COLUMNS
+    assert (results["feature_date"] == results["date"]).all()
+    assert (results["anomalous_metrics"].astype(str).str.strip() != "").all()
+    assert (results["contributing_signals"].astype(str).str.strip() != "").all()
+    assert not results.duplicated(["asset_id", "feature_date"]).any()
+
+
+def test_anomaly_results_are_deterministic(
+    anomaly_fixture: dict[str, pd.DataFrame | Path],
+) -> None:
+    features = anomaly_fixture["features"]
+    assert isinstance(features, pd.DataFrame)
+
+    first = build_anomaly_results(features)
+    second = build_anomaly_results(features)
+
+    pd.testing.assert_frame_equal(first, second)
 
 
 def test_anomaly_score_bounds_and_boolean_flag(

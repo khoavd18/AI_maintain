@@ -29,6 +29,22 @@ def test_daily_feature_output_columns() -> None:
 
     assert list(features.columns) == FEATURE_COLUMNS
     assert len(features) == 12 * 10
+    assert not features.duplicated(["asset_id", "feature_date"]).any()
+
+
+def test_daily_feature_generation_is_deterministic() -> None:
+    dataset = generate_dataset(asset_count=9, days=8, seed=21)
+    arguments = {
+        "assets": dataset["assets"],
+        "sensor_readings": dataset["sensor_readings"],
+        "maintenance_tickets": dataset["maintenance_tickets"],
+        "maintenance_logs": dataset["maintenance_logs"],
+    }
+
+    first = build_daily_asset_features(**arguments)
+    second = build_daily_asset_features(**arguments)
+
+    pd.testing.assert_frame_equal(first, second)
 
 
 def test_rolling_energy_features_match_manual_calculation() -> None:
@@ -186,3 +202,33 @@ def test_missing_raw_pressure_preserves_downstream_feature_contract() -> None:
     )
 
     assert (features["pressure"] == 0.0).all()
+
+
+def test_point_in_time_ticket_and_follow_up_counts_do_not_use_future_records() -> None:
+    dataset = generate_dataset(asset_count=12, days=45, seed=21)
+    features = build_daily_asset_features(
+        assets=dataset["assets"],
+        sensor_readings=dataset["sensor_readings"],
+        maintenance_tickets=dataset["maintenance_tickets"],
+        maintenance_logs=dataset["maintenance_logs"],
+    )
+    tickets = dataset["maintenance_tickets"].copy()
+    tickets["created_at"] = pd.to_datetime(tickets["created_at"], utc=True).dt.tz_localize(None)
+    logs = dataset["maintenance_logs"].copy()
+    logs["maintenance_date"] = pd.to_datetime(logs["maintenance_date"])
+
+    for feature in features.itertuples(index=False):
+        feature_date = pd.Timestamp(feature.feature_date)
+        eligible_tickets = tickets[
+            (tickets["asset_id"] == feature.asset_id)
+            & (tickets["created_at"].dt.normalize() <= feature_date)
+        ]
+        category_counts = eligible_tickets.groupby("failure_category").size()
+        eligible_logs = logs[
+            (logs["asset_id"] == feature.asset_id)
+            & (logs["maintenance_date"] <= feature_date)
+        ]
+        assert feature.recurring_issue_count == int(category_counts.ge(3).sum())
+        assert feature.follow_up_required_count == int(
+            eligible_logs["follow_up_required"].astype(bool).sum()
+        )

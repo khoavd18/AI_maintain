@@ -7,11 +7,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from src.api.schemas import (
     AnomalyRecord,
     AssetContextResponse,
+    AssetDetailsResponse,
+    AssetOverviewRecord,
+    AssetRecord,
     CopilotAskRequest,
     CopilotAskResponse,
     HealthResponse,
+    MaintenanceKpiResponse,
+    MaintenanceLogRecord,
+    PreventiveMaintenanceRecord,
+    RecurringIssueRecord,
     RiskRecord,
     SummaryResponse,
+    TicketRecord,
 )
 from src.api.services import (
     AssetNotFoundError,
@@ -39,10 +47,10 @@ CopilotDependency = Annotated[MaintenanceCopilot, Depends(_copilot_service)]
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])
-def health() -> HealthResponse:
+def health(service: ServiceDependency) -> dict[str, object]:
     """Return API health."""
 
-    return HealthResponse(status="ok")
+    return service.get_health()
 
 
 @router.get("/summary", response_model=SummaryResponse, tags=["maintenance"])
@@ -126,6 +134,148 @@ def asset_context(asset_id: str, service: ServiceDependency) -> dict[str, object
     return _handle_service_errors(service.get_asset_context, asset_id=asset_id)
 
 
+@router.get("/assets", response_model=list[AssetOverviewRecord], tags=["assets"])
+def list_assets(
+    service: ServiceDependency,
+    asset_type: str | None = None,
+    location: str | None = None,
+    criticality: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, object]]:
+    """List asset master rows enriched with latest maintenance signals."""
+
+    return _handle_service_errors(
+        service.list_assets,
+        asset_type=asset_type,
+        location=location,
+        criticality=criticality,
+        status=status,
+    )
+
+
+@router.get(
+    "/assets/{asset_id}/details",
+    response_model=AssetDetailsResponse,
+    tags=["assets"],
+)
+def asset_details(
+    asset_id: str,
+    service: ServiceDependency,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> dict[str, object]:
+    """Return one consolidated manager-facing asset view."""
+
+    return _handle_service_errors(
+        service.get_asset_details,
+        asset_id=asset_id,
+        limit=limit,
+    )
+
+
+@router.get("/assets/{asset_id}", response_model=AssetRecord, tags=["assets"])
+def asset_master_record(asset_id: str, service: ServiceDependency) -> dict[str, object]:
+    """Return one raw asset master record."""
+
+    return _handle_service_errors(service.get_asset, asset_id=asset_id)
+
+
+@router.get(
+    "/maintenance/preventive",
+    response_model=list[PreventiveMaintenanceRecord],
+    tags=["maintenance"],
+)
+def preventive_maintenance(
+    service: ServiceDependency,
+    maintenance_status: str | None = None,
+    asset_type: str | None = None,
+    criticality: str | None = None,
+) -> list[dict[str, object]]:
+    """List current preventive maintenance status rows."""
+
+    return _handle_service_errors(
+        service.list_preventive_maintenance,
+        maintenance_status=maintenance_status,
+        asset_type=asset_type,
+        criticality=criticality,
+    )
+
+
+@router.get(
+    "/maintenance/recurring-issues",
+    response_model=list[RecurringIssueRecord],
+    tags=["maintenance"],
+)
+def recurring_issues(
+    service: ServiceDependency,
+    asset_id: str | None = None,
+    failure_category: str | None = None,
+    recurrence_flag: bool | None = None,
+) -> list[dict[str, object]]:
+    """List deterministic recurring ticket groups."""
+
+    return _handle_service_errors(
+        service.list_recurring_issues,
+        asset_id=asset_id,
+        failure_category=failure_category,
+        recurrence_flag=recurrence_flag,
+    )
+
+
+@router.get(
+    "/maintenance/kpis",
+    response_model=MaintenanceKpiResponse,
+    tags=["maintenance"],
+)
+def maintenance_kpis(service: ServiceDependency) -> dict[str, object]:
+    """Return the current descriptive maintenance KPI snapshot."""
+
+    return _handle_service_errors(service.get_maintenance_kpis)
+
+
+@router.get("/tickets", response_model=list[TicketRecord], tags=["maintenance"])
+def tickets(
+    service: ServiceDependency,
+    asset_id: str | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+    failure_category: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+) -> list[dict[str, object]]:
+    """List raw ticket records with focused filters."""
+
+    return _handle_service_errors(
+        service.list_tickets,
+        asset_id=asset_id,
+        status=status,
+        priority=priority,
+        failure_category=failure_category,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/maintenance/logs",
+    response_model=list[MaintenanceLogRecord],
+    tags=["maintenance"],
+)
+def maintenance_logs(
+    service: ServiceDependency,
+    asset_id: str | None = None,
+    maintenance_result: str | None = None,
+    follow_up_required: bool | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+) -> list[dict[str, object]]:
+    """List maintenance log records with focused filters."""
+
+    return _handle_service_errors(
+        service.list_maintenance_logs,
+        asset_id=asset_id,
+        maintenance_result=maintenance_result,
+        follow_up_required=follow_up_required,
+        limit=limit,
+    )
+
+
 @router.post("/copilot/ask", response_model=CopilotAskResponse, tags=["copilot"])
 def ask_copilot(
     request: CopilotAskRequest,
@@ -134,17 +284,32 @@ def ask_copilot(
     """Ask the deterministic RAG Maintenance Copilot."""
 
     try:
+        optional_filters = {
+            key: value
+            for key, value in {
+                "document_type": request.document_type,
+                "failure_category": request.failure_category,
+            }.items()
+            if value is not None
+        }
         return copilot.ask(
             question=request.question,
             asset_id=request.asset_id,
             top_k=request.top_k,
+            **optional_filters,
         ).to_dict()
     except AssetNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=404,
+            detail=f"Không tìm thấy thiết bị: {request.asset_id or 'không xác định'}.",
+        ) from exc
     except ProcessedDataNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except (EmbeddingDependencyError, VectorStoreError) as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Maintenance Copilot tạm thời không truy cập được kho tài liệu.",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

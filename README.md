@@ -52,20 +52,13 @@ Chi tiết và tiêu chí thành công: [docs/mvp_scope.md](docs/mvp_scope.md).
 - daily asset-level feature engineering;
 - rule-based signals kết hợp Isolation Forest scoring;
 - explainable risk scoring và top risky assets;
-- CSV-backed FastAPI;
-- Streamlit risk/anomaly dashboard;
-- Qdrant-based SOP/checklist retrieval;
-- deterministic Maintenance Copilot response kèm sources.
+- preventive maintenance status, recurring issue và maintenance KPI snapshots;
+- CSV-backed FastAPI cho asset, ticket, maintenance, analytics và Copilot context;
+- Streamlit manager dashboard với bốn workflow views;
+- Qdrant-based SOP/checklist retrieval với metadata filters và relevance gate;
+- deterministic Maintenance Copilot response có sources, safety notice và safe fallback.
 
-Thuộc target MVP nhưng chưa được triển khai đầy đủ:
-
-- API/dashboard views cho asset master, tickets và maintenance logs;
-- upcoming maintenance view;
-- recurring issue report;
-- maintenance-process KPI dashboard;
-- API/dashboard reporting riêng cho recurring issues và maintenance-process KPI.
-
-Các mục chưa hoàn thiện được xem là future milestones, không phải current capabilities.
+Các production concerns như scheduler, authentication, audit logging, observability và deployment hardening không thuộc portfolio MVP hiện tại.
 
 ## Canonical Architecture
 
@@ -126,6 +119,9 @@ Canonical processed outputs:
 - `data/processed/asset_daily_features.csv`
 - `data/processed/anomaly_results.csv`
 - `data/processed/risk_scores.csv`
+- `data/processed/preventive_maintenance_status.csv`
+- `data/processed/recurring_issues.csv`
+- `data/processed/maintenance_kpis.csv`
 
 Default generation tạo 27 assets và 120 ngày hourly readings. Generator không tạo raw risk result hoặc raw anomaly label; analytics output chỉ được tạo bởi canonical processed pipelines. Đây là synthetic demo data, không phải production dataset hoặc bằng chứng model accuracy.
 
@@ -151,6 +147,7 @@ Ví dụ:
 - days since maintenance và days overdue;
 - ticket counts trong 7/30 ngày;
 - high-priority ticket counts;
+- point-in-time unresolved ticket, recurring category và maintenance follow-up counts;
 - asset age và criticality score.
 
 Raw readings không còn chứa `pressure`. Feature pipeline tạm phát sinh `pressure = 0.0` để giữ compatibility với downstream anomaly/API contracts; đây không phải measurement mới.
@@ -168,17 +165,22 @@ anomaly_score = 70% rule_based_score + 30% isolation_forest_score
 
 Trong implementation hiện tại, rule signals có vai trò chính trong quyết định `is_anomaly`; Isolation Forest chủ yếu điều chỉnh score và explanation. Đây là batch retrospective scoring, không phải real-time alerting.
 
+Final flag dùng combined score threshold 60. Vì Isolation Forest chỉ đóng góp tối đa 30 điểm, nó không thể tự tạo final flag khi không có rule signal. Output bổ sung `anomalous_metrics` và Vietnamese contributing signals.
+
 ## Risk Scoring
 
 `src/risk/risk_scoring.py` là implementation canonical.
 
 ```text
 final_risk_score =
-  35% anomaly_score
-+ 20% maintenance_overdue_score
-+ 20% recent_ticket_score
-+ 15% criticality_score
-+ 10% runtime_score
+  20% anomaly_score
++ 25% maintenance_overdue_score
++ 20% unresolved_ticket_score
++ 10% recent_ticket_score
++  7.5% recurring_issue_score
++ 10% criticality_score
++  5% follow_up_score
++  2.5% runtime_score
 ```
 
 Risk levels:
@@ -190,9 +192,11 @@ Risk levels:
 
 Risk score là heuristic prioritization score. Nó không phải calibrated failure probability và không dự đoán exact failure time.
 
+Formula, component thresholds, preventive status, recurrence và KPI definitions: [docs/analytics.md](docs/analytics.md).
+
 ## FastAPI Contract
 
-Existing API contract được giữ nguyên trong Milestone 1:
+Existing endpoints được giữ nguyên:
 
 - `GET /health`
 - `GET /summary`
@@ -204,13 +208,29 @@ Existing API contract được giữ nguyên trong Milestone 1:
 - `GET /assets/{asset_id}/context`
 - `POST /copilot/ask`
 
+Manager workflow endpoints:
+
+- `GET /assets`
+- `GET /assets/{asset_id}`
+- `GET /assets/{asset_id}/details`
+- `GET /maintenance/preventive`
+- `GET /maintenance/recurring-issues`
+- `GET /maintenance/kpis`
+- `GET /tickets`
+- `GET /maintenance/logs`
+
+Các list endpoint hỗ trợ filters theo data contract. `/assets/{asset_id}/details` gom asset profile, latest risk, preventive status, risk history, anomaly, ticket, log và recurring issues mà không thay đổi RAG logic.
+
 Ví dụ:
 
 ```bash
 curl http://localhost:8000/health
 curl http://localhost:8000/summary
 curl "http://localhost:8000/assets/risk/top?limit=5"
-curl http://localhost:8000/assets/GENERATOR_002/context
+curl http://localhost:8000/assets/GENERATOR_002/details
+curl "http://localhost:8000/maintenance/preventive?maintenance_status=overdue"
+curl "http://localhost:8000/maintenance/recurring-issues?recurrence_flag=true"
+curl http://localhost:8000/maintenance/kpis
 ```
 
 Copilot request:
@@ -221,16 +241,16 @@ curl -X POST http://localhost:8000/copilot/ask \
   -d '{"question":"Vì sao GENERATOR_002 đang rủi ro cao?","asset_id":"GENERATOR_002","top_k":5}'
 ```
 
+Request giữ `question`, optional `asset_id` và `top_k`; có thể thêm optional `document_type` hoặc `failure_category`. Response vẫn giữ `answer`, `asset_context`, `sources`, `retrieved_chunks` và bổ sung `retrieval_status`, `relevance_status`, `safety_notice`, `filters_applied`.
+
 ## Streamlit Dashboard
 
-Current dashboard pages:
+Current dashboard views:
 
-- `Overview`
-- `Asset Risk Monitoring`
-- `Anomaly Monitoring`
-- `Asset Context`
-- `Demo Story`
-- `Maintenance Copilot`
+- `Tổng quan`: KPI, ticket/risk/preventive distributions và top priorities;
+- `Thiết bị và rủi ro`: asset filters, consolidated details, risk history, tickets và logs;
+- `Bất thường và lỗi lặp lại`: anomaly signals và deterministic recurring groups;
+- `Trợ lý bảo trì`: existing Copilot retrieval, sources và technician disclaimer.
 
 Dashboard lấy dữ liệu qua `API_BASE_URL`, mặc định `http://localhost:8000`.
 
@@ -239,14 +259,40 @@ Dashboard lấy dữ liệu qua `API_BASE_URL`, mặc định `http://localhost:
 Current RAG workflow:
 
 1. Đọc `data/raw/documents.csv`.
-2. Chunk `clean_text` và giữ source metadata.
-3. Tạo local sentence-transformers embeddings với E5-style prefixes.
-4. Upsert vào Qdrant collection `maintenance_knowledge`.
-5. Retrieve top-k chunks, có thể filter theo `asset_type`.
-6. Kết hợp tài liệu với structured asset context.
-7. Tạo deterministic Vietnamese response và trả về sources.
+2. Chuẩn hóa legacy CSV fields thành `document_id`, `document_type`, `content`, `failure_category`, `version` và `effective_date`.
+3. Chunk nội dung theo section marker và giữ đầy đủ source metadata cùng `chunk_index`.
+4. Tạo local sentence-transformers embeddings với E5-style prefixes.
+5. Thay thế toàn bộ Qdrant collection `maintenance_knowledge` và upsert stable chunk IDs.
+6. Retrieve top-k chunks với `asset_type` filter; `document_type` và `failure_category` là optional filters.
+7. Loại chunk dưới relevance threshold và chỉ compose answer khi còn nguồn đủ liên quan.
+8. Kết hợp retrieved guidance với structured asset facts từ CSV-backed service.
+9. Tạo deterministic Vietnamese response với năm phần: tình trạng, checklist, nguồn, an toàn và giới hạn.
 
-Copilot không sử dụng paid API và hiện không có generative LLM. Manager/technician phải xác minh recommendation trước khi hành động.
+Document coverage hiện tại:
+
+| Asset type | Preventive document | Troubleshooting document |
+|---|---|---|
+| HVAC | Checklist kiểm tra định kỳ máy lạnh | Máy lạnh không làm mát |
+| Pump | Checklist kiểm tra định kỳ máy bơm | Rung hoặc tiếng ồn bất thường |
+| Generator | Checklist kiểm tra định kỳ máy phát | Không khởi động |
+
+Default source set có 6 documents và tạo 30 chunks với cấu hình `max_chars=800`, `overlap=80`. `make index-documents` luôn rebuild collection, vì vậy chạy lại cùng input không tạo duplicate và tài liệu bị xóa/đổi không để stale chunk active.
+
+Relevance threshold là retrieval gate, không phải xác suất đúng:
+
+- deterministic `HashEmbeddingProvider` trong unit tests: `0.15`;
+- local `SentenceTransformerEmbeddingProvider`: `0.55`.
+
+Khi kết quả rỗng, dưới threshold, câu hỏi ngoài phạm vi hoặc Qdrant unavailable, Copilot trả safe fallback và không tạo checklist từ unrelated chunks. API health và ba dashboard workflow còn lại không phụ thuộc Qdrant.
+
+Copilot không sử dụng paid API và hiện không có generative LLM. Đây không phải automatic diagnostic system. Anomaly/Risk Score không chứng minh failure; manager/technician phải xác minh thiết bị và ưu tiên manual nhà sản xuất cùng quy trình an toàn tòa nhà.
+
+Ví dụ câu hỏi trong phạm vi:
+
+- `Thiết bị này cần kiểm tra gì trước?` khi đã chọn asset;
+- `Máy bơm rung bất thường thì kiểm tra những bước nào?`;
+- `Máy phát điện không khởi động thì tham khảo checklist nào?`;
+- `SOP bảo trì định kỳ cho HVAC là gì?`.
 
 ## Setup
 
@@ -279,6 +325,9 @@ make generate-data
 make build-features
 make detect-anomalies
 make score-risk
+python -m src.features.build_features --analysis preventive
+python -m src.features.build_features --analysis recurring
+python -m src.features.build_features --analysis kpis
 ```
 
 ### 2. Khởi Động Qdrant Và Index Documents
@@ -289,6 +338,8 @@ Qdrant chỉ cần cho Maintenance Copilot:
 docker compose up -d qdrant
 make index-documents
 ```
+
+Index command báo `document_count`, `chunk_count`, collection, embedding implementation và vector dimensions. Chạy lại command là cách canonical để đồng bộ document set.
 
 ### 3. Chạy FastAPI
 
@@ -338,11 +389,14 @@ Test suite bao phủ data generation, validation, optional database loading, fea
 ## Limitations
 
 - Synthetic data chưa được kiểm chứng bằng maintenance history thực tế.
+- Analytics thresholds và risk weights là transparent demo heuristics, chưa được hiệu chuẩn trên dữ liệu thực tế.
 - Synthetic chronology chỉ mô phỏng quy trình đơn giản và chưa được đối chiếu với quy tắc lịch bảo trì thực tế của một cơ sở cụ thể.
 - API hiện phục vụ processed CSV, không có scheduler hoặc cache invalidation strategy cho production.
 - Isolation Forest và risk formula chưa được đánh giá trên labeled failure outcomes.
-- Copilot retrieval quality chưa có evaluation dataset hoặc relevance threshold.
-- Một số target MVP views vẫn là future work.
+- Copilot có relevance threshold minh bạch nhưng chưa có labeled retrieval evaluation dataset hoặc hiệu chuẩn trên tài liệu thực tế.
+- Sáu SOP/checklist là synthetic/illustrative và không thay thế tài liệu nhà sản xuất.
+- Deterministic composer là extractive decision support, không phải diagnosis hoặc generative reasoning.
+- Dashboard là manager-facing portfolio workflow, chưa có production caching, accessibility audit hoặc browser-level regression suite.
 - Không có production auth, audit logging, observability hoặc deployment hardening.
 
 ## Legacy Modules
@@ -381,6 +435,7 @@ docs/                 Scope, architecture, process, contracts và demo docs
 - [Business process](docs/business_process.md)
 - [Data contract](docs/data_contract.md)
 - [Canonical architecture](docs/architecture.md)
+- [Analytics pipeline](docs/analytics.md)
 - [Demo script](docs/demo_script.md)
 - [Interview notes](docs/interview_notes.md)
 - [Troubleshooting](docs/troubleshooting.md)

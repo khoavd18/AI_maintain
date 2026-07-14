@@ -35,6 +35,39 @@ class MaintenanceApiClient:
 
         return self._get_object("/summary")
 
+    def list_assets(
+        self,
+        *,
+        asset_type: str | None = None,
+        location: str | None = None,
+        criticality: str | None = None,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return asset master rows enriched with latest analytics."""
+
+        return self._get_records(
+            "/assets",
+            params={
+                "asset_type": asset_type,
+                "location": location,
+                "criticality": criticality,
+                "status": status,
+            },
+        )
+
+    def get_asset(self, asset_id: str) -> dict[str, Any]:
+        """Return one asset master record."""
+
+        return self._get_object(f"/assets/{asset_id}")
+
+    def get_asset_details(self, asset_id: str, *, limit: int = 10) -> dict[str, Any]:
+        """Return the consolidated manager-facing asset payload."""
+
+        return self._get_object(
+            f"/assets/{asset_id}/details",
+            params={"limit": limit},
+        )
+
     def list_risks(
         self,
         *,
@@ -110,12 +143,97 @@ class MaintenanceApiClient:
 
         return self._get_object(f"/assets/{asset_id}/context")
 
+    def list_preventive_maintenance(
+        self,
+        *,
+        maintenance_status: str | None = None,
+        asset_type: str | None = None,
+        criticality: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return preventive maintenance status rows."""
+
+        return self._get_records(
+            "/maintenance/preventive",
+            params={
+                "maintenance_status": maintenance_status,
+                "asset_type": asset_type,
+                "criticality": criticality,
+            },
+        )
+
+    def list_recurring_issues(
+        self,
+        *,
+        asset_id: str | None = None,
+        failure_category: str | None = None,
+        recurrence_flag: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return recurring ticket groups."""
+
+        return self._get_records(
+            "/maintenance/recurring-issues",
+            params={
+                "asset_id": asset_id,
+                "failure_category": failure_category,
+                "recurrence_flag": recurrence_flag,
+            },
+        )
+
+    def get_maintenance_kpis(self) -> dict[str, Any]:
+        """Return the current maintenance KPI snapshot."""
+
+        return self._get_object("/maintenance/kpis")
+
+    def list_tickets(
+        self,
+        *,
+        asset_id: str | None = None,
+        status: str | None = None,
+        priority: str | None = None,
+        failure_category: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return filtered maintenance tickets."""
+
+        return self._get_records(
+            "/tickets",
+            params={
+                "asset_id": asset_id,
+                "status": status,
+                "priority": priority,
+                "failure_category": failure_category,
+                "limit": limit,
+            },
+        )
+
+    def list_maintenance_logs(
+        self,
+        *,
+        asset_id: str | None = None,
+        maintenance_result: str | None = None,
+        follow_up_required: bool | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return filtered maintenance logs."""
+
+        return self._get_records(
+            "/maintenance/logs",
+            params={
+                "asset_id": asset_id,
+                "maintenance_result": maintenance_result,
+                "follow_up_required": follow_up_required,
+                "limit": limit,
+            },
+        )
+
     def ask_copilot(
         self,
         *,
         question: str,
         asset_id: str | None = None,
         top_k: int = 5,
+        document_type: str | None = None,
+        failure_category: str | None = None,
     ) -> dict[str, Any]:
         """Ask the RAG Maintenance Copilot."""
 
@@ -125,6 +243,8 @@ class MaintenanceApiClient:
                 "question": question,
                 "asset_id": asset_id,
                 "top_k": top_k,
+                "document_type": document_type,
+                "failure_category": failure_category,
             },
         )
 

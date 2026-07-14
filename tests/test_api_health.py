@@ -13,4 +13,8 @@ def test_health_endpoint_returns_ok() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "raw_data_available": True,
+        "analytics_available": True,
+    }

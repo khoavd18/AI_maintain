@@ -710,51 +710,105 @@ def _generate_documents() -> pd.DataFrame:
     templates = [
         (
             "DOC-001",
-            "Quy trình xử lý điện năng máy lạnh tăng bất thường",
-            "sop",
+            "Checklist kiểm tra định kỳ máy lạnh",
+            "checklist",
             "hvac",
-            "Sổ tay kỹ thuật máy lạnh",
-            "Kiểm tra lịch vận hành, lưới lọc, dàn coil và mức gas lạnh trước khi khởi động lại.",
+            "Tài liệu minh họa nội bộ - máy lạnh",
+            """Phạm vi: Checklist synthetic minh họa cho kiểm tra định kỳ máy lạnh; không thay thế hướng dẫn của nhà sản xuất.
+An toàn: Kỹ thuật viên phải đánh giá hiện trường, mang PPE phù hợp, cô lập nguồn và áp dụng lockout/tagout theo quy định của tòa nhà trước khi mở tủ hoặc tiếp cận bộ phận chuyển động. Không vô hiệu hóa liên động hay thiết bị bảo vệ.
+Các bước kiểm tra:
+1. Xác nhận mã thiết bị, tình trạng vận hành và lịch bảo trì gần nhất.
+2. Quan sát rò rỉ, tiếng ồn, mùi bất thường và cảnh báo trên bộ điều khiển mà không tháo bộ phận đang mang điện.
+3. Kiểm tra tình trạng lưới lọc, dàn trao đổi nhiệt và đường thoát nước ngưng; chỉ vệ sinh theo hướng dẫn được phê duyệt.
+4. Ghi nhận nhiệt độ vào/ra, dòng điện và thời gian vận hành để so sánh với giới hạn của nhà sản xuất.
+5. Xác nhận tấm che, cảm biến và thiết bị bảo vệ đã ở trạng thái an toàn trước khi bàn giao.
+Khi nào cần hỗ trợ chuyên môn: Dừng kiểm tra và liên hệ kỹ thuật trưởng hoặc đơn vị chuyên môn khi có mùi khét, rò môi chất lạnh, dây dẫn hư hỏng, cảnh báo bảo vệ lặp lại hoặc thông số vượt giới hạn nhà sản xuất.
+Giới hạn: Không tự nạp môi chất, sửa mạch điện hoặc bỏ qua cảnh báo chỉ dựa trên checklist minh họa này.""",
         ),
         (
             "DOC-002",
-            "Checklist bảo trì định kỳ máy lạnh",
-            "checklist",
+            "Hướng dẫn kiểm tra máy lạnh không làm mát",
+            "troubleshooting_guide",
             "hvac",
-            "Checklist nội bộ máy lạnh",
-            "Vệ sinh lưới lọc, kiểm tra dây curoa, cảm biến nhiệt và ghi lại dòng điện vận hành.",
+            "Tài liệu minh họa nội bộ - máy lạnh",
+            """Phạm vi: Hướng dẫn synthetic minh họa để thu thập bằng chứng ban đầu khi máy lạnh không làm mát; không phải quy trình chẩn đoán hoặc sửa chữa chính thức.
+An toàn: Không mở tủ điện, chạm mạch môi chất hoặc tiếp cận quạt khi chưa cô lập nguồn và thực hiện lockout/tagout. Tuân thủ PPE, quy trình an toàn tòa nhà và hướng dẫn nhà sản xuất.
+Các bước kiểm tra:
+1. Xác nhận yêu cầu nhiệt độ, chế độ vận hành, lịch chạy và mã cảnh báo hiển thị.
+2. Kiểm tra bằng quan sát xem luồng gió có bị cản, lưới lọc có bẩn hoặc cửa gió có đóng hay không.
+3. Ghi nhận nhiệt độ gió vào/ra, nhiệt độ phòng, runtime và điện năng tại cùng thời điểm.
+4. Quan sát nước ngưng, dấu hiệu đóng băng, rò rỉ hoặc tiếng ồn bất thường mà không tháo đường ống.
+5. Đối chiếu kết quả với manual và checklist được phê duyệt; ghi lại ảnh, cảnh báo và thông số để chuyển cấp.
+Khi nào cần hỗ trợ chuyên môn: Liên hệ kỹ thuật trưởng hoặc đơn vị HVAC có chứng chỉ khi nghi ngờ rò môi chất, đóng băng kéo dài, bảo vệ điện tác động, máy nén không hoạt động hoặc cần đo/hiệu chỉnh chuyên dụng.
+Giới hạn: Không nạp môi chất, đấu tắt cảm biến, cưỡng bức contactor hoặc khởi động lặp lại thiết bị đang báo bảo vệ.""",
         ),
         (
             "DOC-003",
-            "Quy trình xử lý độ rung máy bơm",
-            "sop",
+            "Checklist kiểm tra định kỳ máy bơm nước",
+            "checklist",
             "pump",
-            "Sổ tay kỹ thuật máy bơm",
-            "Cô lập nguồn, kiểm tra độ đồng tâm, bạc đạn, bu lông bệ máy và tình trạng phớt.",
+            "Tài liệu minh họa nội bộ - máy bơm",
+            """Phạm vi: Checklist synthetic minh họa cho kiểm tra định kỳ máy bơm nước; không thay thế manual, quy trình lockout/tagout hoặc hướng dẫn vận hành hệ thống.
+An toàn: Xác nhận áp suất hệ thống, cô lập điện và năng lượng thủy lực theo quy định trước khi tiếp cận khớp nối hoặc bộ phận chuyển động. Không tháo đường ống đang có áp và không bỏ qua công tắc bảo vệ.
+Các bước kiểm tra:
+1. Xác nhận mã bơm, trạng thái van theo quy trình vận hành và lịch bảo trì gần nhất.
+2. Quan sát rò rỉ tại phớt, mặt bích và đường ống; ghi nhận nhưng không siết chỉnh khi hệ thống còn áp.
+3. Ghi nhận độ rung, nhiệt độ ổ trục, dòng điện, áp suất và tiếng ồn tại điều kiện vận hành ổn định.
+4. Quan sát bu lông bệ, tấm che khớp nối và dấu hiệu lệch hoặc lỏng từ bên ngoài.
+5. So sánh thông số với baseline và giới hạn nhà sản xuất; ghi lại kết quả kiểm tra.
+Khi nào cần hỗ trợ chuyên môn: Dừng thiết bị theo quy trình và liên hệ kỹ thuật trưởng hoặc chuyên gia khi rung tăng nhanh, ổ trục quá nhiệt, rò rỉ lớn, cavitation kéo dài hoặc thiết bị bảo vệ tác động.
+Giới hạn: Không căn chỉnh khớp nối, thay phớt, tháo ổ trục hoặc thay đổi van ngoài thẩm quyền từ checklist này.""",
         ),
         (
             "DOC-004",
-            "Checklist bảo trì định kỳ máy bơm",
-            "checklist",
+            "Hướng dẫn kiểm tra máy bơm rung hoặc ồn bất thường",
+            "troubleshooting_guide",
             "pump",
-            "Checklist nội bộ máy bơm",
-            "Kiểm tra độ rung, nhiệt độ, dòng điện động cơ và ghi nhận tiếng ồn bất thường.",
+            "Tài liệu minh họa nội bộ - máy bơm",
+            """Phạm vi: Hướng dẫn synthetic minh họa để kiểm tra ban đầu khi máy bơm rung hoặc phát tiếng ồn bất thường; không phải chẩn đoán hư hỏng tự động.
+An toàn: Giữ khoảng cách với bộ phận quay, không tháo tấm che khi máy chạy và không chạm đường ống đang có áp. Nếu cần kiểm tra cơ khí, phải dừng máy, cô lập mọi nguồn năng lượng và áp dụng lockout/tagout.
+Các bước kiểm tra:
+1. Ghi nhận thời điểm, chế độ tải, vị trí phát tiếng ồn và giá trị rung hiện tại.
+2. So sánh rung, nhiệt độ ổ trục, dòng điện và áp suất với baseline cùng điều kiện vận hành.
+3. Quan sát bên ngoài bệ máy, bu lông, tấm che, đường ống và dấu hiệu rò rỉ hoặc cavitation.
+4. Kiểm tra điều kiện hút/xả và trạng thái van theo sơ đồ vận hành đã phê duyệt, không tự thay đổi cấu hình hệ thống.
+5. Ghi lại xu hướng và chuyển bằng chứng cho người có thẩm quyền đánh giá căn chỉnh, ổ trục hoặc phớt.
+Khi nào cần hỗ trợ chuyên môn: Dừng theo quy trình và liên hệ kỹ thuật trưởng hoặc chuyên gia rotating equipment khi rung vượt giới hạn nhà sản xuất, có tiếng va đập, nhiệt tăng nhanh, mất áp hoặc rò rỉ nguy hiểm.
+Giới hạn: Không tiếp tục chạy thử nhiều lần, không căn chỉnh, tháo khớp nối hoặc can thiệp ổ trục chỉ dựa trên hướng dẫn minh họa này.""",
         ),
         (
             "DOC-005",
-            "Quy trình kiểm tra máy phát điện quá hạn",
-            "sop",
+            "Checklist kiểm tra định kỳ máy phát điện dự phòng",
+            "checklist",
             "generator",
-            "Sổ tay kỹ thuật máy phát điện",
-            "Kiểm tra ắc quy, nhiên liệu, dầu nhớt, nước làm mát và tình trạng tủ chuyển nguồn.",
+            "Tài liệu minh họa nội bộ - máy phát điện",
+            """Phạm vi: Checklist synthetic minh họa cho kiểm tra định kỳ máy phát điện dự phòng; không thay thế manual, kế hoạch chạy thử hoặc quy trình điện của tòa nhà.
+An toàn: Chỉ nhân sự được phân quyền mới thao tác máy phát và ATS. Thực hiện kiểm soát nguồn điện, chống khởi động ngoài ý muốn, thông gió và phòng cháy theo quy định. Không chạm đầu cực, dây dẫn hoặc bộ phận nóng khi chưa bảo đảm an toàn.
+Các bước kiểm tra:
+1. Xác nhận mã thiết bị, chế độ Auto/Manual theo kế hoạch và các cảnh báo hiện có mà không thay đổi cài đặt bảo vệ.
+2. Quan sát mức nhiên liệu, dầu, nước làm mát, rò rỉ và tình trạng khu vực bằng phương pháp được nhà sản xuất cho phép.
+3. Kiểm tra trực quan ắc quy, cáp, bộ sạc và thông gió; không đo hoặc tháo đầu cực nếu không đủ thẩm quyền.
+4. Khi có kế hoạch chạy thử được phê duyệt, ghi nhận điện áp, tần số, nhiệt độ, độ rung, áp suất dầu và thời gian chạy.
+5. Xác nhận cảnh báo, tấm che và khu vực máy đã được bàn giao an toàn; lưu kết quả vào maintenance log.
+Khi nào cần hỗ trợ chuyên môn: Liên hệ kỹ thuật trưởng hoặc đơn vị máy phát khi có rò nhiên liệu, khói bất thường, quá nhiệt, điện áp/tần số ngoài giới hạn, lỗi ATS hoặc cảnh báo bảo vệ lặp lại.
+Giới hạn: Không tự điều chỉnh governor, AVR, ATS, hệ thống nhiên liệu hoặc vô hiệu hóa bảo vệ từ checklist này.""",
         ),
         (
             "DOC-006",
-            "Checklist chạy thử máy phát điện",
-            "checklist",
+            "Hướng dẫn kiểm tra máy phát điện không khởi động",
+            "troubleshooting_guide",
             "generator",
-            "Checklist nội bộ máy phát điện",
-            "Kiểm tra rò rỉ, cảnh báo, nhiệt độ, độ rung, điện áp đầu ra và thời gian chạy thử.",
+            "Tài liệu minh họa nội bộ - máy phát điện",
+            """Phạm vi: Hướng dẫn synthetic minh họa để thu thập thông tin ban đầu khi máy phát điện không khởi động; không thay thế hướng dẫn nhà sản xuất và không cho phép khởi động cưỡng bức.
+An toàn: Không đấu tắt interlock, relay bảo vệ, cảm biến hoặc mạch khởi động. Chỉ nhân sự được phân quyền mới kiểm tra điện. Bảo đảm thông gió, phòng cháy và chống khởi động ngoài ý muốn theo quy định của tòa nhà.
+Các bước kiểm tra:
+1. Ghi nhận chế độ điều khiển, mã cảnh báo, thời điểm yêu cầu khởi động và trạng thái emergency stop từ màn hình an toàn.
+2. Kiểm tra trực quan mức nhiên liệu, dầu, nước làm mát, rò rỉ và vật cản mà không mở hệ thống đang có áp hoặc còn nóng.
+3. Quan sát tình trạng ắc quy, bộ sạc và đầu cáp từ vị trí an toàn; chỉ đo điện khi có thẩm quyền và thiết bị phù hợp.
+4. Xác nhận điều kiện cho phép khởi động và trạng thái ATS theo manual; không reset cảnh báo lặp lại nếu chưa xác định nguyên nhân.
+5. Lưu mã lỗi, thông số và lịch sử lần khởi động để chuyển cho kỹ thuật trưởng hoặc đơn vị chuyên môn.
+Khi nào cần hỗ trợ chuyên môn: Chuyển cấp ngay khi có mùi nhiên liệu, khói, dây dẫn hư hỏng, điện áp ắc quy bất thường, lỗi ATS, emergency stop không rõ nguyên nhân hoặc cảnh báo bảo vệ tái diễn.
+Giới hạn: Không câu bình, cấp nhiên liệu trực tiếp, đấu tắt mạch, reset bảo vệ liên tục hoặc chạy thử cưỡng bức theo tài liệu minh họa này.""",
         ),
     ]
     rows = []

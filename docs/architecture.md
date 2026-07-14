@@ -15,6 +15,7 @@ flowchart LR
     Raw[Raw Vietnamese CSVs<br/>assets, readings, tickets, logs, documents]
     Validation[CSV validation]
     Features[Canonical feature pipeline<br/>src/features/build_features.py]
+    Maintenance[Preventive status<br/>recurring issues<br/>maintenance KPIs]
     Anomaly[Canonical anomaly pipeline<br/>src/models/anomaly_detection.py]
     Risk[Canonical risk pipeline<br/>src/risk/risk_scoring.py]
     Processed[Processed CSVs<br/>features, anomalies, risks]
@@ -22,19 +23,24 @@ flowchart LR
     Dashboard[Streamlit<br/>src/dashboard/app.py]
 
     Raw --> Validation
+    Raw --> API
     Validation --> Features
+    Validation --> Maintenance
     Features --> Anomaly
     Anomaly --> Risk
+    Risk --> Maintenance
     Features --> Processed
     Anomaly --> Processed
     Risk --> Processed
+    Maintenance --> Processed
     Processed --> API
     API --> Dashboard
 
-    Docs[documents.csv] --> Chunking[RAG document loader + chunking]
+    Docs[6 Vietnamese synthetic documents] --> Chunking[Deterministic chunking<br/>source metadata]
     Chunking --> Embeddings[Local sentence-transformers embeddings]
-    Embeddings --> Qdrant[(Qdrant)]
-    Qdrant --> Copilot[RAG retrieval + deterministic composer]
+    Embeddings --> Qdrant[(Qdrant<br/>replace collection on index)]
+    Qdrant --> Filters[asset_type + optional<br/>document_type + failure_category]
+    Filters --> Copilot[Relevance gate +<br/>deterministic composer]
     API --> Copilot
     Copilot --> API
 
@@ -48,9 +54,10 @@ flowchart LR
 3. `src/features/build_features.py` tạo `data/processed/asset_daily_features.csv`.
 4. `src/models/anomaly_detection.py` tạo `data/processed/anomaly_results.csv`.
 5. `src/risk/risk_scoring.py` tạo `data/processed/risk_scores.csv`.
-6. `src/api/services.py` đọc processed CSV và cung cấp data qua FastAPI routes.
-7. `src/dashboard/api_client.py` gọi FastAPI; Streamlit không đọc CSV trực tiếp.
-8. Copilot kết hợp structured asset context từ API service với SOP/checklist chunks được retrieve từ Qdrant.
+6. `src/features/build_features.py` tạo preventive status, recurring issue và KPI snapshots từ raw contract cùng latest canonical risk output.
+7. `src/api/services.py` đọc các processed CSV thuộc API contract hiện tại và cung cấp data qua FastAPI routes.
+8. `src/dashboard/api_client.py` gọi FastAPI; Streamlit không đọc CSV trực tiếp.
+9. Copilot kết hợp structured asset context từ API service với SOP/checklist chunks được retrieve từ Qdrant.
 
 ## Canonical Analytics Implementations
 
@@ -59,29 +66,41 @@ flowchart LR
 | Daily feature engineering | `src/features/build_features.py` | `asset_daily_features.csv` |
 | Batch anomaly detection | `src/models/anomaly_detection.py` | `anomaly_results.csv` |
 | Explainable risk scoring | `src/risk/risk_scoring.py` | `risk_scores.csv` |
+| Preventive/recurrence/KPI analytics | `src/features/build_features.py` | Ba focused maintenance CSV snapshots |
 
 Chỉ các implementation trên được mở rộng trong future MVP work. Một thay đổi analytics phải đi vào canonical implementation, có test, và cập nhật data contract tương ứng.
+
+Chi tiết formula và definitions: [Analytics pipeline](analytics.md).
 
 ## Serving Layer
 
 - `src/api/main.py` tạo FastAPI application.
-- `src/api/routes.py` giữ API contract hiện tại cho health, summary, risk, anomaly, asset context và Copilot.
-- `src/api/services.py` là CSV-backed query service hiện tại.
+- `src/api/routes.py` giữ backward-compatible risk/anomaly/context/Copilot endpoints và manager workflow endpoints cho assets, tickets, logs, preventive status, recurrence và KPI.
+- `src/api/services.py` đọc raw asset/ticket/log CSV cùng canonical processed outputs, kiểm tra availability/freshness và không trả internal file path trong lỗi.
 - `src/dashboard/app.py` là Streamlit entrypoint canonical.
 - `src/dashboard/api_client.py` là HTTP boundary giữa dashboard và API.
 
-Milestone 1 không thay đổi endpoint, request field hoặc response field hiện có.
+Streamlit chỉ gọi FastAPI. Bốn views canonical là `Tổng quan`, `Thiết bị và rủi ro`, `Bất thường và lỗi lặp lại` và `Trợ lý bảo trì`. RAG availability không quyết định health của manager dashboard.
 
 ## RAG Layer
 
-- `src/rag/document_loader.py` đọc `documents.csv`.
-- `src/rag/chunking.py` tạo chunks có source metadata.
+- `src/rag/document_loader.py` đọc legacy CSV fields và chuẩn hóa thành `document_id`, `document_type`, `content`, `failure_category`, `version` và `effective_date`.
+- `src/rag/chunking.py` tạo deterministic chunks, bỏ empty chunk và giữ document identity cùng `chunk_index`.
 - `src/rag/embeddings.py` tạo local embeddings.
-- `src/rag/vector_store.py` lưu/search vectors trong Qdrant.
-- `src/rag/retriever.py` thực hiện top-k retrieval và asset-type filter.
-- `src/rag/copilot.py` kết hợp retrieved documents với structured asset context.
+- `src/rag/index_documents.py` embed toàn bộ document set rồi thay thế collection; re-index cùng input không tạo duplicate và document bị xóa không để stale chunk.
+- `src/rag/vector_store.py` kiểm tra collection name, vector dimension, missing/empty collection và thực hiện metadata filtering trong Qdrant.
+- `src/rag/retriever.py` thực hiện top-k retrieval với `asset_type`, `document_type` và `failure_category` filters.
+- `src/rag/copilot.py` kiểm tra phạm vi câu hỏi, áp dụng relevance gate, kết hợp asset facts với retrieved guidance và tạo response deterministic có source/safety sections.
 
-Qdrant là dependency của RAG retrieval, không phải dependency của risk/anomaly dashboard. Copilot hiện dùng deterministic composer; không được mô tả là LLM-generated answer.
+Khi chọn asset, `asset_type` của asset là filter mặc định. Failure category và ticket description gần đây chỉ bổ sung query context; chúng không thay đổi structured facts hoặc tự động chẩn đoán lỗi. Câu hỏi nêu rõ một focused asset type khác được xem là yêu cầu cross-asset tường minh và filter theo loại được nêu.
+
+Relevance policy:
+
+- `HashEmbeddingProvider` trong tests dùng cosine threshold `0.15`; đây chỉ là deterministic lexical test double, không phải semantic quality score.
+- `SentenceTransformerEmbeddingProvider` dùng threshold `0.55`; đây là retrieval gate cấu hình cho MVP, không phải xác suất đúng và chưa được hiệu chuẩn bằng evaluation dataset thực tế.
+- Empty result, điểm dưới threshold, câu hỏi ngoài phạm vi hoặc RAG unavailable đều trả safe fallback, không dùng unrelated chunk để tạo checklist.
+
+Qdrant là dependency của RAG retrieval, không phải dependency của API health hoặc manager dashboard. Copilot hiện dùng deterministic composer; không được mô tả là LLM-generated answer hoặc automatic diagnostic system.
 
 ## PostgreSQL Optional/Experimental Path
 
