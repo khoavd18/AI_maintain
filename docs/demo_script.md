@@ -1,14 +1,18 @@
-# Demo Script
+# Kịch Bản Demo Portfolio
 
-Use this script for a recruiter, interviewer, or portfolio walkthrough. It assumes Python dependencies are installed and Docker is available.
+Kịch bản này trình bày primary CSV-first workflow. PostgreSQL không cần thiết cho demo chính. Qdrant chỉ cần khi demo Maintenance Copilot.
 
-## 1. Start Infrastructure
+## 1. Chuẩn Bị Environment
 
 ```bash
-make services-up
+python -m pip install -e ".[dev,rag]"
 ```
 
-This starts PostgreSQL and Qdrant from `docker-compose.yml`.
+Giải thích ngắn:
+
+- `dev` cung cấp pytest và Ruff;
+- `rag` cung cấp sentence-transformers cho local embeddings;
+- không sử dụng paid API.
 
 ## 2. Generate Vietnamese Synthetic Data
 
@@ -16,50 +20,52 @@ This starts PostgreSQL and Qdrant from `docker-compose.yml`.
 make generate-data
 ```
 
-Show `data/raw` and mention the generated assets, sensor readings, tickets, logs, risk snapshots, and Vietnamese SOP/checklist documents.
+Mở `data/raw` và giới thiệu:
 
-## 3. Initialize Database
+- asset master;
+- hourly sensor readings;
+- maintenance tickets và logs;
+- Vietnamese SOP/checklist documents.
 
-```bash
-make init-db
-```
+Nhấn mạnh đây là synthetic batch data, không phải real-time IoT hoặc production data.
 
-This creates the SQLAlchemy schema for structured maintenance data.
-
-## 4. Load Data
-
-```bash
-make load-data
-```
-
-Explain that PostgreSQL is the structured data store for assets, readings, tickets, logs, risk scores, and documents.
-
-## 5. Build Features
+## 3. Build Daily Features
 
 ```bash
 make build-features
 ```
 
-Show `data/processed/asset_daily_features.csv`. Highlight rolling energy trends, vibration deltas, ticket counts, overdue maintenance days, and criticality score.
+Mở `data/processed/asset_daily_features.csv` và chỉ ra:
 
-## 6. Detect Anomalies
+- rolling energy trend;
+- temperature/vibration/runtime delta;
+- ticket frequency;
+- maintenance overdue days;
+- criticality score.
+
+Canonical implementation: `src/features/build_features.py`.
+
+## 4. Detect Anomalies
 
 ```bash
 make detect-anomalies
 ```
 
-Show `data/processed/anomaly_results.csv`. Explain the hybrid method:
+Mở `data/processed/anomaly_results.csv` và giải thích:
 
-- rule-based thresholds for explainable maintenance patterns;
-- Isolation Forest for multivariate outliers.
+- rule-based signals tạo explanation cho known patterns;
+- Isolation Forest bổ sung relative outlier score;
+- output có Vietnamese `anomaly_type` và `anomaly_reasons`.
 
-## 7. Score Risk
+Canonical implementation: `src/models/anomaly_detection.py`.
+
+## 5. Score Risk
 
 ```bash
 make score-risk
 ```
 
-Show `data/processed/risk_scores.csv`. Explain the formula:
+Mở `data/processed/risk_scores.csv` và trình bày formula:
 
 ```text
 final_risk_score =
@@ -70,83 +76,99 @@ final_risk_score =
 + 10% runtime_score
 ```
 
-## 8. Index Documents Into Qdrant
+Nói rõ risk score dùng để prioritization; nó không dự đoán exact failure time.
 
-Install optional RAG dependencies if needed:
+Canonical implementation: `src/risk/risk_scoring.py`.
 
-```bash
-python -m pip install -e ".[dev,rag]"
-```
-
-Index Vietnamese SOP/checklist documents:
+## 6. Start Qdrant Và Index Documents
 
 ```bash
+docker compose up -d qdrant
 make index-documents
 ```
 
-Explain the RAG path: `documents.csv -> chunks -> embeddings -> Qdrant maintenance_knowledge`.
+Giải thích RAG path:
 
-## 9. Run FastAPI
+```text
+documents.csv -> chunks -> local embeddings -> Qdrant -> top-k retrieval
+```
 
-Open a terminal:
+Qdrant không cần cho risk/anomaly dashboard; nó chỉ hỗ trợ Copilot retrieval.
+
+## 7. Run FastAPI
+
+Trong terminal thứ nhất:
 
 ```bash
 make run-api
 ```
 
-Open these URLs:
+Mở:
 
 - `http://localhost:8000/health`
 - `http://localhost:8000/summary`
 - `http://localhost:8000/docs`
 
-## 10. Run Streamlit Dashboard
+FastAPI đọc canonical processed CSVs qua service layer.
 
-Open a second terminal:
+## 8. Run Streamlit
+
+Trong terminal thứ hai:
 
 ```bash
 make run-dashboard
 ```
 
-Open the Streamlit URL shown in the terminal.
+Mở URL do Streamlit hiển thị. Dashboard gọi FastAPI qua `API_BASE_URL` và không đọc CSV trực tiếp.
 
-## 11. Inspect Top Risky Asset
+## 9. Inspect Top Risky Asset
 
-In the dashboard:
+1. Mở `Overview`.
+2. Xem summary metrics và `Top 10 Risky Assets`.
+3. Mở `Asset Risk Monitoring`.
+4. Chọn một asset có risk score cao.
+5. Trình bày `main_reasons` và `recommended_action`.
+6. Nhấn mạnh manager quyết định mức ưu tiên thực tế.
 
-1. Open `Overview`.
-2. Review total assets, anomalies, high-risk count, urgent-risk count, latest date, and average risk score.
-3. Inspect `Top 10 Risky Assets`.
-4. Open `Asset Risk Monitoring`.
-5. Select a high-risk `asset_id`.
-6. Show `main_reasons` and `recommended_action`.
+## 10. Ask Maintenance Copilot
 
-## 12. Ask The Copilot
-
-Open `Maintenance Copilot`.
-
-Ask:
+Mở `Maintenance Copilot` và hỏi:
 
 ```text
 Vì sao GENERATOR_002 đang rủi ro cao?
 ```
 
-Use:
+Sử dụng:
 
 - `asset_id`: `GENERATOR_002`
 - `top_k`: `5`
 
-Show:
+Trình bày:
 
-- Vietnamese answer;
 - structured risk/anomaly context;
+- Vietnamese response;
 - SOP/checklist sources;
-- retrieved chunks in the expander.
+- retrieved chunks.
 
-## 13. Close With The Product Story
+Nói rõ response hiện dùng deterministic composer, không phải generative LLM. Technician phải kiểm tra hiện trường và SOP chính thức trước khi hành động.
 
-Position the project as:
+## 11. Kết Thúc Product Story
 
-- not a CMMS replacement;
-- an AI decision-support layer over existing CMMS/sensor/SOP data;
-- a complete MVP showing data engineering, anomaly detection, explainable scoring, API serving, dashboarding, and RAG.
+AI Maintenance Copilot là:
+
+- một AI decision-support layer;
+- batch analytics workflow;
+- portfolio MVP tích hợp data engineering, ML scoring, API, dashboard và RAG;
+- không phải CMMS replacement hoặc production-ready system.
+
+## Optional PostgreSQL Experiment
+
+Phần này không thuộc main demo. Chỉ chạy khi muốn minh họa SQLAlchemy schema và raw CSV loading:
+
+```bash
+docker compose up -d postgres
+make init-db
+make load-data
+```
+
+PostgreSQL path hiện không cấp dữ liệu cho FastAPI, Streamlit hoặc canonical analytics outputs.

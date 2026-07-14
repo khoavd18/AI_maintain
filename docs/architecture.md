@@ -1,48 +1,130 @@
-# MVP Architecture
+# Kiến Trúc Canonical Của MVP
 
-The MVP is intentionally modular. Each package owns one part of the maintenance intelligence workflow and can be expanded independently.
+## Architecture Decision
+
+MVP sử dụng kiến trúc **CSV-first, batch-first**. Raw CSV là primary data source; processed CSV là analytics serving contract. FastAPI là boundary duy nhất cho Streamlit và các client ứng dụng.
+
+PostgreSQL chỉ là optional/experimental adapter để minh họa structured storage. PostgreSQL không cần thiết để generate data, chạy analytics, khởi động FastAPI, mở dashboard hoặc sử dụng các trang không phụ thuộc RAG.
+
+Đây là kiến trúc portfolio/development, không phải production architecture.
 
 ## System Map
 
 ```mermaid
 flowchart LR
-    Data[Raw Vietnamese CSV data] --> Ingestion[src/ingestion]
-    Ingestion --> DB[(PostgreSQL)]
-    Ingestion --> Features[src/features]
-    Features --> Models[src/models]
-    Models --> Risk[src/risk]
-    Risk --> Processed[data/processed CSVs]
-    Processed --> API[src/api FastAPI]
-    API --> Dashboard[src/dashboard Streamlit]
+    Raw[Raw Vietnamese CSVs<br/>assets, readings, tickets, logs, documents]
+    Validation[CSV validation]
+    Features[Canonical feature pipeline<br/>src/features/build_features.py]
+    Anomaly[Canonical anomaly pipeline<br/>src/models/anomaly_detection.py]
+    Risk[Canonical risk pipeline<br/>src/risk/risk_scoring.py]
+    Processed[Processed CSVs<br/>features, anomalies, risks]
+    API[FastAPI<br/>src/api]
+    Dashboard[Streamlit<br/>src/dashboard/app.py]
 
-    Docs[data/raw/documents.csv] --> RAG[src/rag]
-    RAG --> Qdrant[(Qdrant)]
-    Qdrant --> API
+    Raw --> Validation
+    Validation --> Features
+    Features --> Anomaly
+    Anomaly --> Risk
+    Features --> Processed
+    Anomaly --> Processed
+    Risk --> Processed
+    Processed --> API
+    API --> Dashboard
+
+    Docs[documents.csv] --> Chunking[RAG document loader + chunking]
+    Chunking --> Embeddings[Local sentence-transformers embeddings]
+    Embeddings --> Qdrant[(Qdrant)]
+    Qdrant --> Copilot[RAG retrieval + deterministic composer]
+    API --> Copilot
+    Copilot --> API
+
+    Validation -. optional load .-> Postgres[(PostgreSQL<br/>optional/experimental)]
 ```
 
-## Data Layer
+## Primary Runtime Path
 
-- PostgreSQL stores structured assets, sensor readings, tickets, logs, risk scores, and documents.
-- Qdrant stores embedded Vietnamese SOP/checklist chunks in the `maintenance_knowledge` collection.
-- Processed CSV files provide a stable serving contract for the current FastAPI backend.
+1. `src/data_generation/generate_data.py` tạo Vietnamese synthetic CSV data trong `data/raw`.
+2. `src/ingestion/validation.py` kiểm tra schema, reference, date và Vietnamese business values.
+3. `src/features/build_features.py` tạo `data/processed/asset_daily_features.csv`.
+4. `src/models/anomaly_detection.py` tạo `data/processed/anomaly_results.csv`.
+5. `src/risk/risk_scoring.py` tạo `data/processed/risk_scores.csv`.
+6. `src/api/services.py` đọc processed CSV và cung cấp data qua FastAPI routes.
+7. `src/dashboard/api_client.py` gọi FastAPI; Streamlit không đọc CSV trực tiếp.
+8. Copilot kết hợp structured asset context từ API service với SOP/checklist chunks được retrieve từ Qdrant.
 
-## Intelligence Layer
+## Canonical Analytics Implementations
 
-- `src/ingestion` validates and loads raw CSV data.
-- `src/features` builds daily asset-level features from sensor readings and maintenance history.
-- `src/models` combines rule-based anomaly detection with scikit-learn Isolation Forest scoring.
-- `src/risk` turns anomaly scores and maintenance context into explainable asset risk.
-- `src/rag` loads documents, chunks Vietnamese text, embeds chunks, searches Qdrant, and composes deterministic Vietnamese copilot answers.
+| Analytics stage | Canonical implementation | Canonical output |
+|---|---|---|
+| Daily feature engineering | `src/features/build_features.py` | `asset_daily_features.csv` |
+| Batch anomaly detection | `src/models/anomaly_detection.py` | `anomaly_results.csv` |
+| Explainable risk scoring | `src/risk/risk_scoring.py` | `risk_scores.csv` |
+
+Chỉ các implementation trên được mở rộng trong future MVP work. Một thay đổi analytics phải đi vào canonical implementation, có test, và cập nhật data contract tương ứng.
 
 ## Serving Layer
 
-- `src/api` exposes health, summary, risk, anomaly, asset context, and copilot endpoints.
-- `src/dashboard` provides the Streamlit operator dashboard and Maintenance Copilot tab.
+- `src/api/main.py` tạo FastAPI application.
+- `src/api/routes.py` giữ API contract hiện tại cho health, summary, risk, anomaly, asset context và Copilot.
+- `src/api/services.py` là CSV-backed query service hiện tại.
+- `src/dashboard/app.py` là Streamlit entrypoint canonical.
+- `src/dashboard/api_client.py` là HTTP boundary giữa dashboard và API.
 
-## Production Architecture Decisions
+Milestone 1 không thay đổi endpoint, request field hoặc response field hiện có.
 
-- Add Alembic migrations once schema evolution matters.
-- Move scheduled ingestion and scoring into an orchestrator such as Airflow, Prefect, Dagster, or cron-managed jobs.
-- Move API reads from processed CSVs to database-backed query services.
-- Add retrieval/answer evaluation before replacing the deterministic composer with an LLM.
-- Add authentication, authorization, observability, and deployment automation.
+## RAG Layer
+
+- `src/rag/document_loader.py` đọc `documents.csv`.
+- `src/rag/chunking.py` tạo chunks có source metadata.
+- `src/rag/embeddings.py` tạo local embeddings.
+- `src/rag/vector_store.py` lưu/search vectors trong Qdrant.
+- `src/rag/retriever.py` thực hiện top-k retrieval và asset-type filter.
+- `src/rag/copilot.py` kết hợp retrieved documents với structured asset context.
+
+Qdrant là dependency của RAG retrieval, không phải dependency của risk/anomaly dashboard. Copilot hiện dùng deterministic composer; không được mô tả là LLM-generated answer.
+
+## PostgreSQL Optional/Experimental Path
+
+Các module sau được giữ để tham khảo và thử nghiệm structured storage:
+
+- `src/database/session.py`
+- `src/database/models.py`
+- `src/database/init_db.py`
+- `src/ingestion/load_data.py`
+
+Quy tắc:
+
+- Không đưa PostgreSQL vào prerequisite của main portfolio demo.
+- Không chuyển API sang database-backed serving trong revised MVP nếu chưa có quyết định scope mới.
+- Không xem database `risk_scores` hiện tại là canonical analytics output.
+- PostgreSQL experiments không được làm gián đoạn CSV-first pipeline.
+
+## Legacy Và Removal Candidates
+
+Các file/implementation sau chưa bị xóa trong Milestone 1 nhưng không phải canonical extension points:
+
+| Module hoặc implementation | Trạng thái |
+|---|---|
+| `src/models/anomaly.py` | Legacy anomaly wrapper; candidate for later removal |
+| `src/risk/scoring.py` | Legacy risk formula; candidate for later removal |
+| Raw risk generation trong `src/data_generation/generate_data.py` | Không phải processed risk contract; cần xử lý ở milestone sau |
+| `_risk_reasons_legacy` và `_recommended_action_legacy` | Legacy helpers |
+| `src/ingestion/documents.py` | Legacy chunking helper; canonical chunker ở `src/rag/chunking.py` |
+| `src/ingestion/tickets.py` | Unused normalization helper; candidate for later removal |
+| `build_asset_feature_frame` trong `src/features/build_features.py` | Backward-compatible helper, không phải daily feature pipeline |
+| `src/data_generation/sample_data.py` | Convenience helper chưa được active workflow sử dụng |
+| Root `app.py` | Compatibility dashboard entrypoint; canonical entrypoint là `src/dashboard/app.py` |
+
+Không mở rộng legacy modules. Việc xóa chỉ được thực hiện trong cleanup milestone sau khi kiểm tra import, test và migration impact.
+
+## Human-in-the-Loop Boundary
+
+- Anomaly và risk scores chỉ hỗ trợ prioritization.
+- Recommended action là hướng dẫn tham khảo, không phải lệnh thực thi.
+- Manager quyết định lịch và mức ưu tiên thực tế.
+- Technician xác nhận hiện trường, an toàn và maintenance result.
+- Hệ thống không tự động tạo production work order hoặc dự đoán exact failure time.
+
+## Non-Goals Của Architecture
+
+Architecture không được mở rộng trong MVP sang inventory, QR code, mobile apps, vendor management, real-time streaming, complex approvals, enterprise auth hoặc exact failure-time prediction. Các giới hạn lâu dài cho future agents được ghi trong `AGENTS.md`.

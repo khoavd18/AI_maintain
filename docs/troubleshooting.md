@@ -10,7 +10,7 @@ Symptoms:
 Fix:
 
 ```bash
-make services-up
+docker compose up -d qdrant
 ```
 
 Check Qdrant:
@@ -133,19 +133,25 @@ python -m src.database.init_db --database-url sqlite:///maintenance_demo.db --dr
 python -m src.ingestion.load_data --database-url sqlite:///maintenance_demo.db --replace
 ```
 
-## Regenerate Data And Rerun Full Pipeline
+## Regenerate Data And Rerun The Primary CSV Pipeline
 
 Use this when the raw or processed files are stale:
 
 ```bash
-make services-up
 make generate-data
-make init-db
-make load-data
 make build-features
 make detect-anomalies
 make score-risk
+docker compose up -d qdrant
 make index-documents
+```
+
+PostgreSQL is optional and is not required for this primary pipeline. To test the experimental database-loading path separately, run:
+
+```bash
+docker compose up -d postgres
+make init-db
+make load-data
 ```
 
 Then run the app:

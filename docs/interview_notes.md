@@ -15,7 +15,7 @@ The MVP uses deterministic Vietnamese synthetic maintenance data:
 - risk score snapshots;
 - Vietnamese SOP/checklist/troubleshooting documents.
 
-The data is generated as CSV files in `data/raw` and loaded into PostgreSQL. Processed outputs are written to `data/processed`.
+The data is generated as CSV files in `data/raw`. The canonical batch pipeline reads those CSVs directly and writes analytics outputs to `data/processed`. Loading the raw data into PostgreSQL is an optional experiment, not a requirement for the main demo.
 
 ## What is the output?
 
@@ -71,15 +71,15 @@ A normal CMMS/S-Maintain system is the system of record for assets, work orders,
 
 This project is an AI decision-support layer. It analyzes CMMS-like data, detects abnormal patterns, prioritizes risky assets, explains risk drivers, and retrieves SOP/checklist context. In production, it would integrate with a CMMS rather than replace it.
 
-## Why use PostgreSQL and Qdrant?
+## Why keep PostgreSQL and Qdrant?
 
-PostgreSQL is a strong fit for structured operational maintenance data: assets, readings, tickets, logs, and risk scores.
+PostgreSQL is retained as an optional/experimental example of structured storage for assets, readings, tickets, logs, and risk snapshots. The current API and Copilot structured context do not query PostgreSQL; they use canonical processed CSV outputs.
 
 Qdrant is a vector database designed for semantic retrieval. It stores embeddings of SOP/checklist chunks and supports top-k search with metadata filters such as `asset_type`.
 
-Together they support hybrid maintenance intelligence:
+In the current MVP, the active hybrid context is:
 
-- structured context from PostgreSQL/processed features;
+- structured context from processed CSV features, anomalies, and risks;
 - semantic document context from Qdrant.
 
 ## What are the limitations?
