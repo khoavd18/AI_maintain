@@ -27,6 +27,8 @@ MVP tập trung vào:
 - recurring issue analysis và maintenance KPI ở mức mô tả;
 - RAG retrieval cho SOP/checklist.
 
+Synthetic data foundation hiện tập trung vào 27 assets thuộc HVAC, pump và generator, với 120 ngày operational readings theo giờ.
+
 Không thuộc phạm vi:
 
 - spare-parts inventory;
@@ -61,8 +63,7 @@ Thuộc target MVP nhưng chưa được triển khai đầy đủ:
 - upcoming maintenance view;
 - recurring issue report;
 - maintenance-process KPI dashboard;
-- explicit `maintenance_result` field;
-- SOP/checklist coverage cho toàn bộ asset types.
+- API/dashboard reporting riêng cho recurring issues và maintenance-process KPI.
 
 Các mục chưa hoàn thiện được xem là future milestones, không phải current capabilities.
 
@@ -118,7 +119,6 @@ Raw synthetic CSVs:
 - `data/raw/sensor_readings.csv`
 - `data/raw/maintenance_tickets.csv`
 - `data/raw/maintenance_logs.csv`
-- `data/raw/risk_scores.csv` (legacy generated snapshot, không phải canonical processed risk)
 - `data/raw/documents.csv`
 
 Canonical processed outputs:
@@ -127,7 +127,7 @@ Canonical processed outputs:
 - `data/processed/anomaly_results.csv`
 - `data/processed/risk_scores.csv`
 
-Default generation hiện tạo 100 assets và 60 ngày hourly readings. Đây là synthetic demo data, không phải production dataset hoặc bằng chứng model accuracy.
+Default generation tạo 27 assets và 120 ngày hourly readings. Generator không tạo raw risk result hoặc raw anomaly label; analytics output chỉ được tạo bởi canonical processed pipelines. Đây là synthetic demo data, không phải production dataset hoặc bằng chứng model accuracy.
 
 Minimum field definitions: [docs/data_contract.md](docs/data_contract.md).
 
@@ -137,7 +137,7 @@ Code, module, column và API field dùng tiếng Anh. Business values và nội 
 
 Ví dụ:
 
-- `asset_type`: `Máy lạnh`, `Máy bơm nước`, `Thang máy`, `Máy phát điện dự phòng`;
+- `asset_type`: `Máy lạnh`, `Máy bơm nước`, `Máy phát điện dự phòng`;
 - `priority`: `Thấp`, `Trung bình`, `Cao`, `Khẩn cấp`;
 - `risk_level`: `Thấp`, `Trung bình`, `Cao`, `Khẩn cấp`;
 - `anomaly_type`: `Tăng điện năng bất thường`, `Độ rung tăng bất thường`.
@@ -146,14 +146,14 @@ Ví dụ:
 
 `src/features/build_features.py` tổng hợp daily asset-level features:
 
-- energy, temperature, vibration, runtime và pressure aggregates;
+- energy, temperature, vibration và runtime aggregates;
 - rolling 7-day baselines và delta signals;
 - days since maintenance và days overdue;
 - ticket counts trong 7/30 ngày;
 - high-priority ticket counts;
 - asset age và criticality score.
 
-`pressure` hiện được giữ để tương thích với dataset cũ nhưng không phải minimum field của revised MVP.
+Raw readings không còn chứa `pressure`. Feature pipeline tạm phát sinh `pressure = 0.0` để giữ compatibility với downstream anomaly/API contracts; đây không phải measurement mới.
 
 ## Anomaly Detection
 
@@ -338,7 +338,7 @@ Test suite bao phủ data generation, validation, optional database loading, fea
 ## Limitations
 
 - Synthetic data chưa được kiểm chứng bằng maintenance history thực tế.
-- Preventive timeline trong generated data cần được làm chặt ở milestone sau.
+- Synthetic chronology chỉ mô phỏng quy trình đơn giản và chưa được đối chiếu với quy tắc lịch bảo trì thực tế của một cơ sở cụ thể.
 - API hiện phục vụ processed CSV, không có scheduler hoặc cache invalidation strategy cho production.
 - Isolation Forest và risk formula chưa được đánh giá trên labeled failure outcomes.
 - Copilot retrieval quality chưa có evaluation dataset hoặc relevance threshold.

@@ -7,7 +7,12 @@ import pandas as pd
 import pytest
 
 from src.config.value_mappings import ANOMALY_TYPE_CODE_TO_VI
-from src.data_generation.generate_data import generate_dataset, save_dataset
+from src.data_generation.generate_data import (
+    CONTROLLED_ANOMALY_DAYS,
+    DATA_START,
+    generate_dataset,
+    save_dataset,
+)
 from src.features.build_features import build_features_from_csv
 from src.models.anomaly_detection import (
     ANOMALY_OUTPUT_COLUMNS,
@@ -99,16 +104,22 @@ def test_injected_anomaly_records_score_higher_than_normal_records(
     assert isinstance(dataset, dict)
     assert isinstance(results, pd.DataFrame)
 
-    sensor_readings = dataset["sensor_readings"].copy()
-    sensor_readings["date"] = pd.to_datetime(sensor_readings["timestamp"], utc=True).dt.date.astype(str)
-    injected_days = (
-        sensor_readings[sensor_readings["anomaly_type"] != ANOMALY_TYPE_CODE_TO_VI["none"]]
-        [["asset_id", "date"]]
-        .drop_duplicates()
+    controlled_assets = {
+        "HVAC_001",
+        "HVAC_002",
+        "PUMP_001",
+        "PUMP_002",
+        "GENERATOR_001",
+        "GENERATOR_002",
+    }
+    controlled_start = pd.Timestamp(DATA_START) + pd.Timedelta(
+        days=20 - CONTROLLED_ANOMALY_DAYS
     )
-
-    scored = results.merge(injected_days.assign(injected=True), on=["asset_id", "date"], how="left")
-    scored["injected"] = scored["injected"].eq(True)
+    result_dates = pd.to_datetime(results["date"], utc=True)
+    scored = results.copy()
+    scored["injected"] = scored["asset_id"].isin(controlled_assets) & result_dates.ge(
+        controlled_start
+    )
 
     assert scored.loc[scored["injected"], "anomaly_score"].mean() > scored.loc[
         ~scored["injected"], "anomaly_score"

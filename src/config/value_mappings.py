@@ -67,6 +67,16 @@ MAINTENANCE_TYPE_VI_TO_CODE = {
     value: key for key, value in MAINTENANCE_TYPE_CODE_TO_VI.items()
 }
 
+MAINTENANCE_RESULT_CODE_TO_VI = {
+    "resolved": "Đã xử lý",
+    "partially_resolved": "Đã xử lý một phần",
+    "monitoring_required": "Cần theo dõi",
+    "vendor_required": "Cần hỗ trợ chuyên môn",
+}
+MAINTENANCE_RESULT_VI_TO_CODE = {
+    value: key for key, value in MAINTENANCE_RESULT_CODE_TO_VI.items()
+}
+
 DOCUMENT_TYPE_CODE_TO_VI = {
     "sop": "Quy trình vận hành chuẩn",
     "checklist": "Danh sách kiểm tra",

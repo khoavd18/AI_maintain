@@ -24,14 +24,17 @@ LOAD_ORDER = [
     ("sensor_readings", SensorReading),
     ("maintenance_tickets", MaintenanceTicket),
     ("maintenance_logs", MaintenanceLog),
-    ("risk_scores", RiskScore),
     ("documents", Document),
 ]
+CLEAR_ORDER = [Document, RiskScore, MaintenanceLog, MaintenanceTicket, SensorReading, Asset]
 
 DATE_COLUMNS = {
-    "assets": ["installation_date", "last_maintenance_date"],
+    "assets": [
+        "installation_date",
+        "last_maintenance_date",
+        "next_maintenance_date",
+    ],
     "maintenance_logs": ["maintenance_date", "next_maintenance_date"],
-    "risk_scores": ["score_date"],
 }
 
 DATETIME_COLUMNS = {
@@ -54,7 +57,7 @@ def load_csv_dataset(
 
     with Session(engine) as session:
         if replace:
-            for _, model in reversed(LOAD_ORDER):
+            for model in CLEAR_ORDER:
                 session.execute(delete(model))
             session.commit()
 

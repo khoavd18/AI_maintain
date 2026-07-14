@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from src.config.value_mappings import PRIORITY_VI_TO_SCORE, criticality_score
-from src.ingestion.validation import validate_csv_dataset
+from src.ingestion.validation import validate_csv_dataset, validate_feature_overdue_days
 
 DEFAULT_FEATURE_OUTPUT_PATH = Path("data/processed/asset_daily_features.csv")
 
@@ -30,6 +30,8 @@ FEATURE_COLUMNS = [
     "rolling_avg_vibration_7d",
     "vibration_delta",
     "runtime_delta_percent",
+    "last_maintenance_date",
+    "next_maintenance_date",
     "days_since_last_maintenance",
     "days_overdue",
     "ticket_count_7d",
@@ -71,6 +73,8 @@ def build_daily_asset_features(
     features[count_columns] = features[count_columns].fillna(0).astype(int)
     features = features[FEATURE_COLUMNS].sort_values(["asset_id", "feature_date"]).reset_index(drop=True)
     features["feature_date"] = features["feature_date"].dt.date.astype(str)
+    for column in ["last_maintenance_date", "next_maintenance_date"]:
+        features[column] = pd.to_datetime(features[column]).dt.date.astype(str)
     return features
 
 
@@ -87,6 +91,7 @@ def build_features_from_csv(
         maintenance_tickets=frames["maintenance_tickets"],
         maintenance_logs=frames["maintenance_logs"],
     )
+    validate_feature_overdue_days(features)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     features.to_csv(output_path, index=False)
     return features
@@ -111,7 +116,11 @@ def build_asset_feature_frame(readings: pd.DataFrame) -> pd.DataFrame:
 
 def _prepare_assets(assets: pd.DataFrame) -> pd.DataFrame:
     prepared = assets.copy()
-    for column in ["installation_date", "last_maintenance_date"]:
+    for column in [
+        "installation_date",
+        "last_maintenance_date",
+        "next_maintenance_date",
+    ]:
         prepared[column] = pd.to_datetime(prepared[column], errors="raise").dt.normalize()
     prepared["criticality_score"] = prepared["criticality"].map(criticality_score)
     return prepared
@@ -121,17 +130,22 @@ def _build_daily_sensor_features(sensor_readings: pd.DataFrame) -> pd.DataFrame:
     readings = sensor_readings.copy()
     readings["feature_date"] = _to_utc_naive_datetime(readings["timestamp"]).dt.normalize()
 
+    aggregations: dict[str, tuple[str, str]] = {
+        "daily_energy_kwh": ("energy_kwh", "sum"),
+        "daily_avg_temperature": ("temperature", "mean"),
+        "daily_avg_vibration": ("vibration", "mean"),
+        "daily_runtime_hours": ("runtime_hours", "sum"),
+    }
+    if "pressure" in readings.columns:
+        aggregations["daily_avg_pressure"] = ("pressure", "mean")
+
     daily = (
         readings.groupby(["asset_id", "feature_date"], as_index=False)
-        .agg(
-            daily_energy_kwh=("energy_kwh", "sum"),
-            daily_avg_temperature=("temperature", "mean"),
-            daily_avg_vibration=("vibration", "mean"),
-            daily_runtime_hours=("runtime_hours", "sum"),
-            daily_avg_pressure=("pressure", "mean"),
-        )
+        .agg(**aggregations)
         .sort_values(["asset_id", "feature_date"])
     )
+    if "daily_avg_pressure" not in daily.columns:
+        daily["daily_avg_pressure"] = 0.0
     daily["energy_kwh"] = daily["daily_energy_kwh"]
     daily["temperature"] = daily["daily_avg_temperature"]
     daily["vibration"] = daily["daily_avg_vibration"]
@@ -210,35 +224,45 @@ def _build_maintenance_features(
     asset_lookup = assets.set_index("asset_id")
     logs = maintenance_logs.copy()
     logs["maintenance_date"] = pd.to_datetime(logs["maintenance_date"], errors="raise").dt.normalize()
+    logs["next_maintenance_date"] = pd.to_datetime(
+        logs["next_maintenance_date"], errors="raise"
+    ).dt.normalize()
     logs_by_asset = {
-        asset_id: group["maintenance_date"].sort_values().tolist()
+        asset_id: group.sort_values(["maintenance_date", "log_id"])
         for asset_id, group in logs.groupby("asset_id")
     }
 
     rows: list[dict[str, object]] = []
     for row in readings_daily[["asset_id", "feature_date"]].itertuples(index=False):
         asset = asset_lookup.loc[row.asset_id]
-        installation_date = asset["installation_date"]
-        last_maintenance_date = asset["last_maintenance_date"]
-        frequency_days = int(asset["maintenance_frequency_days"])
         feature_date = row.feature_date
 
-        candidate_dates = [installation_date]
-        if last_maintenance_date <= feature_date:
-            candidate_dates.append(last_maintenance_date)
-        candidate_dates.extend(
-            log_date for log_date in logs_by_asset.get(row.asset_id, []) if log_date <= feature_date
-        )
-        latest_maintenance_date = max(candidate_dates)
+        asset_logs = logs_by_asset.get(row.asset_id)
+        if asset_logs is None:
+            raise ValueError(f"No maintenance history found for asset_id={row.asset_id}")
+        eligible_logs = asset_logs[asset_logs["maintenance_date"] <= feature_date]
+        if eligible_logs.empty:
+            raise ValueError(
+                "No point-in-time maintenance event found for "
+                f"asset_id={row.asset_id} feature_date={feature_date.date()}"
+            )
+        latest_log = eligible_logs.iloc[-1]
+        latest_maintenance_date = latest_log["maintenance_date"]
+        next_maintenance_date = latest_log["next_maintenance_date"]
         days_since_last_maintenance = max(0, int((feature_date - latest_maintenance_date).days))
+        days_overdue = max(0, int((feature_date - next_maintenance_date).days))
 
         rows.append(
             {
                 "asset_id": row.asset_id,
                 "feature_date": feature_date,
+                "last_maintenance_date": latest_maintenance_date,
+                "next_maintenance_date": next_maintenance_date,
                 "days_since_last_maintenance": days_since_last_maintenance,
-                "days_overdue": max(0, days_since_last_maintenance - frequency_days),
-                "asset_age_days": max(0, int((feature_date - installation_date).days)),
+                "days_overdue": days_overdue,
+                "asset_age_days": max(
+                    0, int((feature_date - asset["installation_date"]).days)
+                ),
                 "criticality_score": int(asset["criticality_score"]),
             }
         )

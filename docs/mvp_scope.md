@@ -29,6 +29,8 @@ Sản phẩm không thay thế CMMS/S-Maintain và không tự quyết định t
 - Operational reading theo batch: điện năng, runtime, nhiệt độ và độ rung khi phù hợp với loại thiết bị.
 - SOP/checklist tiếng Việt có metadata nguồn và loại thiết bị.
 
+Synthetic demo scope được khóa ở ba loại asset: `Máy lạnh` (HVAC), `Máy bơm nước` (pump) và `Máy phát điện dự phòng` (generator). Dataset mặc định gồm 27 assets và 120 ngày operational readings theo giờ. Đây là quy mô demo, không phải sizing cho production.
+
 ### Analytics Và Ứng Dụng
 
 - Tổng hợp feature hằng ngày ở cấp asset.
@@ -39,6 +41,7 @@ Sản phẩm không thay thế CMMS/S-Maintain và không tự quyết định t
 - Maintenance KPI ở mức mô tả, với định nghĩa rõ ràng.
 - FastAPI làm serving boundary cho Streamlit và Copilot.
 - RAG Copilot tìm SOP/checklist liên quan và hiển thị nguồn.
+- Maintenance result có enum rõ ràng, liên kết ticket khi là corrective maintenance và cờ follow-up nhất quán.
 
 ## Trạng Thái Hiện Tại Và Future Milestones
 
@@ -59,8 +62,7 @@ Thuộc phạm vi MVP nhưng chưa hoàn thiện trong behavior hiện tại:
 - upcoming maintenance view;
 - recurring issue analysis;
 - maintenance-process KPI dashboard;
-- field `maintenance_result` rõ ràng;
-- SOP/checklist coverage cho toàn bộ loại thiết bị.
+- API/dashboard reporting riêng cho recurring issues và maintenance-process KPI.
 
 Các mục này là future milestones. Tài liệu không được mô tả chúng như capability đã chạy nếu code và test chưa tồn tại.
 
@@ -101,4 +103,3 @@ MVP được xem là coherent khi:
 5. Technician có thể tìm SOP/checklist liên quan và thấy nguồn tài liệu được sử dụng.
 6. Current features và future work được phân biệt rõ trong README và docs.
 7. Test và lint pass; không có claim về accuracy, ROI hoặc production readiness khi chưa có bằng chứng.
-

@@ -44,7 +44,7 @@ flowchart LR
 ## Primary Runtime Path
 
 1. `src/data_generation/generate_data.py` tạo Vietnamese synthetic CSV data trong `data/raw`.
-2. `src/ingestion/validation.py` kiểm tra schema, reference, date và Vietnamese business values.
+2. `src/ingestion/validation.py` kiểm tra schema, reference, enum, chronology và Vietnamese business values.
 3. `src/features/build_features.py` tạo `data/processed/asset_daily_features.csv`.
 4. `src/models/anomaly_detection.py` tạo `data/processed/anomaly_results.csv`.
 5. `src/risk/risk_scoring.py` tạo `data/processed/risk_scores.csv`.
@@ -107,7 +107,7 @@ Các file/implementation sau chưa bị xóa trong Milestone 1 nhưng không ph�
 |---|---|
 | `src/models/anomaly.py` | Legacy anomaly wrapper; candidate for later removal |
 | `src/risk/scoring.py` | Legacy risk formula; candidate for later removal |
-| Raw risk generation trong `src/data_generation/generate_data.py` | Không phải processed risk contract; cần xử lý ở milestone sau |
+| Legacy `data/raw/risk_scores.csv` | Không còn được generator tạo; stale file được xóa khi save dataset |
 | `_risk_reasons_legacy` và `_recommended_action_legacy` | Legacy helpers |
 | `src/ingestion/documents.py` | Legacy chunking helper; canonical chunker ở `src/rag/chunking.py` |
 | `src/ingestion/tickets.py` | Unused normalization helper; candidate for later removal |

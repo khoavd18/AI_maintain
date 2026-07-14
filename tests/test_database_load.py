@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 
 from src.data_generation.generate_data import generate_dataset, save_dataset
 from src.database.init_db import init_database
-from src.database.models import Asset, Document, RiskScore, SensorReading
+from src.database.models import (
+    Asset,
+    Document,
+    MaintenanceLog,
+    MaintenanceTicket,
+    SensorReading,
+)
 from src.database.session import build_engine
 from src.ingestion.load_data import load_csv_dataset
 
@@ -24,17 +30,20 @@ def test_database_insertion_works(tmp_path: Path) -> None:
 
     assert counts["assets"] == 12
     assert counts["sensor_readings"] == 12 * 3 * 24
-    assert counts["risk_scores"] == 12
-    assert counts["documents"] == 10
+    assert counts["maintenance_tickets"] == len(dataset["maintenance_tickets"])
+    assert counts["maintenance_logs"] == len(dataset["maintenance_logs"])
+    assert counts["documents"] == 6
 
     engine = build_engine(database_url)
     with Session(engine) as session:
         asset_count = session.scalar(select(func.count()).select_from(Asset))
         reading_count = session.scalar(select(func.count()).select_from(SensorReading))
-        risk_count = session.scalar(select(func.count()).select_from(RiskScore))
+        ticket_count = session.scalar(select(func.count()).select_from(MaintenanceTicket))
+        log_count = session.scalar(select(func.count()).select_from(MaintenanceLog))
         document_count = session.scalar(select(func.count()).select_from(Document))
 
     assert asset_count == counts["assets"]
     assert reading_count == counts["sensor_readings"]
-    assert risk_count == counts["risk_scores"]
+    assert ticket_count == counts["maintenance_tickets"]
+    assert log_count == counts["maintenance_logs"]
     assert document_count == counts["documents"]

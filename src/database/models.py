@@ -2,10 +2,10 @@
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.config.value_mappings import ANOMALY_TYPE_CODE_TO_VI, STATUS_CODE_TO_VI
+from src.config.value_mappings import STATUS_CODE_TO_VI
 from src.database.session import Base
 
 
@@ -18,12 +18,14 @@ class Asset(Base):
     asset_name: Mapped[str] = mapped_column(String(200), nullable=False)
     asset_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     location: Mapped[str] = mapped_column(String(200), nullable=False)
-    floor: Mapped[int] = mapped_column(Integer, nullable=False)
     criticality: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default=STATUS_CODE_TO_VI["normal"]
+    )
     installation_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_maintenance_date: Mapped[date] = mapped_column(Date, nullable=False)
-    maintenance_frequency_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(String(40), nullable=False, default=STATUS_CODE_TO_VI["normal"])
+    maintenance_interval_days: Mapped[int] = mapped_column(nullable=False)
+    next_maintenance_date: Mapped[date] = mapped_column(Date, nullable=False)
 
     sensor_readings: Mapped[list["SensorReading"]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"
@@ -51,10 +53,8 @@ class SensorReading(Base):
     temperature: Mapped[float] = mapped_column(Float, nullable=False)
     vibration: Mapped[float] = mapped_column(Float, nullable=False)
     runtime_hours: Mapped[float] = mapped_column(Float, nullable=False)
-    pressure: Mapped[float] = mapped_column(Float, nullable=False)
-    status: Mapped[str] = mapped_column(String(40), nullable=False, default=STATUS_CODE_TO_VI["normal"])
-    anomaly_type: Mapped[str] = mapped_column(
-        String(100), nullable=False, default=ANOMALY_TYPE_CODE_TO_VI["none"]
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default=STATUS_CODE_TO_VI["normal"]
     )
 
     asset: Mapped[Asset] = relationship(back_populates="sensor_readings")
@@ -74,8 +74,8 @@ class MaintenanceTicket(Base):
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    technician_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    failure_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    failure_category: Mapped[str] = mapped_column(String(100), nullable=False)
+    technician_id: Mapped[str] = mapped_column(String(40), nullable=False)
 
     asset: Mapped[Asset] = relationship(back_populates="maintenance_tickets")
 
@@ -86,14 +86,20 @@ class MaintenanceLog(Base):
     __tablename__ = "maintenance_logs"
 
     log_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    ticket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("maintenance_tickets.ticket_id"), index=True, nullable=True
+    )
     asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), index=True, nullable=False)
     maintenance_date: Mapped[date] = mapped_column(Date, nullable=False)
     maintenance_type: Mapped[str] = mapped_column(String(80), nullable=False)
-    technician_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    technician_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    inspection_result: Mapped[str] = mapped_column(Text, nullable=False)
     actions_taken: Mapped[str] = mapped_column(Text, nullable=False)
     parts_replaced: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    technician_note: Mapped[str] = mapped_column(Text, nullable=False)
+    maintenance_result: Mapped[str] = mapped_column(String(80), nullable=False)
+    follow_up_required: Mapped[bool] = mapped_column(Boolean, nullable=False)
     next_maintenance_date: Mapped[date] = mapped_column(Date, nullable=False)
-    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     asset: Mapped[Asset] = relationship(back_populates="maintenance_logs")
 
