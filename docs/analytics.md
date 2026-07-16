@@ -1,5 +1,7 @@
 # Analytics Pipeline Canonical
 
+> Ticket và maintenance log được ghi từ dashboard là raw inputs cho lần chạy batch tiếp theo. Write endpoints không thay đổi feature, anomaly, risk, preventive, recurring hoặc KPI output ngay tại thời điểm lưu.
+
 ## Phạm Vi
 
 Analytics chạy theo batch trên synthetic CSV data. Kết quả dùng để ưu tiên kiểm tra và hỗ trợ giải thích; không phải failure probability, không dự đoán thời điểm hỏng và không tự động quyết định maintenance action.

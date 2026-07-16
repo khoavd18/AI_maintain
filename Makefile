@@ -1,9 +1,9 @@
-.PHONY: install test lint services-up services-down init-db generate-data load-data build-features detect-anomalies score-risk index-documents rag-query run-api run-dashboard
+.PHONY: install test lint services-up services-down qdrant-up qdrant-down init-db generate-data validate-data load-data build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query run-api run-dashboard
 
 PYTHON ?= python
 
 install:
-	$(PYTHON) -m pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[dev,rag,postgres]"
 
 test:
 	$(PYTHON) -m pytest
@@ -17,11 +17,20 @@ services-up:
 services-down:
 	docker compose down
 
+qdrant-up:
+	docker compose up -d qdrant
+
+qdrant-down:
+	docker compose stop qdrant
+
 init-db:
 	$(PYTHON) -m src.database.init_db
 
 generate-data:
 	$(PYTHON) -m src.data_generation.generate_data
+
+validate-data:
+	$(PYTHON) -m src.ingestion.validation
 
 load-data:
 	$(PYTHON) -m src.ingestion.load_data --replace
@@ -34,6 +43,15 @@ detect-anomalies:
 
 score-risk:
 	$(PYTHON) -m src.risk.risk_scoring
+
+build-preventive:
+	$(PYTHON) -m src.features.build_features --analysis preventive
+
+build-recurring:
+	$(PYTHON) -m src.features.build_features --analysis recurring
+
+build-kpis:
+	$(PYTHON) -m src.features.build_features --analysis kpis
 
 index-documents:
 	$(PYTHON) -m src.rag.index_documents

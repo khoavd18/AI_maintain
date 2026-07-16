@@ -46,8 +46,12 @@ Primary source hiện tại: `data/raw/maintenance_tickets.csv`.
 | `created_at` | datetime | Có | Thời điểm tạo |
 | `resolved_at` | datetime/null | Có điều kiện | Có giá trị khi ticket đã xử lý |
 | `technician_id` | string | Có | Định danh technician được gán |
+| `manager_note` | string/null | Không | Ghi chú của manager khi tạo ticket từ risk context |
+| `note` | string/null | Không | Ghi chú cập nhật gần nhất trong local workflow |
 
 Allowed `status`: `Mới tạo`, `Đang xử lý`, `Đã xử lý`. Chỉ ticket `Đã xử lý` có `resolved_at`; timestamp này không được sớm hơn `created_at`.
+
+Write workflow chỉ cho phép transition tuyến tính `Mới tạo -> Đang xử lý -> Đã xử lý`; cập nhật cùng trạng thái được phép để đổi priority, technician hoặc note. Ticket phải có maintenance log liên kết trước khi chuyển sang `Đã xử lý`. `created_at` do server tạo theo UTC, còn `resolved_at` phải có timezone và không được nằm trong tương lai.
 
 ## Maintenance Logs
 
@@ -79,6 +83,18 @@ Allowed `maintenance_result`:
 `follow_up_required = false` chỉ khi result là `Đã xử lý`; các result còn lại yêu cầu follow-up. Tên code trong ngoặc dùng trong mapping nội bộ, còn CSV giữ business value tiếng Việt.
 
 `parts_replaced` có thể được giữ như lịch sử hành động nhưng không được mở rộng thành spare-parts inventory.
+
+Log được tạo từ ticket trong local workflow dùng `maintenance_type = Bảo trì sửa chữa` và kế thừa `technician_id` đang được gán trên ticket. `asset_id` phải khớp ticket, ticket phải ở trạng thái `Đang xử lý`, `maintenance_date` không được trước ngày tạo ticket hoặc nằm trong tương lai, và `next_maintenance_date` phải theo đúng maintenance interval của asset.
+
+Khi log được ghi thành công, `assets.last_maintenance_date` và `assets.next_maintenance_date` của cùng asset được đồng bộ để raw dataset vẫn qua canonical validation và sẵn sàng cho batch tiếp theo.
+
+## CSV Write Contract
+
+- `POST /tickets`, `PATCH /tickets/{ticket_id}` và `POST /maintenance/logs` chỉ ghi raw workflow CSV; log creation đồng bộ asset maintenance dates nhưng không ghi processed analytics.
+- Ticket ID và log ID được tạo theo canonical sequence, đồng thời được kiểm tra trùng trước khi ghi.
+- Mỗi file đích được stage trong cùng thư mục, flush dữ liệu rồi dùng atomic replacement. Maintenance-log request stage cả log và asset master; lỗi replace được rollback về các bản gốc đã backup.
+- Không có cross-process lock, database transaction isolation hoặc crash-safe multi-file commit. Write path này chỉ phù hợp local single-user portfolio MVP và không an toàn cho concurrent production users.
+- Sau khi ghi, risk, preventive, recurrence và KPI snapshots vẫn phản ánh batch trước đó cho đến khi canonical analytics pipeline được chạy lại.
 
 ## Operational Readings
 

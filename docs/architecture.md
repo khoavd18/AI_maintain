@@ -20,6 +20,7 @@ flowchart LR
     Risk[Canonical risk pipeline<br/>src/risk/risk_scoring.py]
     Processed[Processed CSVs<br/>features, anomalies, risks]
     API[FastAPI<br/>src/api]
+    WriteRepo[Atomic CSV write repository<br/>tickets, logs + asset dates]
     Dashboard[Streamlit<br/>src/dashboard/app.py]
 
     Raw --> Validation
@@ -35,6 +36,9 @@ flowchart LR
     Maintenance --> Processed
     Processed --> API
     API --> Dashboard
+    Dashboard -->|POST/PATCH| API
+    API --> WriteRepo
+    WriteRepo -->|atomic replace| Raw
 
     Docs[6 Vietnamese synthetic documents] --> Chunking[Deterministic chunking<br/>source metadata]
     Chunking --> Embeddings[Local sentence-transformers embeddings]
@@ -55,9 +59,10 @@ flowchart LR
 4. `src/models/anomaly_detection.py` tạo `data/processed/anomaly_results.csv`.
 5. `src/risk/risk_scoring.py` tạo `data/processed/risk_scores.csv`.
 6. `src/features/build_features.py` tạo preventive status, recurring issue và KPI snapshots từ raw contract cùng latest canonical risk output.
-7. `src/api/services.py` đọc các processed CSV thuộc API contract hiện tại và cung cấp data qua FastAPI routes.
-8. `src/dashboard/api_client.py` gọi FastAPI; Streamlit không đọc CSV trực tiếp.
-9. Copilot kết hợp structured asset context từ API service với SOP/checklist chunks được retrieve từ Qdrant.
+7. `src/api/services.py` đọc raw/processed CSV và điều phối local ticket/log write rules.
+8. `src/api/csv_repository.py` ghi từng ticket/log file bằng temporary file và atomic replacement; không có concurrent-user locking.
+9. `src/dashboard/api_client.py` gọi FastAPI cho cả reads và writes; Streamlit không đọc hoặc ghi CSV trực tiếp.
+10. Copilot kết hợp structured asset/ticket context từ API service với SOP/checklist chunks được retrieve từ Qdrant.
 
 ## Canonical Analytics Implementations
 
@@ -75,12 +80,19 @@ Chi tiết formula và definitions: [Analytics pipeline](analytics.md).
 ## Serving Layer
 
 - `src/api/main.py` tạo FastAPI application.
-- `src/api/routes.py` giữ backward-compatible risk/anomaly/context/Copilot endpoints và manager workflow endpoints cho assets, tickets, logs, preventive status, recurrence và KPI.
-- `src/api/services.py` đọc raw asset/ticket/log CSV cùng canonical processed outputs, kiểm tra availability/freshness và không trả internal file path trong lỗi.
+- `src/api/routes.py` giữ backward-compatible risk/anomaly/context/Copilot endpoints và bổ sung write endpoints `POST /tickets`, `PATCH /tickets/{ticket_id}`, `POST /maintenance/logs`.
+- `src/api/services.py` đọc raw asset/ticket/log CSV cùng canonical processed outputs, kiểm tra availability/freshness, thực thi ticket transition/chronology rules và không trả internal file path trong lỗi.
+- `src/api/csv_repository.py` kiểm tra minimum schema, duplicate ID và dùng `os.replace` để tránh partial file replacement.
 - `src/dashboard/app.py` là Streamlit entrypoint canonical.
 - `src/dashboard/api_client.py` là HTTP boundary giữa dashboard và API.
 
-Streamlit chỉ gọi FastAPI. Bốn views canonical là `Tổng quan`, `Thiết bị và rủi ro`, `Bất thường và lỗi lặp lại` và `Trợ lý bảo trì`. RAG availability không quyết định health của manager dashboard.
+Streamlit chỉ gọi FastAPI. Năm views canonical là `Tổng quan`, `Thiết bị và rủi ro`, `Ticket workspace`, `Bất thường và lỗi lặp lại` và `Trợ lý bảo trì`. RAG availability không quyết định health của manager dashboard.
+
+## Local Write Boundary
+
+Write workflow chỉ đóng vòng demo: manager tạo inspection ticket từ risk context, technician nhận ticket, ghi maintenance result và resolve hoặc giữ follow-up. Ticket request thay một raw CSV; maintenance-log request stage log cùng asset maintenance dates và rollback các file đã thay nếu một bước replace thất bại. Processed risk/KPI files không thay đổi cho đến canonical batch tiếp theo.
+
+Atomic replacement và handled-failure rollback ngăn file đích ở trạng thái ghi dở trong local workflow, nhưng không cung cấp crash-safe multi-file transaction, record locking hoặc conflict detection giữa nhiều process. Vì vậy write boundary này chỉ dành cho một local portfolio user, không phải production CMMS storage.
 
 ## RAG Layer
 
@@ -118,23 +130,24 @@ Quy tắc:
 - Không xem database `risk_scores` hiện tại là canonical analytics output.
 - PostgreSQL experiments không được làm gián đoạn CSV-first pipeline.
 
-## Legacy Và Removal Candidates
+## Cleanup Audit
 
-Các file/implementation sau chưa bị xóa trong Milestone 1 nhưng không phải canonical extension points:
+Milestone 6 tìm kiếm toàn bộ imports, function references, tests, docs và CLI entrypoints trước khi xóa. Kết quả:
 
-| Module hoặc implementation | Trạng thái |
-|---|---|
-| `src/models/anomaly.py` | Legacy anomaly wrapper; candidate for later removal |
-| `src/risk/scoring.py` | Legacy risk formula; candidate for later removal |
-| Legacy `data/raw/risk_scores.csv` | Không còn được generator tạo; stale file được xóa khi save dataset |
-| `_risk_reasons_legacy` và `_recommended_action_legacy` | Legacy helpers |
-| `src/ingestion/documents.py` | Legacy chunking helper; canonical chunker ở `src/rag/chunking.py` |
-| `src/ingestion/tickets.py` | Unused normalization helper; candidate for later removal |
-| `build_asset_feature_frame` trong `src/features/build_features.py` | Backward-compatible helper, không phải daily feature pipeline |
-| `src/data_generation/sample_data.py` | Convenience helper chưa được active workflow sử dụng |
-| Root `app.py` | Compatibility dashboard entrypoint; canonical entrypoint là `src/dashboard/app.py` |
+| Candidate | Phân loại cuối | Quyết định và canonical replacement |
+|---|---|---|
+| `src/models/anomaly.py` | Safe to remove | Không có import/test; dùng `src/models/anomaly_detection.py` |
+| `src/risk/scoring.py` | Safe to remove | Formula 55/30/15 cũ không được import; dùng `src/risk/risk_scoring.py` |
+| `src/ingestion/documents.py` | Safe to remove | Chunker duplicate không được dùng; dùng `src/rag/chunking.py` |
+| `src/ingestion/tickets.py` | Safe to remove | Normalization helper không có caller; validation canonical ở `src/ingestion/validation.py` |
+| `src/data_generation/sample_data.py` | Safe to remove | Wrapper demo không có caller; dùng `src/data_generation/generate_data.py` |
+| Root `app.py` | Safe to remove | Duplicate Streamlit entrypoint; dùng `src/dashboard/app.py` |
+| Root `proposal.md` | Safe to remove | File rỗng, không có reference |
+| `build_asset_feature_frame` | Safe to remove | Helper cho schema `value` cũ, không có caller; daily pipeline giữ nguyên |
+| `src/database/*`, `src/ingestion/load_data.py` | Compatibility-only | Retain với deprecation/status note vì optional PostgreSQL tests đang dùng |
+| `src/rag/query.py` | Actively used | Retain làm CLI query được Make target sử dụng |
 
-Không mở rộng legacy modules. Việc xóa chỉ được thực hiện trong cleanup milestone sau khi kiểm tra import, test và migration impact.
+Generator vẫn chủ động xóa stale `data/raw/risk_scores.csv` nếu file cũ tồn tại. Đây là migration hygiene, không phải một analytics implementation khác.
 
 ## Human-in-the-Loop Boundary
 

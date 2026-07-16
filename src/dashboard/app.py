@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 import pandas as pd
@@ -15,6 +16,24 @@ from src.dashboard.api_client import (
 )
 
 ALL_OPTION = "Tất cả"
+TICKET_STATUSES = ["Mới tạo", "Đang xử lý", "Đã xử lý"]
+PRIORITIES = ["Thấp", "Trung bình", "Cao", "Khẩn cấp"]
+FAILURE_CATEGORIES = [
+    "Lỗi làm lạnh",
+    "Lỗi rung động",
+    "Lỗi điện",
+    "Lỗi áp suất",
+    "Lỗi thời gian vận hành",
+    "Lỗi cảm biến",
+    "Cảnh báo giả",
+    "Không có lỗi",
+]
+MAINTENANCE_RESULTS = [
+    "Đã xử lý",
+    "Đã xử lý một phần",
+    "Cần theo dõi",
+    "Cần hỗ trợ chuyên môn",
+]
 
 ASSET_TABLE_COLUMNS = [
     "asset_id",
@@ -54,6 +73,8 @@ TICKET_COLUMNS = [
     "status",
     "resolved_at",
     "technician_id",
+    "manager_note",
+    "note",
 ]
 LOG_COLUMNS = [
     "log_id",
@@ -78,7 +99,7 @@ RECURRING_COLUMNS = [
 
 
 def main() -> None:
-    """Render the four-view manager workflow."""
+    """Render the focused manager and technician workflow."""
 
     st.set_page_config(page_title="AI Maintenance Copilot", layout="wide")
     st.title("AI Maintenance Copilot")
@@ -113,6 +134,7 @@ def main() -> None:
         [
             "Tổng quan",
             "Thiết bị và rủi ro",
+            "Ticket workspace",
             "Bất thường và lỗi lặp lại",
             "Trợ lý bảo trì",
         ]
@@ -122,8 +144,10 @@ def main() -> None:
     with tabs[1]:
         render_assets_and_risk(client, assets)
     with tabs[2]:
-        render_anomalies_and_recurring(client)
+        render_ticket_workspace(client, assets)
     with tabs[3]:
+        render_anomalies_and_recurring(client)
+    with tabs[4]:
         render_maintenance_copilot(client, assets)
 
 
@@ -242,9 +266,13 @@ def render_assets_and_risk(client: MaintenanceApiClient, assets: pd.DataFrame) -
         st.info("Không có thiết bị phù hợp với bộ lọc.")
         return
 
+    asset_options = filtered["asset_id"].astype(str).tolist()
+    requested_asset_id = st.session_state.pop("requested_asset_id", None)
+    if requested_asset_id in asset_options:
+        st.session_state["selected_asset_details"] = requested_asset_id
     selected_asset_id = st.selectbox(
         "Chọn thiết bị để xem chi tiết",
-        filtered["asset_id"].astype(str).tolist(),
+        asset_options,
         key="selected_asset_details",
     )
     try:
@@ -254,7 +282,207 @@ def render_assets_and_risk(client: MaintenanceApiClient, assets: pd.DataFrame) -
         st.error(str(exc))
         return
 
-    _render_asset_details(details)
+    action_columns = st.columns(3)
+    if action_columns[0].button(
+        "Xem chi tiết",
+        type="primary",
+        key=f"view_asset_{selected_asset_id}",
+        width="stretch",
+    ):
+        st.session_state["asset_details_open"] = selected_asset_id
+    if action_columns[1].button(
+        "Tạo ticket kiểm tra",
+        key=f"create_ticket_{selected_asset_id}",
+        width="stretch",
+    ):
+        st.session_state["asset_details_open"] = selected_asset_id
+        st.session_state["ticket_create_asset_id"] = selected_asset_id
+    if action_columns[2].button(
+        "Mở Copilot checklist",
+        key=f"asset_copilot_{selected_asset_id}",
+        width="stretch",
+    ):
+        _set_copilot_context(details)
+        st.success("Đã chuẩn bị ngữ cảnh. Mở tab Trợ lý bảo trì để xem checklist.")
+
+    if st.session_state.get("ticket_create_asset_id") == selected_asset_id:
+        _render_create_ticket_form(client, details)
+
+    if st.session_state.get("asset_details_open") == selected_asset_id:
+        _render_asset_details(details)
+    else:
+        st.caption("Chọn hành động để xem facts, tạo ticket hoặc mở checklist.")
+
+
+def render_ticket_workspace(client: MaintenanceApiClient, assets: pd.DataFrame) -> None:
+    """Render the small assignment, inspection, and resolution workflow."""
+
+    st.subheader("Ticket workspace")
+    notice = st.session_state.pop("ticket_workflow_notice", None)
+    if notice:
+        st.success(str(notice))
+    try:
+        tickets = records_to_dataframe(client.list_tickets(limit=1000))
+    except ApiClientError as exc:
+        st.error(str(exc))
+        return
+    if tickets.empty:
+        st.info("Chưa có ticket bảo trì.")
+        return
+
+    status_metrics = st.columns(3)
+    for column, status_value in zip(status_metrics, TICKET_STATUSES, strict=True):
+        count = int((tickets["status"] == status_value).sum())
+        column.metric(status_value, count)
+
+    status_tabs = st.tabs(TICKET_STATUSES)
+    for tab, status_value in zip(status_tabs, TICKET_STATUSES, strict=True):
+        with tab:
+            status_rows = tickets[tickets["status"] == status_value].head(15)
+            _dataframe(
+                status_rows,
+                [
+                    "ticket_id",
+                    "asset_id",
+                    "priority",
+                    "failure_category",
+                    "technician_id",
+                    "created_at",
+                ],
+            )
+
+    st.markdown("#### Chọn ticket để xử lý")
+    filter_columns = st.columns(3)
+    status_filter = filter_columns[0].selectbox(
+        "Trạng thái",
+        [ALL_OPTION, *TICKET_STATUSES],
+        key="ticket_status_filter",
+    )
+    priority_filter = filter_columns[1].selectbox(
+        "Mức ưu tiên",
+        [ALL_OPTION, *PRIORITIES],
+        key="ticket_priority_filter",
+    )
+    asset_filter = filter_columns[2].selectbox(
+        "Thiết bị",
+        [ALL_OPTION, *_asset_id_options(assets)],
+        key="ticket_asset_filter",
+    )
+    filtered = _filter_frame(tickets, "status", _selected_value(status_filter))
+    filtered = _filter_frame(filtered, "priority", _selected_value(priority_filter))
+    filtered = _filter_frame(filtered, "asset_id", _selected_value(asset_filter))
+    filtered = filtered.sort_values("created_at", ascending=False)
+    if filtered.empty:
+        st.info("Không có ticket phù hợp với bộ lọc.")
+        return
+
+    ticket_options = filtered["ticket_id"].astype(str).tolist()
+    requested_ticket_id = st.session_state.pop("requested_ticket_id", None)
+    if requested_ticket_id in ticket_options:
+        st.session_state["selected_ticket_id"] = requested_ticket_id
+    selected_ticket_id = st.selectbox(
+        "Ticket",
+        ticket_options,
+        key="selected_ticket_id",
+    )
+    selected_ticket = filtered[
+        filtered["ticket_id"].astype(str) == selected_ticket_id
+    ].iloc[0].to_dict()
+
+    badge_columns = st.columns([1, 1, 3])
+    with badge_columns[0]:
+        st.badge(
+            str(selected_ticket["status"]),
+            color=_ticket_status_color(str(selected_ticket["status"])),
+        )
+    with badge_columns[1]:
+        st.badge(
+            str(selected_ticket["priority"]),
+            color=_priority_color(str(selected_ticket["priority"])),
+        )
+    badge_columns[2].caption(
+        f"{selected_ticket['asset_id']} · {selected_ticket['failure_category']}"
+    )
+
+    detail_columns = st.columns(3)
+    detail_columns[0].metric("Kỹ thuật viên", selected_ticket.get("technician_id") or "-")
+    detail_columns[1].metric("Ngày tạo", selected_ticket.get("created_at") or "-")
+    detail_columns[2].metric("Ngày xử lý", selected_ticket.get("resolved_at") or "-")
+    st.write(str(selected_ticket.get("issue_description") or ""))
+
+    action_columns = st.columns(2)
+    if action_columns[0].button(
+        "Mở thiết bị liên quan",
+        key=f"ticket_asset_{selected_ticket_id}",
+        width="stretch",
+    ):
+        st.session_state["requested_asset_id"] = str(selected_ticket["asset_id"])
+        st.session_state["asset_details_open"] = str(selected_ticket["asset_id"])
+        st.success("Đã chọn thiết bị liên quan. Mở tab Thiết bị và rủi ro để xem.")
+    if action_columns[1].button(
+        "Mở Copilot checklist",
+        key=f"ticket_copilot_{selected_ticket_id}",
+        width="stretch",
+    ):
+        try:
+            details = client.get_asset_details(str(selected_ticket["asset_id"]), limit=5)
+        except ApiClientError as exc:
+            st.error(str(exc))
+        else:
+            _set_copilot_context(details, selected_ticket)
+            st.success("Đã chuẩn bị ticket context. Mở tab Trợ lý bảo trì để tiếp tục.")
+
+    with st.expander("Phân công và cập nhật trạng thái", expanded=True):
+        allowed_statuses = _allowed_ticket_statuses(str(selected_ticket["status"]))
+        with st.form(f"ticket_update_form_{selected_ticket_id}"):
+            update_columns = st.columns(3)
+            updated_status = update_columns[0].selectbox(
+                "Trạng thái",
+                allowed_statuses,
+                index=allowed_statuses.index(str(selected_ticket["status"])),
+            )
+            updated_priority = update_columns[1].selectbox(
+                "Mức ưu tiên",
+                PRIORITIES,
+                index=PRIORITIES.index(str(selected_ticket["priority"])),
+            )
+            updated_technician = update_columns[2].text_input(
+                "Kỹ thuật viên",
+                value=str(selected_ticket.get("technician_id") or ""),
+            )
+            update_note = st.text_area("Ghi chú cập nhật", height=80)
+            update_submitted = st.form_submit_button(
+                "Lưu cập nhật",
+                type="primary",
+                width="stretch",
+            )
+        if update_submitted:
+            try:
+                updated = client.update_ticket(
+                    selected_ticket_id,
+                    status=updated_status,
+                    priority=updated_priority,
+                    technician_id=updated_technician,
+                    note=update_note or None,
+                )
+            except ApiClientError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["requested_ticket_id"] = selected_ticket_id
+                st.session_state["ticket_workflow_notice"] = (
+                    f"Đã cập nhật {selected_ticket_id}: {updated['status']}."
+                )
+                st.rerun()
+
+    if selected_ticket["status"] == "Đang xử lý":
+        _render_maintenance_result_form(client, selected_ticket)
+    elif selected_ticket["status"] == "Mới tạo":
+        st.info("Chuyển ticket sang Đang xử lý trước khi ghi kết quả kiểm tra.")
+
+    st.caption(
+        "Ticket và log được ghi vào raw CSV. Risk/KPI hiện tại giữ nguyên cho đến lần chạy batch "
+        "analytics tiếp theo."
+    )
 
 
 def render_anomalies_and_recurring(client: MaintenanceApiClient) -> None:
@@ -334,6 +562,12 @@ def render_maintenance_copilot(
 
     st.subheader("Trợ lý bảo trì")
     asset_ids = _asset_id_options(assets)
+    context = st.session_state.get("copilot_context") or {}
+    context_asset_id = str(context.get("asset_id") or "")
+    if "copilot_asset_id" not in st.session_state:
+        st.session_state["copilot_asset_id"] = (
+            context_asset_id if context_asset_id in asset_ids else ""
+        )
     selected_asset_id = st.selectbox(
         "Thiết bị",
         ["", *asset_ids],
@@ -350,19 +584,36 @@ def render_maintenance_copilot(
             profile = details.get("asset_profile") or {}
             latest_risk = details.get("latest_risk") or {}
             st.markdown("#### Facts từ dữ liệu thiết bị")
-            context_columns = st.columns(4)
+            context_columns = st.columns(5)
             context_columns[0].metric("Thiết bị", _metric_value(profile.get("asset_name")))
-            context_columns[1].metric("Vị trí", _metric_value(profile.get("location")))
+            context_columns[1].metric("Loại", _metric_value(profile.get("asset_type")))
             context_columns[2].metric(
-                "Risk Score", _metric_value(latest_risk.get("risk_score"), decimals=2)
+                "Vị trí", _metric_value(profile.get("location"))
             )
             context_columns[3].metric(
+                "Risk Score", _metric_value(latest_risk.get("risk_score"), decimals=2)
+            )
+            context_columns[4].metric(
                 "Risk Level", _metric_value(latest_risk.get("risk_level"))
             )
+            if context_asset_id == selected_asset_id and context.get("ticket_id"):
+                st.badge(
+                    f"Ticket {context['ticket_id']} · {context.get('failure_category') or '-'}",
+                    color="orange",
+                )
+                with st.expander("Context được chuyển từ ticket", expanded=False):
+                    st.write(context.get("ticket_description") or "-")
+                    st.caption(
+                        "Giải thích risk mới nhất: "
+                        f"{context.get('risk_explanation') or 'Không có.'}"
+                    )
 
+    if "copilot_question" not in st.session_state:
+        st.session_state["copilot_question"] = (
+            "Vì sao thiết bị này có rủi ro cao và kỹ thuật viên nên kiểm tra gì?"
+        )
     question = st.text_area(
         "Câu hỏi bảo trì",
-        value="Vì sao thiết bị này có rủi ro cao và kỹ thuật viên nên kiểm tra gì?",
         height=110,
         key="copilot_question",
     )
@@ -375,7 +626,10 @@ def render_maintenance_copilot(
         key="copilot_top_k",
     )
     if not st.button("Hỏi Copilot", type="primary", key="copilot_ask"):
-        st.info("Qdrant cần được index bằng `make index-documents` trước khi hỏi Copilot.")
+        st.info(
+            "Qdrant cần được index bằng `python -m src.rag.index_documents` "
+            "trước khi hỏi Copilot."
+        )
         _render_copilot_disclaimer()
         return
     if not question.strip():
@@ -388,6 +642,12 @@ def render_maintenance_copilot(
                 question=question.strip(),
                 asset_id=selected_asset_id or None,
                 top_k=int(top_k),
+                failure_category=(
+                    str(context.get("failure_category"))
+                    if context_asset_id == selected_asset_id
+                    and context.get("failure_category")
+                    else None
+                ),
             )
     except ApiClientError:
         st.warning(
@@ -451,11 +711,181 @@ def render_maintenance_copilot(
     _render_copilot_disclaimer()
 
 
+def _render_create_ticket_form(
+    client: MaintenanceApiClient,
+    details: dict[str, Any],
+) -> None:
+    defaults = _ticket_form_defaults(details)
+    asset_id = str(defaults["asset_id"])
+    with st.expander("Tạo ticket kiểm tra", expanded=True):
+        st.markdown("**Facts đo được từ batch analytics**")
+        fact_columns = st.columns(2)
+        fact_columns[0].metric("Asset ID", asset_id)
+        with fact_columns[1]:
+            st.badge(
+                f"Risk Level: {defaults['risk_level']}",
+                color=_risk_color(str(defaults["risk_level"])),
+            )
+        st.caption(f"Yếu tố đóng góp: {defaults['contributing_factors'] or 'Không có.'}")
+
+        st.markdown("**Đề xuất của manager trước khi giao kỹ thuật viên**")
+        with st.form(f"create_ticket_form_{asset_id}"):
+            issue_description = st.text_area(
+                "Mô tả kiểm tra đề xuất",
+                value=str(defaults["issue_description"]),
+                height=100,
+            )
+            form_columns = st.columns(3)
+            priority = form_columns[0].selectbox(
+                "Mức ưu tiên",
+                PRIORITIES,
+                index=PRIORITIES.index(str(defaults["priority"])),
+            )
+            failure_category = form_columns[1].selectbox(
+                "Nhóm sự cố",
+                FAILURE_CATEGORIES,
+                index=FAILURE_CATEGORIES.index(str(defaults["failure_category"])),
+            )
+            technician_id = form_columns[2].text_input(
+                "Kỹ thuật viên",
+                value=str(defaults["technician_id"]),
+            )
+            manager_note = st.text_area(
+                "Ghi chú manager (khuyến nghị)",
+                value=str(defaults["manager_note"]),
+                height=80,
+            )
+            submitted = st.form_submit_button(
+                "Tạo ticket kiểm tra",
+                type="primary",
+                width="stretch",
+            )
+        if submitted:
+            try:
+                ticket = client.create_ticket(
+                    asset_id=asset_id,
+                    issue_description=issue_description,
+                    priority=priority,
+                    failure_category=failure_category,
+                    technician_id=technician_id,
+                    manager_note=manager_note or None,
+                )
+            except ApiClientError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["requested_ticket_id"] = ticket["ticket_id"]
+                st.session_state.pop("ticket_create_asset_id", None)
+                st.success(
+                    f"Đã tạo {ticket['ticket_id']} ở trạng thái {ticket['status']}. "
+                    "Mở Ticket workspace để phân công và cập nhật."
+                )
+                st.caption("Risk/KPI sẽ chỉ thay đổi sau lần chạy batch analytics tiếp theo.")
+
+
+def _render_maintenance_result_form(
+    client: MaintenanceApiClient,
+    ticket: dict[str, Any],
+) -> None:
+    ticket_id = str(ticket["ticket_id"])
+    try:
+        asset = client.get_asset(str(ticket["asset_id"]))
+    except ApiClientError as exc:
+        st.error(str(exc))
+        return
+    interval_days = int(asset.get("maintenance_interval_days") or 1)
+    default_date = date.today()
+    default_next_date = _calculate_next_maintenance_date(default_date, interval_days)
+
+    with st.expander("Ghi kết quả kiểm tra/bảo trì", expanded=True):
+        with st.form(f"maintenance_result_form_{ticket_id}"):
+            date_columns = st.columns(2)
+            maintenance_date = date_columns[0].date_input(
+                "Ngày bảo trì",
+                value=default_date,
+            )
+            next_maintenance_date = date_columns[1].date_input(
+                "Ngày bảo trì kế tiếp",
+                value=default_next_date,
+            )
+            inspection_result = st.text_area("Kết quả kiểm tra", height=80)
+            actions_taken = st.text_area("Hành động đã thực hiện", height=80)
+            parts_replaced = st.text_input(
+                "Vật tư đã thay (lịch sử mô tả, không phải inventory)"
+            )
+            technician_note = st.text_area("Ghi chú kỹ thuật viên", height=80)
+            maintenance_result = st.selectbox(
+                "Kết quả bảo trì",
+                MAINTENANCE_RESULTS,
+            )
+            follow_up_required = _maintenance_follow_up(maintenance_result)
+            st.checkbox(
+                "Cần follow-up",
+                value=follow_up_required,
+                disabled=True,
+                help="Giá trị được xác định theo canonical maintenance result contract.",
+            )
+            submitted = st.form_submit_button(
+                "Lưu kết quả bảo trì",
+                type="primary",
+                width="stretch",
+            )
+        if submitted:
+            try:
+                client.create_maintenance_log(
+                    ticket_id=ticket_id,
+                    asset_id=str(ticket["asset_id"]),
+                    maintenance_date=maintenance_date.isoformat(),
+                    inspection_result=inspection_result,
+                    actions_taken=actions_taken,
+                    parts_replaced=parts_replaced or None,
+                    technician_note=technician_note,
+                    maintenance_result=maintenance_result,
+                    follow_up_required=follow_up_required,
+                    next_maintenance_date=next_maintenance_date.isoformat(),
+                )
+            except ApiClientError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["requested_ticket_id"] = ticket_id
+                st.session_state["ticket_workflow_notice"] = (
+                    "Maintenance data has been recorded. Risk and KPI results will update in "
+                    "the next analytics batch."
+                )
+                st.rerun()
+        st.caption(
+            "Kết quả Đã xử lý có thể chuyển ticket sang Đã xử lý sau khi lưu log. Các kết quả "
+            "khác giữ ticket để follow-up."
+        )
+
+
+def _set_copilot_context(
+    details: dict[str, Any],
+    ticket: dict[str, Any] | None = None,
+) -> None:
+    context = _build_copilot_context(details, ticket)
+    st.session_state["copilot_context"] = context
+    st.session_state["copilot_asset_id"] = context["asset_id"]
+    st.session_state["copilot_question"] = _build_copilot_question(context)
+
+
 def _render_asset_details(details: dict[str, Any]) -> None:
     profile = details.get("asset_profile") or {}
     latest_risk = details.get("latest_risk") or {}
     preventive = details.get("preventive_maintenance") or {}
 
+    badge_columns = st.columns(2)
+    with badge_columns[0]:
+        st.badge(
+            f"Risk: {latest_risk.get('risk_level') or '-'}",
+            color=_risk_color(str(latest_risk.get("risk_level") or "")),
+        )
+    with badge_columns[1]:
+        st.badge(
+            f"Bảo trì: {preventive.get('maintenance_status_display') or '-'}",
+            color=_maintenance_status_color(
+                str(preventive.get("maintenance_status") or "")
+            ),
+        )
     st.markdown("#### Hồ sơ và facts mới nhất")
     profile_columns = st.columns(4)
     profile_columns[0].metric("Tên thiết bị", _metric_value(profile.get("asset_name")))
@@ -499,6 +929,151 @@ def _render_asset_details(details: dict[str, Any]) -> None:
         _dataframe(records_to_dataframe(details.get("recent_anomalies")), ANOMALY_COLUMNS)
     with detail_tabs[3]:
         _dataframe(records_to_dataframe(details.get("recurring_issues")), RECURRING_COLUMNS)
+
+
+def _ticket_form_defaults(details: dict[str, Any]) -> dict[str, str]:
+    """Build deterministic ticket form defaults from the selected asset facts."""
+
+    profile = details.get("asset_profile") or {}
+    latest_risk = details.get("latest_risk") or {}
+    recent_tickets = details.get("recent_tickets") or []
+    latest_ticket = recent_tickets[0] if recent_tickets else {}
+    asset_id = str(profile.get("asset_id") or "")
+    asset_name = str(profile.get("asset_name") or asset_id)
+    asset_type = str(profile.get("asset_type") or "")
+    risk_level = str(latest_risk.get("risk_level") or "Chưa xác định")
+    contributing_factors = str(details.get("risk_contributing_factors") or "")
+    default_categories = {
+        "Máy lạnh": "Lỗi làm lạnh",
+        "Máy bơm nước": "Lỗi rung động",
+        "Máy phát điện dự phòng": "Lỗi điện",
+    }
+    failure_category = str(
+        latest_ticket.get("failure_category")
+        or default_categories.get(asset_type)
+        or "Không có lỗi"
+    )
+    if failure_category not in FAILURE_CATEGORIES:
+        failure_category = "Không có lỗi"
+    priority = {
+        "Khẩn cấp": "Khẩn cấp",
+        "Cao": "Cao",
+        "Trung bình": "Trung bình",
+    }.get(risk_level, "Thấp")
+    issue_description = f"Kiểm tra {asset_name} ({asset_id}) theo tín hiệu Risk Level {risk_level}."
+    if contributing_factors:
+        issue_description += f" Yếu tố đóng góp từ batch analytics: {contributing_factors}."
+    return {
+        "asset_id": asset_id,
+        "risk_level": risk_level,
+        "contributing_factors": contributing_factors,
+        "issue_description": issue_description,
+        "priority": priority,
+        "failure_category": failure_category,
+        "technician_id": str(latest_ticket.get("technician_id") or "TECH_001"),
+        "manager_note": str(details.get("recommended_action") or ""),
+    }
+
+
+def _allowed_ticket_statuses(current_status: str) -> list[str]:
+    """Return current and next status for the linear local workflow."""
+
+    transitions = {
+        "Mới tạo": ["Mới tạo", "Đang xử lý"],
+        "Đang xử lý": ["Đang xử lý", "Đã xử lý"],
+        "Đã xử lý": ["Đã xử lý"],
+    }
+    return transitions.get(current_status, [current_status])
+
+
+def _maintenance_follow_up(maintenance_result: str) -> bool:
+    return maintenance_result != "Đã xử lý"
+
+
+def _calculate_next_maintenance_date(
+    maintenance_date: date,
+    interval_days: int,
+) -> date:
+    return maintenance_date + timedelta(days=interval_days)
+
+
+def _build_copilot_context(
+    details: dict[str, Any],
+    ticket: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Build the structured dashboard handoff without changing RAG behavior."""
+
+    profile = details.get("asset_profile") or {}
+    context = {
+        "asset_id": str(profile.get("asset_id") or ""),
+        "asset_type": str(profile.get("asset_type") or ""),
+        "risk_explanation": str(details.get("risk_contributing_factors") or ""),
+        "ticket_id": "",
+        "failure_category": "",
+        "ticket_description": "",
+    }
+    if ticket:
+        context.update(
+            {
+                "ticket_id": str(ticket.get("ticket_id") or ""),
+                "failure_category": str(ticket.get("failure_category") or ""),
+                "ticket_description": str(ticket.get("issue_description") or ""),
+            }
+        )
+    return context
+
+
+def _build_copilot_question(context: dict[str, str]) -> str:
+    parts = [
+        f"Thiết bị {context.get('asset_id') or 'đã chọn'} thuộc loại "
+        f"{context.get('asset_type') or 'chưa xác định'}.",
+    ]
+    if context.get("ticket_id"):
+        parts.append(
+            f"Ticket {context['ticket_id']} thuộc nhóm {context.get('failure_category') or '-'}: "
+            f"{context.get('ticket_description') or '-'}"
+        )
+    if context.get("risk_explanation"):
+        parts.append(f"Giải thích risk mới nhất: {context['risk_explanation']}")
+    parts.append(
+        "Hãy truy xuất SOP/checklist phù hợp và nêu các bước cần kiểm tra trước, kèm cảnh báo "
+        "an toàn và nguồn tham khảo."
+    )
+    return " ".join(parts)[:1000]
+
+
+def _risk_color(risk_level: str) -> str:
+    return {
+        "Khẩn cấp": "red",
+        "Cao": "orange",
+        "Trung bình": "yellow",
+        "Thấp": "green",
+    }.get(risk_level, "gray")
+
+
+def _maintenance_status_color(maintenance_status: str) -> str:
+    return {
+        "overdue": "red",
+        "due_soon": "orange",
+        "not_due": "green",
+    }.get(maintenance_status, "gray")
+
+
+def _ticket_status_color(ticket_status: str) -> str:
+    return {
+        "Mới tạo": "blue",
+        "Đang xử lý": "orange",
+        "Đã xử lý": "green",
+    }.get(ticket_status, "gray")
+
+
+def _priority_color(priority: str) -> str:
+    return {
+        "Khẩn cấp": "red",
+        "Cao": "orange",
+        "Trung bình": "yellow",
+        "Thấp": "green",
+    }.get(priority, "gray")
 
 
 def _render_distribution_chart(
@@ -549,7 +1124,10 @@ def _render_sidebar() -> str:
 def _render_connection_error(api_base_url: str, error: ApiClientError) -> None:
     st.error(f"Không thể kết nối FastAPI tại {api_base_url}.")
     st.caption(str(error))
-    st.code("make run-api", language="bash")
+    st.code(
+        "python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000",
+        language="powershell",
+    )
 
 
 def _render_data_error(error: ApiClientError) -> None:

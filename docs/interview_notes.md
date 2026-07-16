@@ -1,37 +1,26 @@
-# Interview Notes
+# Ghi Chú Phỏng Vấn
 
-## What problem does this project solve?
+## Vì Sao Chọn Bài Toán Bảo Trì?
 
-It helps facility maintenance teams prioritize risky assets and decide what to inspect next. Instead of manually checking sensor readings, tickets, overdue maintenance, and SOP documents, the system turns those inputs into anomaly scores, explainable risk scores, recommendations, and source-grounded copilot answers.
+Bảo trì có business workflow rõ: dữ liệu vận hành, ticket, lịch preventive và tài liệu kỹ thuật phải được tổng hợp để quyết định thiết bị nào cần kiểm tra trước. Bài toán cho phép trình bày data engineering, explainable ML, API, dashboard và RAG trong một flow có human-in-the-loop.
 
-## What is the input data?
+## Project Giải Quyết Vấn Đề Gì?
 
-The MVP uses deterministic Vietnamese synthetic maintenance data:
+Project giúp Facility Manager ưu tiên assets cần chú ý và giúp technician tìm SOP/checklist liên quan. Input gồm asset master, hourly readings, tickets, maintenance logs và documents. Output gồm daily features, anomaly results, explainable risk scores, preventive/recurring/KPI reports, dashboard và source-grounded Copilot response.
 
-- assets;
-- hourly sensor readings;
-- maintenance tickets;
-- maintenance logs;
-- risk score snapshots;
-- Vietnamese SOP/checklist/troubleshooting documents.
+## Vì Sao Đây Không Phải Full CMMS?
 
-The data is generated as CSV files in `data/raw`. The canonical batch pipeline reads those CSVs directly and writes analytics outputs to `data/processed`. Loading the raw data into PostgreSQL is an optional experiment, not a requirement for the main demo.
+CMMS là system of record cho work orders, assignments, approvals, inventory, vendor và maintenance history. Project chỉ là decision-support layer đọc dữ liệu kiểu CMMS để phân tích và retrieve tài liệu. Nó không tự tạo production work order, không quản lý inventory và không thay con người quyết định.
 
-## What is the output?
+## Vì Sao Dùng Synthetic Data?
 
-The main outputs are:
+Dữ liệu bảo trì thật thường nhạy cảm, khó chia sẻ và hiếm failure labels. Generator deterministic giúp demo và test reproducible với 27 assets, 77.760 readings, 42 tickets và 86 logs. Synthetic data không chứng minh model accuracy hoặc business impact; production phải validate lại bằng history thực tế.
 
-- daily asset-level features;
-- anomaly results with Vietnamese anomaly reasons;
-- explainable risk scores with `risk_level`, `main_reasons`, and `recommended_action`;
-- preventive maintenance status, recurring issue groups, and a descriptive KPI snapshot;
-- FastAPI responses for dashboards/integrations;
-- four manager-facing Streamlit views for overview, asset inspection, anomaly/recurrence review, and Copilot;
-- RAG copilot answers with sources and retrieved chunks.
+## Đây Có Phải Predictive Maintenance Không?
 
-## How is risk predicted?
+Đây là batch predictive-maintenance decision support theo nghĩa phát hiện tín hiệu bất thường và ưu tiên risk trước inspection. Nó không dự đoán exact failure time và Risk Score không phải calibrated failure probability. Cách gọi chính xác nhất là explainable maintenance risk prioritization.
 
-Risk is scored with an explainable formula:
+## Risk Score Được Tính Như Thế Nào?
 
 ```text
 final_risk_score =
@@ -45,73 +34,45 @@ final_risk_score =
 +  2.5% runtime_score
 ```
 
-The score maps to Vietnamese risk levels:
+Weights và component thresholds là transparent demo heuristics. Output có Vietnamese contributing factors và recommended action để manager hiểu vì sao asset được xếp hạng.
 
-- `Thấp`
-- `Trung bình`
-- `Cao`
-- `Khẩn cấp`
+## Isolation Forest Đóng Góp Gì?
 
-This is a prioritization score, not a guaranteed failure prediction.
+Isolation Forest phát hiện multivariate outliers tương đối trong cùng asset type. Model score đóng góp 30% anomaly score; rule score đóng góp 70%. Trong implementation hiện tại, model không thể tự tạo final anomaly flag nếu không có rule evidence, nên vai trò chính là bổ sung mức độ khác biệt và explanation.
 
-## Does it use machine learning?
+## Vì Sao Kết Hợp Rules Và Machine Learning?
 
-Yes. The anomaly detection stage combines:
+Rules encode các tín hiệu bảo trì dễ giải thích như energy spike, vibration hoặc runtime delta. Isolation Forest có thể nhận ra tổ hợp measurements khác baseline mà một rule đơn lẻ bỏ qua. Kết hợp hai cách giữ explanation rõ cho business user nhưng vẫn minh họa unsupervised ML khi không có labels.
 
-- rule-based thresholds for interpretable maintenance signals;
-- scikit-learn Isolation Forest for multivariate outlier detection.
+## Vì Sao Dùng RAG Thay Vì Gửi Toàn Bộ Documents Cho ChatGPT?
 
-The RAG module also uses local sentence-transformers embeddings when installed.
+RAG index documents thành chunks, filter theo metadata và chỉ đưa context liên quan vào answer composer. Cách này giữ source identity, giảm unrelated context, hỗ trợ collection lớn hơn và cho phép fallback khi không có evidence. MVP dùng local embeddings và deterministic composer, không gửi documents đến paid API.
 
-## What does RAG do?
+## Làm Sao Ngăn Câu Trả Lời Không Liên Quan?
 
-RAG retrieves relevant Vietnamese SOP/checklist/troubleshooting chunks from Qdrant and combines them with structured asset facts from the CSV-backed service layer. Khi asset được chọn, `asset_type` là retrieval filter bắt buộc; `document_type` và `failure_category` là optional filters. Ticket/failure text gần đây chỉ bổ sung query context, không thay đổi facts và không tạo diagnosis.
+Asset được chọn cung cấp `asset_type` filter; có thêm optional `document_type` và `failure_category`. Retriever áp dụng relevance threshold `0.55` cho sentence-transformer. Empty, low-relevance, unsupported hoặc unavailable retrieval trả sources rỗng và safe fallback, không compose checklist từ unrelated chunks.
 
-Indexer thay thế toàn bộ MVP collection trong mỗi lần chạy. Stable chunk IDs cùng full rebuild ngăn duplicate và stale chunks. Vector dimension, missing/empty collection và Qdrant availability được kiểm tra tường minh.
+## Người Dùng Có Thể Tin Recommendation Không?
 
-Copilot dùng relevance gate `0.15` cho deterministic hash test double và `0.55` cho local sentence-transformer. Các threshold này không phải confidence probability. Empty/low-relevance/unavailable retrieval trả safe fallback với sources rỗng thay vì compose từ unrelated content.
+Recommendation có thể dùng để tham khảo và prioritization, không phải mệnh lệnh. Successful RAG answer phải có source, safety notice và giới hạn. Anomaly/risk không chứng minh failure; technician phải xác minh hiện trường, và manual nhà sản xuất cùng quy trình an toàn luôn ưu tiên.
 
-Current answer composer là deterministic: nó tách asset summary, retrieved checklist, sources, safety notice và recommendation limits. Mỗi successful answer có source; mọi answer nhắc rằng anomaly/risk không chứng minh failure và technician phải ưu tiên manual nhà sản xuất cùng quy trình an toàn.
+## Vì Sao Dùng PostgreSQL Và Qdrant?
 
-It does not require a paid API or external LLM.
+PostgreSQL được giữ như optional/experimental structured-storage adapter và có compatibility tests, nhưng không phục vụ main CSV-first demo. Qdrant là active vector store chỉ cho SOP/checklist retrieval. API health và manager dashboard không phụ thuộc Qdrant.
 
-## How is it different from a normal maintenance system?
+## Cần Gì Trước Production Deployment?
 
-A normal CMMS/S-Maintain system is the system of record for assets, work orders, technician assignments, inventory, approvals, and maintenance history.
+Cần integration với CMMS/BMS thực, data quality ownership, labeled evaluation, risk calibration, RAG evaluation, scheduler, authentication/RBAC, audit logging, observability, secrets management, backup/recovery, deployment automation, security review và field safety validation. Cũng cần thống nhất SLA và quyền quyết định với đội vận hành.
 
-This project is an AI decision-support layer. It analyzes CMMS-like data, detects abnormal patterns, prioritizes risky assets, explains risk drivers, and retrieves SOP/checklist context. In production, it would integrate with a CMMS rather than replace it.
+## Tôi Đã Trực Tiếp Thiết Kế Và Implement Gì?
 
-## Why keep PostgreSQL and Qdrant?
+Tôi thiết kế data contract và deterministic generator; xây feature, anomaly, risk và maintenance analytics; triển khai CSV-backed FastAPI và Streamlit workflows; xây document chunking, Qdrant retrieval, relevance/safety fallback; viết tests, smoke checks và documentation. Các quyết định chính là CSV-first, batch-first, explainable scoring và human-in-the-loop.
 
-PostgreSQL is retained as an optional/experimental example of structured storage for assets, readings, tickets, logs, and risk snapshots. The current API and Copilot structured context do not query PostgreSQL; they use canonical processed CSV outputs.
+## Limitations Cần Nói Thẳng
 
-Qdrant is a vector database designed for semantic retrieval. It stores embeddings of SOP/checklist chunks and supports top-k search with conjunctive metadata filters for `asset_type`, `document_type`, and `failure_category`.
-
-In the current MVP, the active hybrid context is:
-
-- structured context from processed CSV features, anomalies, and risks;
-- semantic document context from Qdrant.
-
-## What are the limitations?
-
-- Synthetic data is realistic for demos but not production-validated.
-- The API currently serves processed CSV outputs rather than live database queries.
-- Asset, ticket, and maintenance-log API views read raw CSV contracts; analytics views read canonical processed CSVs.
-- Risk scoring is explainable but heuristic.
-- The copilot composer is deterministic and extractive, not LLM-based.
-- RAG quality depends on six synthetic documents and local embedding availability; no labeled retrieval evaluation dataset is available yet.
-- Relevance thresholds are transparent safeguards but have not been calibrated on real SOP collections.
-- The Copilot is decision support, not an automatic diagnostic or failure-prediction system.
-- No authentication, authorization, scheduling, observability, or production deployment hardening is included.
-- The Streamlit workflow has API/client tests and startup smoke coverage, but no production browser regression suite.
-
-## How would you improve it in production?
-
-- Integrate with real CMMS/S-Maintain, BMS, IoT, and ticketing data.
-- Replace processed CSV serving with database-backed query services.
-- Add scheduled pipelines and model/retrieval monitoring.
-- Add labeled historical failures and evaluate risk calibration.
-- Add RAG evaluation for retrieval precision, answer faithfulness, and recommendation quality.
-- Add an LLM answer composer with strict source grounding and fallback behavior.
-- Add authentication, RBAC, audit logging, and observability.
-- Add deployment automation and environment-specific configuration.
+- Dữ liệu và sáu documents đều synthetic.
+- Không có labeled failure/retrieval evaluation dataset.
+- Thresholds/weights chưa được hiệu chuẩn trên facility thực.
+- API đọc CSV và không có scheduler, auth, audit hoặc observability.
+- Copilot composer deterministic và extractive, không phải automatic diagnosis.
+- Portfolio MVP không phải production-ready enterprise deployment.

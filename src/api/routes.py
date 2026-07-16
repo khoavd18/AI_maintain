@@ -2,8 +2,14 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from src.api.csv_repository import (
+    CsvRepositoryError,
+    CsvWriteError,
+    DuplicateRecordError,
+    RecordNotFoundError,
+)
 from src.api.schemas import (
     AnomalyRecord,
     AssetContextResponse,
@@ -14,17 +20,21 @@ from src.api.schemas import (
     CopilotAskResponse,
     HealthResponse,
     MaintenanceKpiResponse,
+    MaintenanceLogCreateRequest,
     MaintenanceLogRecord,
     PreventiveMaintenanceRecord,
     RecurringIssueRecord,
     RiskRecord,
     SummaryResponse,
+    TicketCreateRequest,
     TicketRecord,
+    TicketUpdateRequest,
 )
 from src.api.services import (
     AssetNotFoundError,
     ProcessedDataNotFoundError,
     ProcessedDataService,
+    TicketNotFoundError,
     get_processed_data_service,
 )
 from src.rag.copilot import MaintenanceCopilot, get_copilot_service
@@ -253,6 +263,43 @@ def tickets(
     )
 
 
+@router.post(
+    "/tickets",
+    response_model=TicketRecord,
+    status_code=status.HTTP_201_CREATED,
+    tags=["maintenance"],
+)
+def create_ticket(
+    request: TicketCreateRequest,
+    service: ServiceDependency,
+) -> dict[str, object]:
+    """Create one local inspection ticket without recalculating analytics."""
+
+    return _handle_write_errors(
+        service.create_ticket,
+        **request.model_dump(),
+    )
+
+
+@router.patch(
+    "/tickets/{ticket_id}",
+    response_model=TicketRecord,
+    tags=["maintenance"],
+)
+def update_ticket(
+    ticket_id: str,
+    request: TicketUpdateRequest,
+    service: ServiceDependency,
+) -> dict[str, object]:
+    """Assign or move a local ticket through the linear MVP workflow."""
+
+    return _handle_write_errors(
+        service.update_ticket,
+        ticket_id=ticket_id,
+        updates=request.model_dump(exclude_unset=True),
+    )
+
+
 @router.get(
     "/maintenance/logs",
     response_model=list[MaintenanceLogRecord],
@@ -273,6 +320,24 @@ def maintenance_logs(
         maintenance_result=maintenance_result,
         follow_up_required=follow_up_required,
         limit=limit,
+    )
+
+
+@router.post(
+    "/maintenance/logs",
+    response_model=MaintenanceLogRecord,
+    status_code=status.HTTP_201_CREATED,
+    tags=["maintenance"],
+)
+def create_maintenance_log(
+    request: MaintenanceLogCreateRequest,
+    service: ServiceDependency,
+) -> dict[str, object]:
+    """Record a technician result for the next analytics batch."""
+
+    return _handle_write_errors(
+        service.create_maintenance_log,
+        **request.model_dump(),
     )
 
 
@@ -320,6 +385,21 @@ def _handle_service_errors(function, **kwargs):
     except AssetNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ProcessedDataNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _handle_write_errors(function, **kwargs):
+    try:
+        return function(**kwargs)
+    except (AssetNotFoundError, TicketNotFoundError, RecordNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DuplicateRecordError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CsvWriteError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except CsvRepositoryError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -9,7 +9,6 @@ class Settings(BaseSettings):
     """Runtime settings shared by API, dashboard, and background jobs."""
 
     app_name: str = "AI Maintenance Copilot"
-    app_env: str = "local"
     database_url: str = (
         "postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot"
     )

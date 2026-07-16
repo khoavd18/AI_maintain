@@ -1,13 +1,21 @@
 """CSV-backed data access services for the FastAPI layer."""
 
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
 
-from src.config.value_mappings import RISK_LEVEL_CODE_TO_VI
+from src.api.csv_repository import CsvWriteRepository, commit_csv_writes
+from src.config.value_mappings import (
+    MAINTENANCE_RESULT_CODE_TO_VI,
+    MAINTENANCE_TYPE_CODE_TO_VI,
+    RISK_LEVEL_CODE_TO_VI,
+    STATUS_CODE_TO_VI,
+)
 
 RAW_DATA_DIR = Path("data/raw")
 PROCESSED_DATA_DIR = Path("data/processed")
@@ -21,6 +29,46 @@ RISK_FILE = PROCESSED_DATA_DIR / "risk_scores.csv"
 PREVENTIVE_FILE = PROCESSED_DATA_DIR / "preventive_maintenance_status.csv"
 RECURRING_ISSUE_FILE = PROCESSED_DATA_DIR / "recurring_issues.csv"
 MAINTENANCE_KPI_FILE = PROCESSED_DATA_DIR / "maintenance_kpis.csv"
+FACILITY_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
+
+TICKET_REQUIRED_COLUMNS = {
+    "ticket_id",
+    "asset_id",
+    "issue_description",
+    "priority",
+    "status",
+    "failure_category",
+    "created_at",
+    "resolved_at",
+    "technician_id",
+}
+MAINTENANCE_LOG_REQUIRED_COLUMNS = {
+    "log_id",
+    "ticket_id",
+    "asset_id",
+    "maintenance_date",
+    "maintenance_type",
+    "technician_id",
+    "inspection_result",
+    "actions_taken",
+    "parts_replaced",
+    "technician_note",
+    "maintenance_result",
+    "follow_up_required",
+    "next_maintenance_date",
+}
+ASSET_REQUIRED_COLUMNS = {
+    "asset_id",
+    "asset_name",
+    "asset_type",
+    "location",
+    "criticality",
+    "status",
+    "installation_date",
+    "last_maintenance_date",
+    "maintenance_interval_days",
+    "next_maintenance_date",
+}
 
 
 class ProcessedDataNotFoundError(FileNotFoundError):
@@ -29,6 +77,10 @@ class ProcessedDataNotFoundError(FileNotFoundError):
 
 class AssetNotFoundError(ValueError):
     """Raised when an asset_id cannot be found in the asset master."""
+
+
+class TicketNotFoundError(ValueError):
+    """Raised when a ticket_id cannot be found in the ticket CSV."""
 
 
 class ProcessedDataService:
@@ -376,6 +428,202 @@ class ProcessedDataService:
         frame = frame.sort_values("maintenance_date", ascending=False).head(limit)
         return _records(frame)
 
+    def create_ticket(
+        self,
+        *,
+        asset_id: str,
+        issue_description: str,
+        priority: str,
+        failure_category: str,
+        technician_id: str,
+        manager_note: str | None = None,
+    ) -> dict[str, Any]:
+        """Create one open inspection ticket in the local raw CSV."""
+
+        self.get_asset(asset_id)
+        created_at = _utc_now()
+        repository = CsvWriteRepository(
+            self.ticket_path,
+            id_column="ticket_id",
+            required_columns=TICKET_REQUIRED_COLUMNS,
+        )
+        record = repository.append_generated(
+            {
+                "asset_id": asset_id,
+                "issue_description": issue_description,
+                "priority": priority,
+                "status": STATUS_CODE_TO_VI["open"],
+                "failure_category": failure_category,
+                "created_at": _format_datetime(created_at),
+                "resolved_at": None,
+                "technician_id": technician_id,
+                "manager_note": manager_note,
+                "note": None,
+            },
+            prefix="TCK",
+        )
+        return self._get_ticket_record(record["ticket_id"])
+
+    def update_ticket(self, ticket_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+        """Apply a small validated ticket update and enforce linear status transitions."""
+
+        if not updates:
+            raise ValueError("Cần cung cấp ít nhất một trường để cập nhật.")
+        ticket = self._get_ticket_record(ticket_id)
+        for field in ("status", "priority", "technician_id"):
+            if field in updates and updates[field] is None:
+                raise ValueError(f"{field} không được để trống khi cập nhật.")
+
+        current_status = str(ticket["status"])
+        target_status = str(updates.get("status") or current_status)
+        allowed_statuses = {
+            STATUS_CODE_TO_VI["open"]: {
+                STATUS_CODE_TO_VI["open"],
+                STATUS_CODE_TO_VI["in_progress"],
+            },
+            STATUS_CODE_TO_VI["in_progress"]: {
+                STATUS_CODE_TO_VI["in_progress"],
+                STATUS_CODE_TO_VI["resolved"],
+            },
+            STATUS_CODE_TO_VI["resolved"]: {STATUS_CODE_TO_VI["resolved"]},
+        }
+        if target_status not in allowed_statuses.get(current_status, set()):
+            raise ValueError(
+                f"Chuyển trạng thái không hợp lệ: {current_status} -> {target_status}."
+            )
+
+        normalized_updates = dict(updates)
+        resolved_at = normalized_updates.get("resolved_at")
+        if target_status == STATUS_CODE_TO_VI["resolved"]:
+            linked_logs = self.maintenance_logs[
+                self.maintenance_logs["ticket_id"].astype(str) == ticket_id
+            ]
+            if linked_logs.empty:
+                raise ValueError("Ticket cần có maintenance log trước khi chuyển sang Đã xử lý.")
+            resolution_time = resolved_at or _utc_now()
+            resolution_time = _require_safe_datetime(resolution_time, field_name="resolved_at")
+            created_at = datetime.fromisoformat(str(ticket["created_at"]))
+            if resolution_time < created_at:
+                raise ValueError("resolved_at không được sớm hơn created_at.")
+            latest_log_date = max(
+                date.fromisoformat(value)
+                for value in linked_logs["maintenance_date"].astype(str)
+            )
+            if resolution_time.astimezone(FACILITY_TIMEZONE).date() < latest_log_date:
+                raise ValueError("resolved_at không được sớm hơn maintenance log gần nhất.")
+            normalized_updates["resolved_at"] = _format_datetime(resolution_time)
+        elif "resolved_at" in normalized_updates:
+            raise ValueError("resolved_at chỉ được dùng khi ticket ở trạng thái Đã xử lý.")
+
+        repository = CsvWriteRepository(
+            self.ticket_path,
+            id_column="ticket_id",
+            required_columns=TICKET_REQUIRED_COLUMNS,
+        )
+        repository.update(ticket_id, normalized_updates)
+        return self._get_ticket_record(ticket_id)
+
+    def create_maintenance_log(
+        self,
+        *,
+        ticket_id: str,
+        asset_id: str,
+        maintenance_date: date,
+        inspection_result: str,
+        actions_taken: str,
+        parts_replaced: str | None,
+        technician_note: str,
+        maintenance_result: str,
+        follow_up_required: bool,
+        next_maintenance_date: date,
+    ) -> dict[str, Any]:
+        """Record one technician result without recalculating batch analytics."""
+
+        asset = self.get_asset(asset_id)
+        ticket = self._get_ticket_record(ticket_id)
+        if ticket["asset_id"] != asset_id:
+            raise ValueError("asset_id không khớp với ticket đã chọn.")
+        if ticket["status"] != STATUS_CODE_TO_VI["in_progress"]:
+            raise ValueError("Ticket phải ở trạng thái Đang xử lý trước khi ghi kết quả.")
+        if maintenance_date > datetime.now(FACILITY_TIMEZONE).date():
+            raise ValueError("maintenance_date không được nằm trong tương lai.")
+        created_date = (
+            datetime.fromisoformat(str(ticket["created_at"]))
+            .astimezone(FACILITY_TIMEZONE)
+            .date()
+        )
+        if maintenance_date < created_date:
+            raise ValueError("maintenance_date không được sớm hơn ngày tạo ticket.")
+
+        interval_days = int(asset["maintenance_interval_days"])
+        expected_next_date = maintenance_date + timedelta(days=interval_days)
+        if next_maintenance_date != expected_next_date:
+            raise ValueError(
+                "next_maintenance_date phải bằng maintenance_date cộng chu kỳ bảo trì "
+                f"{interval_days} ngày ({expected_next_date.isoformat()})."
+            )
+        current_last_date = date.fromisoformat(str(asset["last_maintenance_date"]))
+        if maintenance_date < current_last_date:
+            raise ValueError(
+                "maintenance_date không được sớm hơn lần bảo trì gần nhất của asset."
+            )
+        expected_follow_up = maintenance_result != MAINTENANCE_RESULT_CODE_TO_VI["resolved"]
+        if follow_up_required != expected_follow_up:
+            raise ValueError(
+                "follow_up_required không nhất quán với maintenance_result."
+            )
+
+        log_repository = CsvWriteRepository(
+            self.maintenance_log_path,
+            id_column="log_id",
+            required_columns=MAINTENANCE_LOG_REQUIRED_COLUMNS,
+        )
+        log_write = log_repository.prepare_append_generated(
+            {
+                "ticket_id": ticket_id,
+                "asset_id": asset_id,
+                "maintenance_date": maintenance_date.isoformat(),
+                "maintenance_type": MAINTENANCE_TYPE_CODE_TO_VI["corrective"],
+                "technician_id": ticket["technician_id"],
+                "inspection_result": inspection_result,
+                "actions_taken": actions_taken,
+                "parts_replaced": parts_replaced,
+                "technician_note": technician_note,
+                "maintenance_result": maintenance_result,
+                "follow_up_required": follow_up_required,
+                "next_maintenance_date": next_maintenance_date.isoformat(),
+            },
+            prefix="LOG",
+        )
+        asset_repository = CsvWriteRepository(
+            self.asset_path,
+            id_column="asset_id",
+            required_columns=ASSET_REQUIRED_COLUMNS,
+        )
+        asset_write = asset_repository.prepare_update(
+            asset_id,
+            {
+                "last_maintenance_date": maintenance_date.isoformat(),
+                "next_maintenance_date": next_maintenance_date.isoformat(),
+            },
+        )
+        commit_csv_writes([log_write, asset_write])
+        return self._get_maintenance_log_record(log_write.record["log_id"])
+
+    def _get_ticket_record(self, ticket_id: str) -> dict[str, Any]:
+        frame = self.tickets
+        matches = frame[frame["ticket_id"].astype(str) == ticket_id]
+        if matches.empty:
+            raise TicketNotFoundError(f"Không tìm thấy ticket_id: {ticket_id}")
+        return _records(matches.head(1))[0]
+
+    def _get_maintenance_log_record(self, log_id: str) -> dict[str, Any]:
+        frame = self.maintenance_logs
+        matches = frame[frame["log_id"].astype(str) == log_id]
+        if matches.empty:
+            raise ValueError(f"Không tìm thấy log_id vừa tạo: {log_id}")
+        return _records(matches.head(1))[0]
+
     def get_asset_details(self, asset_id: str, limit: int = 10) -> dict[str, Any]:
         """Return the manager-facing consolidated asset workflow payload."""
 
@@ -575,3 +823,20 @@ def _clean_value(value: Any) -> Any:
     if isinstance(value, np.floating):
         return float(value)
     return value
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _require_safe_datetime(value: datetime, *, field_name: str) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{field_name} phải có timezone.")
+    normalized = value.astimezone(timezone.utc).replace(microsecond=0)
+    if normalized > _utc_now() + timedelta(minutes=5):
+        raise ValueError(f"{field_name} không được nằm trong tương lai.")
+    return normalized
+
+
+def _format_datetime(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")

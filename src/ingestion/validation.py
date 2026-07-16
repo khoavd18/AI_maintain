@@ -1,5 +1,6 @@
 """Validation for focused synthetic maintenance CSV datasets."""
 
+import argparse
 from datetime import timedelta
 from pathlib import Path
 
@@ -603,3 +604,19 @@ def _raise_row_error(dataset: str, index: object, field: str, reason: str) -> No
     raise DatasetValidationError(
         f"{dataset} row={row_number} field={field} reason={reason}"
     )
+
+
+def main() -> None:
+    """Validate the generated CSV dataset from the command line."""
+
+    parser = argparse.ArgumentParser(description="Validate focused maintenance CSV data.")
+    parser.add_argument("--input-dir", type=Path, default=Path("data/raw"))
+    args = parser.parse_args()
+
+    frames = validate_csv_dataset(args.input_dir)
+    for dataset_name, frame in frames.items():
+        print(f"Validated {len(frame):>7} rows: {dataset_name}")
+
+
+if __name__ == "__main__":
+    main()

@@ -314,23 +314,6 @@ def build_maintenance_analytics_from_csv(
     return outputs
 
 
-def build_asset_feature_frame(readings: pd.DataFrame) -> pd.DataFrame:
-    """Backward-compatible aggregate feature helper for simple reading frames."""
-
-    required_columns = {"asset_id", "value"}
-    missing = required_columns - set(readings.columns)
-    if missing:
-        raise ValueError(f"Missing reading columns: {sorted(missing)}")
-
-    features = (
-        readings.groupby("asset_id")["value"]
-        .agg(reading_count="count", value_mean="mean", value_std="std", value_max="max")
-        .fillna(0.0)
-        .reset_index()
-    )
-    return features
-
-
 def _prepare_assets(assets: pd.DataFrame) -> pd.DataFrame:
     prepared = assets.copy()
     for column in [

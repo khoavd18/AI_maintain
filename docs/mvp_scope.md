@@ -53,8 +53,8 @@ Synthetic demo scope được khóa ở ba loại asset: `Máy lạnh` (HVAC), `
 - canonical anomaly detection;
 - canonical explainable risk scoring;
 - preventive maintenance status, recurring issue và maintenance KPI processed outputs;
-- CSV-backed FastAPI cho asset, ticket, logs và analytics workflow;
-- Streamlit manager dashboard với bốn views canonical;
+- CSV-backed FastAPI cho asset, ticket, log reads cùng local single-user write workflow;
+- Streamlit dashboard với năm views, gồm risk-to-action và Ticket workspace;
 - Qdrant-based SOP/checklist retrieval và deterministic Copilot response.
 
 Các production concerns ngoài behavior hiện tại gồm scheduler, authentication, audit logging, observability, deployment hardening và browser regression testing. Đây không phải current capabilities của portfolio MVP.
@@ -84,6 +84,7 @@ Các production concerns ngoài behavior hiện tại gồm scheduler, authentic
 - Risk score là heuristic prioritization score, không phải calibrated failure probability.
 - User-facing business values và giải thích được giữ bằng tiếng Việt; code, module, column và API field giữ bằng tiếng Anh.
 - Manager và technician luôn kiểm tra lại dữ liệu, điều kiện an toàn và hiện trạng thiết bị.
+- CSV write workflow không hỗ trợ concurrent users; analytics không tự refresh sau khi ghi ticket/log.
 
 ## Tiêu Chí Thành Công
 
@@ -94,5 +95,7 @@ MVP được xem là coherent khi:
 3. FastAPI phục vụ dữ liệu cho Streamlit; dashboard không đọc trực tiếp processed CSV.
 4. Manager có thể nhận diện top risky assets và đọc nguyên nhân/khuyến nghị bằng tiếng Việt.
 5. Technician có thể tìm SOP/checklist liên quan và thấy nguồn tài liệu được sử dụng.
-6. Current features và future work được phân biệt rõ trong README và docs.
-7. Test và lint pass; không có claim về accuracy, ROI hoặc production readiness khi chưa có bằng chứng.
+6. Manager có thể tạo inspection ticket và technician có thể ghi maintenance result qua FastAPI mà không đọc/ghi CSV từ Streamlit.
+7. UI thông báo rõ risk/KPI chỉ cập nhật trong batch tiếp theo.
+8. Current features và future work được phân biệt rõ trong README và docs.
+9. Test và lint pass; không có claim về accuracy, ROI hoặc production readiness khi chưa có bằng chứng.

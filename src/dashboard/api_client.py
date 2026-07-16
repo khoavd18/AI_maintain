@@ -206,6 +206,53 @@ class MaintenanceApiClient:
             },
         )
 
+    def create_ticket(
+        self,
+        *,
+        asset_id: str,
+        issue_description: str,
+        priority: str,
+        failure_category: str,
+        technician_id: str,
+        manager_note: str | None = None,
+    ) -> dict[str, Any]:
+        """Create one inspection ticket through FastAPI."""
+
+        return self._post_object(
+            "/tickets",
+            json={
+                "asset_id": asset_id,
+                "issue_description": issue_description,
+                "priority": priority,
+                "failure_category": failure_category,
+                "technician_id": technician_id,
+                "manager_note": manager_note,
+            },
+        )
+
+    def update_ticket(
+        self,
+        ticket_id: str,
+        *,
+        status: str | None = None,
+        priority: str | None = None,
+        technician_id: str | None = None,
+        note: str | None = None,
+        resolved_at: str | None = None,
+    ) -> dict[str, Any]:
+        """Assign or update one inspection ticket through FastAPI."""
+
+        return self._patch_object(
+            f"/tickets/{ticket_id}",
+            json={
+                "status": status,
+                "priority": priority,
+                "technician_id": technician_id,
+                "note": note,
+                "resolved_at": resolved_at,
+            },
+        )
+
     def list_maintenance_logs(
         self,
         *,
@@ -223,6 +270,38 @@ class MaintenanceApiClient:
                 "maintenance_result": maintenance_result,
                 "follow_up_required": follow_up_required,
                 "limit": limit,
+            },
+        )
+
+    def create_maintenance_log(
+        self,
+        *,
+        ticket_id: str,
+        asset_id: str,
+        maintenance_date: str,
+        inspection_result: str,
+        actions_taken: str,
+        parts_replaced: str | None,
+        technician_note: str,
+        maintenance_result: str,
+        follow_up_required: bool,
+        next_maintenance_date: str,
+    ) -> dict[str, Any]:
+        """Record one maintenance result through FastAPI."""
+
+        return self._post_object(
+            "/maintenance/logs",
+            json={
+                "ticket_id": ticket_id,
+                "asset_id": asset_id,
+                "maintenance_date": maintenance_date,
+                "inspection_result": inspection_result,
+                "actions_taken": actions_taken,
+                "parts_replaced": parts_replaced,
+                "technician_note": technician_note,
+                "maintenance_result": maintenance_result,
+                "follow_up_required": follow_up_required,
+                "next_maintenance_date": next_maintenance_date,
             },
         )
 
@@ -295,11 +374,38 @@ class MaintenanceApiClient:
             raise ApiClientError(f"Expected an object response from {path}.")
         return payload
 
+    def _patch_object(
+        self,
+        path: str,
+        json: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = self._patch(path, json=json)
+        if not isinstance(payload, dict):
+            raise ApiClientError(f"Expected an object response from {path}.")
+        return payload
+
     def _post(self, path: str, json: dict[str, Any]) -> Any:
         url = f"{self.base_url.rstrip('/')}{path}"
         try:
             with httpx.Client(timeout=self.timeout, transport=self.transport) as client:
                 response = client.post(url, json=_clean_params(json))
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as exc:
+            detail = _extract_error_detail(exc.response)
+            raise ApiClientError(
+                f"API request failed with status {exc.response.status_code}: {detail}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise ApiClientError(f"Could not connect to API at {self.base_url}: {exc}") from exc
+        except ValueError as exc:
+            raise ApiClientError("API response was not valid JSON.") from exc
+
+    def _patch(self, path: str, json: dict[str, Any]) -> Any:
+        url = f"{self.base_url.rstrip('/')}{path}"
+        try:
+            with httpx.Client(timeout=self.timeout, transport=self.transport) as client:
+                response = client.patch(url, json=_clean_params(json))
                 response.raise_for_status()
                 return response.json()
         except httpx.HTTPStatusError as exc:

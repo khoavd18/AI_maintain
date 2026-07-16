@@ -1,8 +1,10 @@
-"""API response schemas."""
+"""API request and response schemas."""
 
+from datetime import date, datetime
+from typing import Literal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -125,6 +127,55 @@ class TicketRecord(BaseModel):
     created_at: str
     resolved_at: str | None
     technician_id: str
+    manager_note: str | None = None
+    note: str | None = None
+
+
+class TicketCreateRequest(BaseModel):
+    """Fields accepted when a manager creates a local inspection ticket."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    asset_id: str = Field(min_length=1, max_length=50)
+    issue_description: str = Field(min_length=5, max_length=1000)
+    priority: Literal["Thấp", "Trung bình", "Cao", "Khẩn cấp"]
+    failure_category: Literal[
+        "Lỗi làm lạnh",
+        "Lỗi rung động",
+        "Lỗi điện",
+        "Lỗi áp suất",
+        "Lỗi thời gian vận hành",
+        "Lỗi cảm biến",
+        "Cảnh báo giả",
+        "Không có lỗi",
+    ]
+    technician_id: str = Field(min_length=1, max_length=50)
+    manager_note: str | None = Field(default=None, max_length=1000)
+
+
+class TicketUpdateRequest(BaseModel):
+    """Small set of mutable ticket fields for the portfolio workflow."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    status: Literal["Mới tạo", "Đang xử lý", "Đã xử lý"] | None = None
+    priority: Literal["Thấp", "Trung bình", "Cao", "Khẩn cấp"] | None = None
+    technician_id: str | None = Field(default=None, min_length=1, max_length=50)
+    note: str | None = Field(default=None, max_length=1000)
+    resolved_at: datetime | None = None
+
+    @field_validator("resolved_at")
+    @classmethod
+    def require_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("resolved_at phải có timezone.")
+        return value
+
+    @model_validator(mode="after")
+    def require_update(self) -> "TicketUpdateRequest":
+        if not self.model_fields_set:
+            raise ValueError("Cần cung cấp ít nhất một trường để cập nhật.")
+        return self
 
 
 class MaintenanceLogRecord(BaseModel):
@@ -143,6 +194,39 @@ class MaintenanceLogRecord(BaseModel):
     maintenance_result: str
     follow_up_required: bool
     next_maintenance_date: str
+
+
+class MaintenanceLogCreateRequest(BaseModel):
+    """Technician result recorded against one inspection ticket."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    ticket_id: str = Field(min_length=1, max_length=50)
+    asset_id: str = Field(min_length=1, max_length=50)
+    maintenance_date: date
+    inspection_result: str = Field(min_length=3, max_length=2000)
+    actions_taken: str = Field(min_length=3, max_length=2000)
+    parts_replaced: str | None = Field(default=None, max_length=1000)
+    technician_note: str = Field(min_length=1, max_length=2000)
+    maintenance_result: Literal[
+        "Đã xử lý",
+        "Đã xử lý một phần",
+        "Cần theo dõi",
+        "Cần hỗ trợ chuyên môn",
+    ]
+    follow_up_required: bool
+    next_maintenance_date: date
+
+    @model_validator(mode="after")
+    def validate_result_contract(self) -> "MaintenanceLogCreateRequest":
+        if self.next_maintenance_date <= self.maintenance_date:
+            raise ValueError("next_maintenance_date phải sau maintenance_date.")
+        expected_follow_up = self.maintenance_result != "Đã xử lý"
+        if self.follow_up_required != expected_follow_up:
+            raise ValueError(
+                "follow_up_required phải là false khi đã xử lý và true với kết quả khác."
+            )
+        return self
 
 
 class PreventiveMaintenanceRecord(BaseModel):

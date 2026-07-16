@@ -1,6 +1,7 @@
 """Tests for dashboard API client helpers."""
 
 import json
+from datetime import date
 from typing import Any
 
 import httpx
@@ -14,7 +15,18 @@ from src.dashboard.api_client import (
     get_api_base_url,
     records_to_dataframe,
 )
-from src.dashboard.app import _distribution, _filter_frame, _format_hours, _format_percent
+from src.dashboard.app import (
+    _allowed_ticket_statuses,
+    _build_copilot_context,
+    _build_copilot_question,
+    _calculate_next_maintenance_date,
+    _distribution,
+    _filter_frame,
+    _format_hours,
+    _format_percent,
+    _maintenance_follow_up,
+    _ticket_form_defaults,
+)
 
 
 def test_get_api_base_url_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -181,6 +193,61 @@ def test_client_rejects_wrong_response_shape_for_new_methods() -> None:
         client.get_maintenance_kpis()
 
 
+def test_client_sends_write_workflow_requests() -> None:
+    requests: list[tuple[str, str, dict[str, Any]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content.decode("utf-8"))
+        requests.append((request.method, request.url.path, payload))
+        if request.url.path == "/maintenance/logs":
+            return httpx.Response(201, json={"log_id": "LOG-000101"})
+        return httpx.Response(201 if request.method == "POST" else 200, json={
+            "ticket_id": "TCK-000101"
+        })
+
+    client = MaintenanceApiClient(
+        "http://api.local",
+        transport=httpx.MockTransport(handler),
+    )
+    client.create_ticket(
+        asset_id="GENERATOR_002",
+        issue_description="Kiểm tra khả năng khởi động.",
+        priority="Cao",
+        failure_category="Lỗi điện",
+        technician_id="TECH_001",
+        manager_note=None,
+    )
+    client.update_ticket(
+        "TCK-000101",
+        status="Đang xử lý",
+        technician_id="TECH_002",
+    )
+    client.create_maintenance_log(
+        ticket_id="TCK-000101",
+        asset_id="GENERATOR_002",
+        maintenance_date="2026-07-15",
+        inspection_result="Ắc quy yếu.",
+        actions_taken="Vệ sinh đầu cực.",
+        parts_replaced=None,
+        technician_note="Đã chạy thử.",
+        maintenance_result="Đã xử lý",
+        follow_up_required=False,
+        next_maintenance_date="2026-11-12",
+    )
+
+    assert [(method, path) for method, path, _ in requests] == [
+        ("POST", "/tickets"),
+        ("PATCH", "/tickets/TCK-000101"),
+        ("POST", "/maintenance/logs"),
+    ]
+    assert "manager_note" not in requests[0][2]
+    assert requests[1][2] == {
+        "status": "Đang xử lý",
+        "technician_id": "TECH_002",
+    }
+    assert requests[2][2]["follow_up_required"] is False
+
+
 def test_dashboard_pure_formatting_and_filter_helpers() -> None:
     frame = pd.DataFrame(
         {
@@ -194,3 +261,47 @@ def test_dashboard_pure_formatting_and_filter_helpers() -> None:
     assert _filter_frame(frame, "risk_level", None).equals(frame)
     assert _format_percent(57.14) == "57.14%"
     assert _format_hours(54) == "54.0 giờ"
+
+
+def test_dashboard_workflow_form_helpers() -> None:
+    details = {
+        "asset_profile": {
+            "asset_id": "GENERATOR_002",
+            "asset_name": "Máy phát điện dự phòng 002",
+            "asset_type": "Máy phát điện dự phòng",
+        },
+        "latest_risk": {"risk_level": "Cao"},
+        "risk_contributing_factors": "Bảo trì quá hạn 159 ngày",
+        "recommended_action": "Kiểm tra trong tuần.",
+        "recent_tickets": [
+            {
+                "failure_category": "Lỗi điện",
+                "technician_id": "TECH_004",
+            }
+        ],
+    }
+    defaults = _ticket_form_defaults(details)
+    ticket = {
+        "ticket_id": "TCK-000099",
+        "failure_category": "Lỗi điện",
+        "issue_description": "Máy phát không khởi động.",
+    }
+    context = _build_copilot_context(details, ticket)
+    question = _build_copilot_question(context)
+
+    assert defaults["asset_id"] == "GENERATOR_002"
+    assert defaults["priority"] == "Cao"
+    assert defaults["failure_category"] == "Lỗi điện"
+    assert "Bảo trì quá hạn 159 ngày" in defaults["issue_description"]
+    assert _allowed_ticket_statuses("Mới tạo") == ["Mới tạo", "Đang xử lý"]
+    assert _allowed_ticket_statuses("Đang xử lý") == ["Đang xử lý", "Đã xử lý"]
+    assert _allowed_ticket_statuses("Đã xử lý") == ["Đã xử lý"]
+    assert _maintenance_follow_up("Đã xử lý") is False
+    assert _maintenance_follow_up("Cần theo dõi") is True
+    assert _calculate_next_maintenance_date(date(2026, 7, 15), 120) == date(
+        2026, 11, 12
+    )
+    assert context["asset_type"] == "Máy phát điện dự phòng"
+    assert context["failure_category"] == "Lỗi điện"
+    assert "TCK-000099" in question
+    assert "Bảo trì quá hạn 159 ngày" in question

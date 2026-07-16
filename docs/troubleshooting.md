@@ -4,7 +4,7 @@
 
 Dấu hiệu:
 
-- `make index-documents` báo lỗi kết nối Qdrant.
+- `python -m src.rag.index_documents` báo lỗi kết nối Qdrant.
 - Copilot trả `retrieval_status=unavailable` và không có sources.
 - Dashboard hiển thị safe fallback nhưng các trang manager vẫn hoạt động.
 
@@ -32,7 +32,7 @@ Dấu hiệu:
 Cách xử lý:
 
 ```bash
-make index-documents
+python -m src.rag.index_documents
 ```
 
 Default indexing report phải cho biết 6 documents, 30 chunks, collection `maintenance_knowledge`, embedding implementation và vector dimensions. Indexer luôn rebuild collection; chạy lại không tạo duplicate.
@@ -47,7 +47,7 @@ Dấu hiệu:
 Cách xử lý:
 
 ```bash
-make index-documents
+python -m src.rag.index_documents
 ```
 
 Không sửa vector size trực tiếp. Full rebuild là synchronization path canonical của MVP.
@@ -56,13 +56,13 @@ Không sửa vector size trực tiếp. Full rebuild là synchronization path ca
 
 Dấu hiệu:
 
-- `make index-documents` báo chưa cài `sentence-transformers`.
-- `make rag-query` hoặc `/copilot/ask` không khởi tạo được embedding provider.
+- `python -m src.rag.index_documents` báo chưa cài `sentence-transformers`.
+- `python -m src.rag.query` hoặc `/copilot/ask` không khởi tạo được embedding provider.
 
 Cách xử lý:
 
 ```bash
-python -m pip install -e ".[dev,rag]"
+python -m pip install -e ".[dev,rag,postgres]"
 ```
 
 Default model là `intfloat/multilingual-e5-small`. Lần chạy đầu có thể tải model miễn phí. Unit tests dùng deterministic hash embeddings và không cần model download.
@@ -79,12 +79,12 @@ Cách xử lý:
 - Chọn asset thuộc HVAC, pump hoặc generator.
 - Đặt câu hỏi bảo trì cụ thể, ví dụ `Máy bơm rung bất thường thì kiểm tra những bước nào?`.
 - Xác nhận `asset_type`, `document_type` và `failure_category` filters phù hợp.
-- Chạy lại `make index-documents` nếu source documents vừa thay đổi.
+- Chạy lại `python -m src.rag.index_documents` nếu source documents vừa thay đổi.
 
 Hỏi lại:
 
 ```bash
-make rag-query QUESTION="Vì sao GENERATOR_002 đang rủi ro cao?" ASSET_ID=GENERATOR_002
+python -m src.rag.query "Vì sao GENERATOR_002 đang rủi ro cao?" --asset-id GENERATOR_002
 ```
 
 Không hạ relevance threshold chỉ để buộc Copilot trả lời. Threshold `0.55` của sentence-transformer là safety gate MVP, chưa phải calibrated probability.
@@ -101,26 +101,20 @@ Cách xử lý:
 Khởi động API trong terminal thứ nhất:
 
 ```bash
-make run-api
+python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
 Khởi động dashboard trong terminal thứ hai:
 
 ```bash
-make run-dashboard
+python -m streamlit run src/dashboard/app.py
 ```
 
-Nếu API dùng host hoặc port khác, cấu hình `API_BASE_URL`:
-
-```bash
-API_BASE_URL=http://localhost:8000 make run-dashboard
-```
-
-Windows PowerShell:
+Nếu API dùng host hoặc port khác, cấu hình `API_BASE_URL` trong PowerShell:
 
 ```powershell
 $env:API_BASE_URL = "http://localhost:8000"
-make run-dashboard
+python -m streamlit run src/dashboard/app.py
 ```
 
 ## Thiếu Processed CSV
@@ -135,10 +129,12 @@ Cách xử lý:
 Chạy lại pipeline:
 
 ```bash
-make generate-data
-make build-features
-make detect-anomalies
-make score-risk
+python -m src.data_generation.generate_data
+python -m src.ingestion.validation
+python -m src.features.build_features
+python -m src.models.anomaly_detection
+python -m src.risk.risk_scoring
+python -m src.features.build_features --analysis maintenance
 ```
 
 Outputs cần có:
@@ -151,15 +147,15 @@ Outputs cần có:
 
 Dấu hiệu:
 
-- `make load-data` cannot connect to PostgreSQL.
-- Database connection errors mention localhost port `5432`.
+- `python -m src.ingestion.load_data --replace` không kết nối được PostgreSQL.
+- Lỗi database connection nhắc đến localhost port `5432`.
 
 Cách xử lý:
 
 ```bash
-make services-up
-make init-db
-make load-data
+docker compose up -d postgres
+python -m src.database.init_db
+python -m src.ingestion.load_data --replace
 ```
 
 Để thử optional database path không cần PostgreSQL, scripts hỗ trợ SQLite URL:
@@ -174,27 +170,29 @@ python -m src.ingestion.load_data --database-url sqlite:///maintenance_demo.db -
 Dùng khi raw hoặc processed files bị stale:
 
 ```bash
-make generate-data
-make build-features
-make detect-anomalies
-make score-risk
+python -m src.data_generation.generate_data
+python -m src.ingestion.validation
+python -m src.features.build_features
+python -m src.models.anomaly_detection
+python -m src.risk.risk_scoring
+python -m src.features.build_features --analysis maintenance
 docker compose up -d qdrant
-make index-documents
+python -m src.rag.index_documents
 ```
 
 PostgreSQL là optional và không cần cho primary pipeline. Để thử experimental database path riêng:
 
 ```bash
 docker compose up -d postgres
-make init-db
-make load-data
+python -m src.database.init_db
+python -m src.ingestion.load_data --replace
 ```
 
 Sau đó chạy ứng dụng:
 
 ```bash
-make run-api
-make run-dashboard
+python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+python -m streamlit run src/dashboard/app.py
 ```
 
 ## Ruff Hoặc Pytest Bị Lỗi
@@ -202,12 +200,34 @@ make run-dashboard
 Chạy:
 
 ```bash
-make lint
-make test
+python -m ruff check .
+python -m pytest
 ```
 
 Nếu lỗi liên quan optional RAG dependencies, cài:
 
 ```bash
-python -m pip install -e ".[dev,rag]"
+python -m pip install -e ".[dev,rag,postgres]"
 ```
+
+## Warnings Đã Review
+
+### Starlette/httpx Trong Test Suite
+
+Cause: Starlette `1.3.x` ưu tiên package `httpx2`; khi package này chưa được cài, `fastapi.testclient` fallback sang `httpx` và phát `StarletteDeprecationWarning`.
+
+Impact: warning chỉ xuất hiện khi import test client; không ảnh hưởng FastAPI runtime, API contract hoặc dashboard. Milestone 6 không thêm `httpx2` chỉ để làm sạch một warning test-only.
+
+Future resolution: đánh giá `httpx2` khi FastAPI/Starlette dependency path ổn định, hoặc migrate test transport trong một dependency-upgrade task riêng.
+
+### Qdrant Client/Server Version
+
+Cause cũ: dependency range `<2.0` cài Qdrant client `1.18.x` trong khi Docker server là `1.10.1`.
+
+Resolution: `pyproject.toml` pin client vào `>=1.10,<1.11`, cùng minor line với Docker image. Nếu virtual environment cũ vẫn báo warning, chạy:
+
+```powershell
+python -m pip install -e ".[dev,rag,postgres]" --upgrade
+```
+
+Không upgrade Qdrant server hoặc toàn bộ dependency tree chỉ để xóa warning.

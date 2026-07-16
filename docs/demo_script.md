@@ -1,224 +1,168 @@
-# Kịch Bản Demo Portfolio
+# Kịch Bản Demo 5–7 Phút
 
-Kịch bản này trình bày primary CSV-first workflow. PostgreSQL không cần thiết cho demo chính. Qdrant chỉ cần khi demo Maintenance Copilot.
+Kịch bản dùng primary CSV-first workflow và dữ liệu synthetic mặc định. PostgreSQL không cần cho demo. Các giá trị expected bên dưới được verify với seed mặc định; nếu thay seed hoặc parameters, hãy dùng giá trị đang hiển thị thay vì đọc thuộc lòng.
 
-## 1. Chuẩn Bị Environment
+## Chuẩn Bị Trước Demo
 
-```bash
-python -m pip install -e ".[dev,rag]"
-```
+Windows PowerShell, không cần `make`:
 
-Giải thích ngắn:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev,rag,postgres]"
 
-- `dev` cung cấp pytest và Ruff;
-- `rag` cung cấp sentence-transformers cho local embeddings;
-- không sử dụng paid API.
-
-## 2. Generate Vietnamese Synthetic Data
-
-```bash
-make generate-data
-```
-
-Mở `data/raw` và giới thiệu:
-
-- asset master;
-- hourly sensor readings;
-- maintenance tickets và logs;
-- Vietnamese SOP/checklist documents.
-
-Nhấn mạnh đây là synthetic batch data, không phải real-time IoT hoặc production data.
-
-## 3. Build Daily Features
-
-```bash
-make build-features
-```
-
-Mở `data/processed/asset_daily_features.csv` và chỉ ra:
-
-- rolling energy trend;
-- temperature/vibration/runtime delta;
-- ticket frequency;
-- maintenance overdue days;
-- criticality score.
-
-Canonical implementation: `src/features/build_features.py`.
-
-## 4. Detect Anomalies
-
-```bash
-make detect-anomalies
-```
-
-Mở `data/processed/anomaly_results.csv` và giải thích:
-
-- rule-based signals tạo explanation cho known patterns;
-- Isolation Forest bổ sung relative outlier score;
-- output có Vietnamese `anomaly_type` và `anomaly_reasons`.
-
-Canonical implementation: `src/models/anomaly_detection.py`.
-
-## 5. Score Risk
-
-```bash
-make score-risk
-```
-
-Mở `data/processed/risk_scores.csv` và trình bày formula:
-
-```text
-final_risk_score =
-  20% anomaly_score
-+ 25% maintenance_overdue_score
-+ 20% unresolved_ticket_score
-+ 10% recent_ticket_score
-+  7.5% recurring_issue_score
-+ 10% criticality_score
-+  5% follow_up_score
-+  2.5% runtime_score
-```
-
-Nói rõ risk score dùng để prioritization; nó không dự đoán exact failure time.
-
-Canonical implementation: `src/risk/risk_scoring.py`.
-
-Tạo các analytics snapshots bổ sung:
-
-```bash
+python -m src.data_generation.generate_data
+python -m src.ingestion.validation
+python -m src.features.build_features
+python -m src.models.anomaly_detection
+python -m src.risk.risk_scoring
 python -m src.features.build_features --analysis preventive
 python -m src.features.build_features --analysis recurring
 python -m src.features.build_features --analysis kpis
-```
 
-Các snapshots này được phục vụ qua manager API và xuất hiện trong các dashboard workflow tương ứng.
-
-## 6. Start Qdrant Và Index Documents
-
-```bash
 docker compose up -d qdrant
-make index-documents
+python -m src.rag.index_documents
 ```
 
-Giải thích RAG path:
+Index lần hai phải vẫn báo 6 documents và 30 chunks:
+
+```powershell
+python -m src.rag.index_documents
+```
+
+Terminal 1:
+
+```powershell
+python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+```
+
+Terminal 2:
+
+```powershell
+$env:API_BASE_URL = "http://localhost:8000"
+python -m streamlit run src/dashboard/app.py
+```
+
+## 0:00–0:45 — Bài Toán Và Phạm Vi
+
+**Click:** mở dashboard, view `Tổng quan`.
+
+**Nói:**
+
+> Đội vận hành phải đối chiếu asset, ticket, lịch bảo trì, readings và SOP. Project này là AI decision-support layer theo batch để ưu tiên thiết bị và tìm checklist liên quan. Nó không thay thế CMMS, không xử lý real-time IoT và không tự quyết định bảo trì.
+
+Chỉ ra dataset đã verify: 27 assets, 77.760 hourly readings, 42 tickets, 86 maintenance logs và ba loại thiết bị HVAC, pump, generator.
+
+## 0:45–1:45 — Overview KPIs
+
+**Click:** KPI cards, preventive/risk distributions và bảng ưu tiên.
+
+**Expected snapshot `2026-04-30`:**
+
+- 42 tickets: 24 resolved, 18 open;
+- ticket resolution rate 57,14%;
+- 2 assets quá hạn;
+- 4 recurring asset/category groups;
+- 2 assets ở mức `Cao` hoặc `Khẩn cấp`.
+
+**Nói:** KPI chỉ mô tả synthetic snapshot. Không diễn giải resolution rate thành ROI, SLA hay production performance.
+
+## 1:45–3:20 — GENERATOR_002
+
+**Click:** view `Thiết bị và rủi ro`, chọn `GENERATOR_002`, bấm `Xem chi tiết`.
+
+**Expected facts:**
+
+- asset: `Máy phát điện dự phòng 002`, `Sân thượng phía Đông`;
+- latest Risk Score: `63.89`, level `Cao`;
+- preventive status: `Quá hạn`, 159 ngày;
+- 2 unresolved electrical tickets: một `Mới tạo`, một `Đang xử lý`;
+- 1 preventive maintenance log ngày `2025-07-25`;
+- recommended action: lên lịch kiểm tra trong tuần, kiểm tra ắc quy, dầu, nước làm mát và chạy thử tải.
+
+**Nói:**
+
+> Risk Score kết hợp anomaly, overdue maintenance, unresolved/recent tickets, recurring issue, criticality, follow-up và runtime. Đây là transparent prioritization score, không phải xác suất failure.
+
+Mở ticket và maintenance history để chứng minh score có trace về business events, không chỉ là model output.
+
+## 3:20–4:30 — Risk-To-Action
+
+**Click:** `Tạo ticket kiểm tra`. Chỉ rõ hai phần:
+
+- facts được prefill từ batch: asset, Risk Level và contributing factors;
+- recommendation có thể được manager chỉnh trước khi gán technician.
+
+Tạo ticket, mở `Ticket workspace`, chuyển `Mới tạo -> Đang xử lý`, ghi inspection result/action/result. Nếu result là `Đã xử lý`, resolve ticket sau khi log đã lưu; nếu result cần follow-up, giữ ticket `Đang xử lý`.
+
+**Nói:**
+
+> Dashboard chỉ ghi raw ticket/log CSV qua FastAPI. Risk và KPI không đổi ngay; thông báo trên form nói rõ kết quả sẽ cập nhật ở analytics batch tiếp theo. Đây là local single-user demo, không phải CMMS transaction engine.
+
+Sau demo có write, chạy lại `python -m src.data_generation.generate_data` nếu cần khôi phục synthetic dataset mặc định.
+
+## 4:30–5:00 — Anomaly Context
+
+**Click:** view `Bất thường và lỗi lặp lại`, filter `GENERATOR_002` nếu cần.
+
+**Expected anomaly gần nhất:** ngày `2026-04-21`, score `95.62`, loại `Thời gian vận hành bất thường`; energy tăng 54,7% và runtime tăng 57,8% so với baseline 7 ngày.
+
+**Nói:** rule-based signals tạo explanation; Isolation Forest bổ sung relative outlier evidence. Anomaly không chứng minh thiết bị đã hỏng.
+
+## 5:00–6:15 — RAG Copilot
+
+**Click:** từ asset hoặc ticket, bấm `Mở Copilot checklist`, sau đó mở view `Trợ lý bảo trì`. Dashboard đã prefill asset type, asset ID, ticket category/description và latest risk explanation. Hỏi:
 
 ```text
-documents.csv -> chunks -> local embeddings -> Qdrant -> top-k retrieval
+Máy phát điện không khởi động thì cần kiểm tra gì trước?
 ```
 
-Với default source set, command báo 6 documents và 30 chunks. Chạy `make index-documents` lần thứ hai và xác nhận chunk count vẫn là 30: indexer luôn thay thế collection, không append duplicate hoặc giữ stale chunk.
+**Expected:**
 
-Qdrant không cần cho risk/anomaly dashboard; nó chỉ hỗ trợ Copilot retrieval. Nếu embedding model chưa có trong cache, lần chạy đầu có thể cần tải model miễn phí.
+- `retrieval_status=success`;
+- filter `asset_type=Máy phát điện dự phòng`, failure category `Lỗi điện`;
+- source `Hướng dẫn kiểm tra máy phát điện không khởi động`, version `1.0`, effective date `2026-01-01`;
+- answer tách asset facts, checklist, sources, safety notice và recommendation limits.
 
-## 7. Run FastAPI
+**Nói:** Qdrant chỉ retrieve document chunks; deterministic composer không tạo diagnosis. Relevance gate loại unrelated chunks. Technician vẫn phải kiểm tra hiện trường và ưu tiên manual nhà sản xuất cùng quy trình an toàn tòa nhà.
 
-Trong terminal thứ nhất:
+## 6:15–6:40 — Safe Fallback (Optional)
 
-```bash
-make run-api
-```
+Nếu muốn demo failure handling:
 
-Mở:
-
-- `http://localhost:8000/health`
-- `http://localhost:8000/summary`
-- `http://localhost:8000/maintenance/kpis`
-- `http://localhost:8000/assets/GENERATOR_002/details`
-- `http://localhost:8000/docs`
-
-FastAPI đọc canonical processed CSVs qua service layer.
-
-## 8. Run Streamlit
-
-Trong terminal thứ hai:
-
-```bash
-make run-dashboard
-```
-
-Mở URL do Streamlit hiển thị. Dashboard gọi FastAPI qua `API_BASE_URL` và không đọc CSV trực tiếp.
-
-## 9. Inspect Top Risky Asset
-
-1. Mở `Tổng quan` và trình bày ticket KPI, overdue assets và distributions.
-2. Xem bảng thiết bị cần ưu tiên.
-3. Mở `Thiết bị và rủi ro`.
-4. Chọn `GENERATOR_002` hoặc asset có Risk Score cao nhất.
-5. Trình bày asset profile, preventive status, contributing factors và recommended action.
-6. Mở risk history, recent tickets và maintenance logs.
-7. Mở `Bất thường và lỗi lặp lại` để phân biệt anomaly signal với recurring ticket group.
-8. Nhấn mạnh manager và technician quyết định hành động thực tế.
-
-## 10. Ask Maintenance Copilot
-
-Mở `Trợ lý bảo trì` và hỏi:
-
-```text
-Vì sao GENERATOR_002 đang rủi ro cao?
-```
-
-Sử dụng:
-
-- `asset_id`: `GENERATOR_002`
-- `top_k`: `5`
-
-Trình bày:
-
-- `Facts từ dữ liệu thiết bị`: structured risk/anomaly context;
-- `Hướng dẫn được truy xuất`: checklist từ document đủ relevance;
-- filter `asset_type=Máy phát điện dự phòng`;
-- source `Hướng dẫn kiểm tra máy phát điện không khởi động`, version và effective date;
-- safety notice và giới hạn của recommendation.
-
-Ví dụ API tương đương:
-
-```bash
-curl -X POST http://localhost:8000/copilot/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question":"Máy phát điện không khởi động thì tham khảo checklist nào?","asset_id":"GENERATOR_002","top_k":5}'
-```
-
-Response thành công phải có `retrieval_status=success`, ít nhất một source và các section tình trạng, checklist, nguồn, an toàn, giới hạn.
-
-Nói rõ response dùng deterministic composer, không phải generative LLM. Technician phải kiểm tra hiện trường và SOP chính thức trước khi hành động.
-
-## 11. Minh Họa Safe Fallback
-
-Dừng riêng Qdrant rồi hỏi lại; không cần dừng API hoặc dashboard:
-
-```bash
+```powershell
 docker compose stop qdrant
 ```
 
-Copilot phải hiển thị thông báo thân thiện, không có source/chunk giả và có câu:
+Hỏi lại. Expected: `retrieval_status=unavailable`, không có source/chunk giả và có safe fallback yêu cầu kiểm tra manual hoặc liên hệ kỹ thuật trưởng. `GET /health` và các workflow không phụ thuộc RAG vẫn hoạt động.
 
-```text
-Không tìm thấy SOP hoặc checklist đủ liên quan trong kho tài liệu hiện có. Vui lòng kiểm tra tài liệu của nhà sản xuất hoặc liên hệ kỹ thuật trưởng.
-```
+Khởi động lại khi cần:
 
-Các trang manager vẫn sử dụng được và `GET /health` vẫn trả trạng thái của raw/analytics data, không phụ thuộc RAG. Khởi động lại Qdrant trước lần hỏi tiếp theo:
-
-```bash
+```powershell
 docker compose start qdrant
 ```
 
-## 12. Kết Thúc Product Story
+## 6:40–7:00 — Kết Luận
 
-AI Maintenance Copilot là:
+**Nói:**
 
-- một AI decision-support layer;
-- batch analytics workflow;
-- portfolio MVP tích hợp data engineering, ML scoring, API, dashboard và RAG;
-- không phải CMMS replacement hoặc production-ready system.
+> MVP trình bày một flow coherent từ synthetic data, validation, feature engineering, hybrid anomaly detection, explainable risk, maintenance reports, API/dashboard đến source-grounded RAG. Production vẫn cần real data integration, evaluation, scheduler, auth, audit, observability và deployment hardening.
 
-## Optional PostgreSQL Experiment
+## Câu Hỏi Interviewer Có Thể Hỏi
 
-Phần này không thuộc main demo. Chỉ chạy khi muốn minh họa SQLAlchemy schema và raw CSV loading:
+- Vì sao rules và Isolation Forest được dùng cùng nhau?
+- Risk Score khác failure probability như thế nào?
+- Làm sao tránh Copilot retrieve SOP sai loại thiết bị?
+- Vì sao Qdrant failure không làm dashboard ngừng hoạt động?
+- Nếu có dữ liệu CMMS thực tế, bạn sẽ evaluate anomaly, risk và RAG như thế nào?
+- PostgreSQL đang đóng vai trò gì nếu API hiện CSV-backed?
 
-```bash
-docker compose up -d postgres
-make init-db
-make load-data
+## Dừng Demo
+
+Dừng API và Streamlit bằng `Ctrl+C`, sau đó:
+
+```powershell
+docker compose stop qdrant
 ```
 
-PostgreSQL path hiện không cấp dữ liệu cho FastAPI, Streamlit hoặc canonical analytics outputs.
+Không dùng `docker compose down -v` trừ khi chủ động muốn xóa local service volumes.

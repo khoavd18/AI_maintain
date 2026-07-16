@@ -26,7 +26,7 @@ Extend only these production paths:
 - Dashboard: `src/dashboard/app.py`
 - RAG chunking: `src/rag/chunking.py`
 
-Treat duplicate wrappers and helpers documented in `docs/architecture.md` as legacy/removal candidates. Do not add behavior to them. Do not delete them until a dedicated cleanup milestone verifies imports, tests, and compatibility.
+Duplicate anomaly, risk, ingestion, sample-data, and dashboard wrappers were removed in the verified cleanup milestone. Do not recreate parallel implementations or compatibility entrypoints; extend only the canonical paths above.
 
 ## Scope Expansion Prohibited
 
@@ -65,4 +65,3 @@ python -m ruff check .
 ```
 
 Keep the main portfolio demo reproducible without PostgreSQL.
-
