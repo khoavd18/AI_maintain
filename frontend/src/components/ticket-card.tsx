@@ -1,4 +1,4 @@
-import { Clock3, UserRound } from "lucide-react";
+import { Clock3, Hourglass, UserRound } from "lucide-react";
 
 import { PriorityBadge } from "@/components/status-badges";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,12 +34,18 @@ export function TicketCard({ ticket, onSelect, compact = false }: TicketCardProp
         <div className="space-y-1.5 text-xs text-muted-foreground">
           <p className="flex items-center gap-2">
             <UserRound className="size-3.5" aria-hidden="true" />
-            <span className="truncate">{ticket.technician}</span>
+            <span className="truncate">Phụ trách: {ticket.technician}</span>
           </p>
           <p className="flex items-center gap-2">
-            <Clock3 className="size-3.5" aria-hidden="true" />
-            <span>{ticket.createdAt}</span>
+            <Hourglass className="size-3.5" aria-hidden="true" />
+            <span>{ticket.status === "resolved" ? "Thời gian xử lý" : "Đang chờ"}: {ticket.waitingTime}</span>
           </p>
+          {!compact && (
+            <p className="flex items-center gap-2">
+              <Clock3 className="size-3.5" aria-hidden="true" />
+              <span>Tạo lúc {ticket.createdAt}</span>
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

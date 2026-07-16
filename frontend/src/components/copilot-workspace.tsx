@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Bot, CheckCircle2, Send, Sparkles, UserRound, Wrench } from "lucide-react";
+import { AlertCircle, Bot, CheckCircle2, Loader2, Send, Sparkles, UserRound, Wrench } from "lucide-react";
 import { FormEvent, useState } from "react";
 
 import { SafetyNotice } from "@/components/safety-notice";
@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { assets, copilotSources, tickets } from "@/lib/mock-data";
+import { assets, copilotSources, copilotSuggestedQuestions, tickets } from "@/lib/mock-data";
 
 const demoAsset = assets.find((asset) => asset.id === "GENERATOR_002")!;
 const demoTicket = tickets.find((ticket) => ticket.id === "TCK-000041")!;
@@ -21,12 +21,19 @@ const defaultQuestion = "Vì sao GENERATOR_002 đang rủi ro cao và cần ki�
 export function CopilotWorkspace() {
   const [question, setQuestion] = useState("");
   const [displayedQuestion, setDisplayedQuestion] = useState(defaultQuestion);
+  const [isLoading, setIsLoading] = useState(false);
+
+  function runMockQuestion(nextQuestion: string) {
+    setDisplayedQuestion(nextQuestion);
+    setIsLoading(true);
+    window.setTimeout(() => setIsLoading(false), 450);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextQuestion = question.trim();
     if (!nextQuestion) return;
-    setDisplayedQuestion(nextQuestion);
+    runMockQuestion(nextQuestion);
     setQuestion("");
   }
 
@@ -36,7 +43,7 @@ export function CopilotWorkspace() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <CardTitle>Ngữ cảnh thiết bị</CardTitle>
+            <CardTitle>Dữ liệu tài sản được chọn</CardTitle>
               <Badge variant="outline">Mock</Badge>
             </div>
           </CardHeader>
@@ -47,13 +54,13 @@ export function CopilotWorkspace() {
             <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
               <span className="text-sm text-muted-foreground">Risk</span>
               <div className="flex items-center gap-2">
-                <span className="font-semibold tabular-nums">{demoAsset.riskScore.toFixed(2)}</span>
-                <RiskBadge level={demoAsset.riskLevel} />
+                <span className="font-semibold tabular-nums">{demoAsset.riskScore?.toFixed(2) ?? "--"}</span>
+                {demoAsset.riskLevel && <RiskBadge level={demoAsset.riskLevel} />}
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm text-muted-foreground">Bảo trì</span>
-              <MaintenanceBadge status={demoAsset.maintenanceStatus} />
+              {demoAsset.maintenanceStatus && <MaintenanceBadge status={demoAsset.maintenanceStatus} />}
             </div>
           </CardContent>
         </Card>
@@ -89,7 +96,26 @@ export function CopilotWorkspace() {
           <Badge className="bg-green-50 text-green-700 ring-1 ring-green-200 hover:bg-green-50">Sẵn sàng</Badge>
         </header>
 
-        <ScrollArea className="h-[560px]">
+        <div className="border-b bg-muted/30 px-4 py-3 sm:px-5">
+          <p className="text-xs font-semibold text-muted-foreground">Câu hỏi bảo trì gợi ý</p>
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {copilotSuggestedQuestions.map((suggestion) => (
+              <Button
+                key={suggestion}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 bg-white"
+                disabled={isLoading}
+                onClick={() => runMockQuestion(suggestion)}
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <ScrollArea className="h-[520px]">
           <div className="space-y-5 p-4 sm:p-6">
             <div className="flex justify-end gap-3">
               <div className="max-w-[85%] rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
@@ -100,13 +126,20 @@ export function CopilotWorkspace() {
               </span>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3" aria-live="polite" aria-busy={isLoading}>
               <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
                 <Sparkles className="size-4" aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1 space-y-4">
+                {isLoading ? (
+                  <div role="status" className="flex items-center gap-2 rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    Đang chuẩn bị hướng dẫn mô phỏng...
+                  </div>
+                ) : (
+                  <>
                 <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
-                  <p className="text-xs font-semibold uppercase text-blue-800">Phản hồi mô phỏng</p>
+                  <p className="text-xs font-semibold uppercase text-blue-800">Hướng dẫn truy xuất mô phỏng</p>
                   <p className="mt-2 text-sm leading-6 text-foreground">
                     GENERATOR_002 được ưu tiên ở mức Cao do nhiều tín hiệu cùng xuất hiện: bảo trì quá hạn 159 ngày, hai ticket chưa hoàn tất và bất thường liên quan điện áp ắc quy cùng runtime.
                   </p>
@@ -145,6 +178,8 @@ export function CopilotWorkspace() {
                     </p>
                   </div>
                 </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -161,8 +196,8 @@ export function CopilotWorkspace() {
               rows={2}
               className="min-h-16 resize-none"
             />
-            <Button type="submit" size="icon-lg" disabled={!question.trim()} aria-label="Gửi câu hỏi mô phỏng">
-              <Send aria-hidden="true" />
+            <Button type="submit" size="icon-lg" disabled={!question.trim() || isLoading} aria-label="Gửi câu hỏi mô phỏng">
+              {isLoading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
             </Button>
           </div>
           <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">

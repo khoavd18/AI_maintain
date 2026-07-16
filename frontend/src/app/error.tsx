@@ -6,7 +6,7 @@ export default function GlobalError({ reset }: { error: Error & { digest?: strin
   return (
     <ErrorState
       title="Không thể hiển thị trang"
-      description="Đã xảy ra lỗi khi dựng giao diện mock. Hãy thử tải lại nội dung."
+      description="Đã xảy ra lỗi khi dựng giao diện. Hãy thử tải lại nội dung."
       action={<RetryButton onClick={reset} />}
     />
   );

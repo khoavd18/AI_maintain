@@ -1,10 +1,12 @@
-export type RiskLevel = "Thấp" | "Trung bình" | "Cao" | "Nghiêm trọng";
+export type RiskLevel = "Thấp" | "Trung bình" | "Cao" | "Khẩn cấp";
 
 export type MaintenanceStatus = "Chưa đến hạn" | "Sắp đến hạn" | "Quá hạn";
 
 export type TicketStatus = "new" | "in_progress" | "resolved";
 
 export type TicketPriority = "Thấp" | "Trung bình" | "Cao" | "Khẩn cấp";
+
+export type AnomalySeverity = "Theo dõi" | "Cảnh báo" | "Ưu tiên";
 
 export interface Asset {
   id: string;
@@ -13,14 +15,14 @@ export interface Asset {
   location: string;
   criticality: string;
   status: string;
-  riskScore: number;
-  riskLevel: RiskLevel;
-  maintenanceStatus: MaintenanceStatus;
+  riskScore: number | null;
+  riskLevel: RiskLevel | null;
+  maintenanceStatus: MaintenanceStatus | null;
   lastMaintenance: string;
   nextMaintenance: string;
   overdueDays: number;
   unresolvedTickets: number;
-  latestAnomaly: string;
+  contributingFactors: string;
   recommendedAction: string;
 }
 
@@ -35,6 +37,7 @@ export interface Ticket {
   technician: string;
   createdAt: string;
   updatedAt: string;
+  waitingTime: string;
 }
 
 export interface AnomalyRecord {
@@ -43,16 +46,21 @@ export interface AnomalyRecord {
   assetId: string;
   assetType: string;
   anomalyType: string;
+  metric: string;
+  change: string;
+  severity: AnomalySeverity;
   score: number;
   reason: string;
+  relatedAction: string;
 }
 
 export interface RecurringIssue {
+  assetId: string;
   category: string;
-  assetType: string;
   occurrences: number;
-  affectedAssets: number;
   latestDate: string;
+  unresolvedCount: number;
+  recurrenceFlag: boolean;
 }
 
 export interface MaintenanceEvent {
@@ -62,6 +70,7 @@ export interface MaintenanceEvent {
   actions: string;
   technician: string;
   followUp: boolean;
+  nextMaintenance: string;
 }
 
 export interface RiskContribution {

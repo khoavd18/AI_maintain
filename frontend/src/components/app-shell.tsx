@@ -24,6 +24,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useHealthQuery, useSummaryQuery } from "@/hooks/use-api-queries";
+import { formatDate } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -40,7 +42,8 @@ const navigation: NavItem[] = [
   { label: "Trợ lý bảo trì", href: "/copilot", icon: Bot },
 ];
 
-function isActivePath(pathname: string, href: string) {
+function isActivePath(pathname: string | null, href: string) {
+  if (!pathname) return href === "/";
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
@@ -99,6 +102,9 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const health = useHealthQuery();
+  const summary = useSummaryQuery();
+
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-sidebar lg:flex lg:flex-col">
@@ -140,17 +146,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Sheet>
             <div>
               <p className="text-sm font-semibold text-foreground">Trung tâm vận hành</p>
-              <p className="hidden text-xs text-muted-foreground sm:block">Cập nhật batch: 30/04/2026</p>
+              <p className="hidden text-xs text-muted-foreground sm:block">
+                Cập nhật batch: {summary.data ? formatDate(summary.data.latest_date) : summary.isPending ? "đang tải" : "chưa khả dụng"}
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="hidden gap-1.5 bg-white text-muted-foreground sm:inline-flex">
-              <span className="size-1.5 rounded-full bg-neutral-400" aria-hidden="true" />
-              API: mock mode
+            <ApiStatusBadge health={health} />
+            <Badge
+              variant="outline"
+              className="hidden bg-white text-muted-foreground xl:inline-flex"
+              title="Copilot chưa kết nối RAG trong frontend milestone này"
+            >
+              RAG: chưa kết nối
             </Badge>
             <Badge className="bg-blue-50 text-blue-700 ring-1 ring-blue-200 hover:bg-blue-50">
-              Dữ liệu tổng hợp
+              Dữ liệu synthetic
             </Badge>
           </div>
         </header>
@@ -160,5 +172,51 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+  );
+}
+
+function ApiStatusBadge({ health }: { health: ReturnType<typeof useHealthQuery> }) {
+  if (health.isPending) {
+    return (
+      <Badge variant="outline" className="hidden gap-1.5 bg-white text-muted-foreground sm:inline-flex">
+        <span className="size-1.5 animate-pulse rounded-full bg-neutral-400" aria-hidden="true" />
+        API: đang kết nối
+      </Badge>
+    );
+  }
+
+  if (health.isError) {
+    return (
+      <Badge
+        variant="outline"
+        className="hidden gap-1.5 border-red-200 bg-red-50 text-red-700 sm:inline-flex"
+        title="Không thể kết nối tới FastAPI"
+      >
+        <span className="size-1.5 rounded-full bg-red-600" aria-hidden="true" />
+        API: ngoại tuyến
+      </Badge>
+    );
+  }
+
+  const partial =
+    health.data.status === "degraded" ||
+    health.data.analytics_available === false ||
+    health.data.raw_data_available === false;
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "hidden gap-1.5 sm:inline-flex",
+        partial
+          ? "border-amber-200 bg-amber-50 text-amber-700"
+          : "border-green-200 bg-green-50 text-green-700",
+      )}
+    >
+      <span
+        className={cn("size-1.5 rounded-full", partial ? "bg-amber-500" : "bg-green-600")}
+        aria-hidden="true"
+      />
+      {partial ? "API: analytics chưa đủ" : "API: đã kết nối"}
+    </Badge>
   );
 }

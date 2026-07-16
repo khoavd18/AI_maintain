@@ -9,21 +9,24 @@ import type {
 } from "@/lib/types";
 
 export const overviewKpis = [
-  { label: "Tổng thiết bị", value: "27", detail: "6 nhóm thiết bị", tone: "blue" },
   { label: "Thiết bị rủi ro cao", value: "2", detail: "Cần ưu tiên kiểm tra", tone: "orange" },
   { label: "Ticket đang mở", value: "18", detail: "7 mới, 11 đang xử lý", tone: "amber" },
-  { label: "Tỷ lệ xử lý", value: "57,14%", detail: "24/42 ticket đã xử lý", tone: "green" },
   { label: "Bảo trì quá hạn", value: "2", detail: "Tối đa 159 ngày", tone: "red" },
-  { label: "Nhóm lỗi lặp lại", value: "4", detail: "Theo lịch sử ticket", tone: "blue" },
-  { label: "Bất thường gần đây", value: "6", detail: "Trong kỳ phân tích", tone: "amber" },
-  { label: "Risk cao nhất", value: "63,89", detail: "GENERATOR_002", tone: "orange" },
+  { label: "Tỷ lệ xử lý", value: "57,14%", detail: "24/42 ticket đã xử lý", tone: "green" },
+] as const;
+
+export const secondaryOverviewStats = [
+  { label: "Tổng thiết bị", value: "27" },
+  { label: "Bất thường gần đây", value: "6" },
+  { label: "Nhóm lỗi lặp lại", value: "4" },
+  { label: "Batch dữ liệu", value: "30/04/2026" },
 ] as const;
 
 export const riskDistribution = [
   { name: "Thấp", value: 14, color: "#16a34a" },
   { name: "Trung bình", value: 11, color: "#d97706" },
   { name: "Cao", value: 2, color: "#ea580c" },
-  { name: "Nghiêm trọng", value: 0, color: "#dc2626" },
+  { name: "Khẩn cấp", value: 0, color: "#dc2626" },
 ];
 
 export const ticketStatusDistribution = [
@@ -53,7 +56,7 @@ export const assets: Asset[] = [
     nextMaintenance: "22/11/2025",
     overdueDays: 159,
     unresolvedTickets: 2,
-    latestAnomaly: "Điện áp ắc quy và thời gian vận hành lệch mức tham chiếu",
+    contributingFactors: "Điện áp ắc quy và thời gian vận hành lệch mức tham chiếu",
     recommendedAction: "Kiểm tra ắc quy, dầu, nước làm mát và chạy thử có tải.",
   },
   {
@@ -70,7 +73,7 @@ export const assets: Asset[] = [
     nextMaintenance: "05/12/2025",
     overdueDays: 146,
     unresolvedTickets: 2,
-    latestAnomaly: "Nhiệt độ vận hành cao hơn xu hướng 7 ngày",
+    contributingFactors: "Nhiệt độ vận hành cao hơn xu hướng 7 ngày",
     recommendedAction: "Kiểm tra hệ thống làm mát và lịch chạy thử gần nhất.",
   },
   {
@@ -87,7 +90,7 @@ export const assets: Asset[] = [
     nextMaintenance: "04/05/2026",
     overdueDays: 0,
     unresolvedTickets: 1,
-    latestAnomaly: "Điện năng tiêu thụ tăng so với trung bình lăn",
+    contributingFactors: "Điện năng tiêu thụ tăng so với trung bình lăn",
     recommendedAction: "Theo dõi tải lạnh và kiểm tra lọc gió trong kỳ kế tiếp.",
   },
   {
@@ -104,7 +107,7 @@ export const assets: Asset[] = [
     nextMaintenance: "18/06/2026",
     overdueDays: 0,
     unresolvedTickets: 1,
-    latestAnomaly: "Độ rung tăng nhẹ ở ca vận hành cuối",
+    contributingFactors: "Độ rung tăng nhẹ ở ca vận hành cuối",
     recommendedAction: "Kiểm tra căn chỉnh và ổ bi trong lần kiểm tra kế hoạch.",
   },
   {
@@ -121,7 +124,7 @@ export const assets: Asset[] = [
     nextMaintenance: "21/06/2026",
     overdueDays: 0,
     unresolvedTickets: 1,
-    latestAnomaly: "Không phát hiện bất thường mới",
+    contributingFactors: "Không phát hiện bất thường mới",
     recommendedAction: "Tiếp tục theo dõi theo lịch bảo trì định kỳ.",
   },
   {
@@ -138,7 +141,7 @@ export const assets: Asset[] = [
     nextMaintenance: "05/05/2026",
     overdueDays: 0,
     unresolvedTickets: 0,
-    latestAnomaly: "Thời gian vận hành tăng theo nhu cầu sử dụng",
+    contributingFactors: "Thời gian vận hành tăng theo nhu cầu sử dụng",
     recommendedAction: "Thực hiện kiểm tra định kỳ theo checklist thang máy.",
   },
   {
@@ -155,7 +158,7 @@ export const assets: Asset[] = [
     nextMaintenance: "15/05/2026",
     overdueDays: 0,
     unresolvedTickets: 0,
-    latestAnomaly: "Không phát hiện bất thường mới",
+    contributingFactors: "Không phát hiện bất thường mới",
     recommendedAction: "Duy trì lịch chạy thử và ghi nhận áp suất.",
   },
   {
@@ -172,7 +175,7 @@ export const assets: Asset[] = [
     nextMaintenance: "25/06/2026",
     overdueDays: 0,
     unresolvedTickets: 1,
-    latestAnomaly: "Không phát hiện bất thường mới",
+    contributingFactors: "Không phát hiện bất thường mới",
     recommendedAction: "Tiếp tục theo dõi điện năng và nhiệt độ hồi gió.",
   },
 ];
@@ -189,6 +192,7 @@ export const tickets: Ticket[] = [
     technician: "Chưa phân công",
     createdAt: "30/04/2026 09:15",
     updatedAt: "30/04/2026 09:15",
+    waitingTime: "2 giờ",
   },
   {
     id: "TCK-000041",
@@ -201,6 +205,7 @@ export const tickets: Ticket[] = [
     technician: "Chưa phân công",
     createdAt: "29/04/2026 14:20",
     updatedAt: "29/04/2026 14:20",
+    waitingTime: "19 giờ",
   },
   {
     id: "TCK-000040",
@@ -213,6 +218,7 @@ export const tickets: Ticket[] = [
     technician: "Nguyễn Minh Tuấn",
     createdAt: "28/04/2026 10:05",
     updatedAt: "30/04/2026 08:30",
+    waitingTime: "2 ngày",
   },
   {
     id: "TCK-000039",
@@ -225,6 +231,7 @@ export const tickets: Ticket[] = [
     technician: "Trần Quốc Huy",
     createdAt: "27/04/2026 16:40",
     updatedAt: "29/04/2026 11:10",
+    waitingTime: "3 ngày",
   },
   {
     id: "TCK-000038",
@@ -237,6 +244,7 @@ export const tickets: Ticket[] = [
     technician: "Lê Hoàng Nam",
     createdAt: "25/04/2026 08:30",
     updatedAt: "29/04/2026 15:45",
+    waitingTime: "5 ngày",
   },
   {
     id: "TCK-000037",
@@ -249,6 +257,7 @@ export const tickets: Ticket[] = [
     technician: "Phạm Gia Bảo",
     createdAt: "24/04/2026 13:12",
     updatedAt: "24/04/2026 13:12",
+    waitingTime: "6 ngày",
   },
   {
     id: "TCK-000036",
@@ -261,6 +270,7 @@ export const tickets: Ticket[] = [
     technician: "Vũ Đức Anh",
     createdAt: "22/04/2026 09:00",
     updatedAt: "22/04/2026 11:20",
+    waitingTime: "2 giờ 20 phút",
   },
   {
     id: "TCK-000035",
@@ -273,6 +283,7 @@ export const tickets: Ticket[] = [
     technician: "Nguyễn Minh Tuấn",
     createdAt: "20/04/2026 08:10",
     updatedAt: "20/04/2026 12:45",
+    waitingTime: "4 giờ 35 phút",
   },
   {
     id: "TCK-000034",
@@ -285,6 +296,7 @@ export const tickets: Ticket[] = [
     technician: "Trần Quốc Huy",
     createdAt: "18/04/2026 14:05",
     updatedAt: "18/04/2026 16:25",
+    waitingTime: "2 giờ 20 phút",
   },
 ];
 
@@ -295,8 +307,12 @@ export const anomalies: AnomalyRecord[] = [
     assetId: "GENERATOR_002",
     assetType: "Máy phát điện",
     anomalyType: "Kết hợp rule và Isolation Forest",
+    metric: "Điện áp ắc quy / runtime",
+    change: "Điện áp thấp, runtime lệch xu hướng 7 ngày",
+    severity: "Ưu tiên",
     score: 0.86,
     reason: "Điện áp ắc quy thấp và runtime lệch mức tham chiếu.",
+    relatedAction: "Đo điện áp, kiểm tra bộ sạc và lịch chạy thử.",
   },
   {
     id: "ANM-20260430-02",
@@ -304,8 +320,12 @@ export const anomalies: AnomalyRecord[] = [
     assetId: "GENERATOR_001",
     assetType: "Máy phát điện",
     anomalyType: "Bất thường theo rule",
+    metric: "Nhiệt độ động cơ",
+    change: "Vượt ngưỡng vận hành theo loại thiết bị",
+    severity: "Ưu tiên",
     score: 0.81,
     reason: "Nhiệt độ cao hơn ngưỡng vận hành theo loại thiết bị.",
+    relatedAction: "Kiểm tra hệ thống làm mát trước lần chạy thử tiếp theo.",
   },
   {
     id: "ANM-20260429-01",
@@ -313,8 +333,12 @@ export const anomalies: AnomalyRecord[] = [
     assetId: "PUMP_001",
     assetType: "Bơm nước",
     anomalyType: "Isolation Forest",
+    metric: "Độ rung",
+    change: "Tăng so với phân bố lịch sử của thiết bị",
+    severity: "Cảnh báo",
     score: 0.68,
     reason: "Độ rung tăng so với phân bố lịch sử của thiết bị.",
+    relatedAction: "Kiểm tra căn chỉnh, ổ bi và tiếng ồn tại hiện trường.",
   },
   {
     id: "ANM-20260428-01",
@@ -322,8 +346,12 @@ export const anomalies: AnomalyRecord[] = [
     assetId: "HVAC_001",
     assetType: "HVAC",
     anomalyType: "Bất thường theo rule",
+    metric: "Điện năng / nhiệt độ hồi gió",
+    change: "Cùng tăng so với mức tham chiếu",
+    severity: "Cảnh báo",
     score: 0.61,
     reason: "Điện năng tăng đồng thời với nhiệt độ hồi gió cao.",
+    relatedAction: "Kiểm tra tải lạnh, lọc gió và điều kiện vận hành.",
   },
   {
     id: "ANM-20260427-01",
@@ -331,8 +359,12 @@ export const anomalies: AnomalyRecord[] = [
     assetId: "HVAC_002",
     assetType: "HVAC",
     anomalyType: "Isolation Forest",
+    metric: "Nhiệt độ hồi gió",
+    change: "Dao động khác lịch sử gần đây",
+    severity: "Theo dõi",
     score: 0.58,
     reason: "Mẫu nhiệt độ dao động khác lịch sử gần đây.",
+    relatedAction: "Theo dõi thêm một batch và đối chiếu cảm biến.",
   },
   {
     id: "ANM-20260425-01",
@@ -340,16 +372,20 @@ export const anomalies: AnomalyRecord[] = [
     assetId: "ELEVATOR_001",
     assetType: "Thang máy",
     anomalyType: "Isolation Forest",
+    metric: "Runtime",
+    change: "Tăng so với trung bình lăn 7 ngày",
+    severity: "Theo dõi",
     score: 0.51,
     reason: "Runtime tăng so với trung bình lăn 7 ngày.",
+    relatedAction: "Đối chiếu lưu lượng sử dụng và lịch kiểm tra định kỳ.",
   },
 ];
 
 export const recurringIssues: RecurringIssue[] = [
-  { category: "Nhiệt độ vận hành cao", assetType: "Máy phát điện", occurrences: 5, affectedAssets: 2, latestDate: "30/04/2026" },
-  { category: "Dao động nhiệt độ hồi gió", assetType: "HVAC", occurrences: 4, affectedAssets: 2, latestDate: "28/04/2026" },
-  { category: "Độ rung tăng", assetType: "Bơm nước", occurrences: 3, affectedAssets: 2, latestDate: "27/04/2026" },
-  { category: "Tiếng ồn cửa tầng", assetType: "Thang máy", occurrences: 3, affectedAssets: 2, latestDate: "24/04/2026" },
+  { assetId: "GENERATOR_002", category: "Nhiệt độ vận hành cao", occurrences: 5, latestDate: "30/04/2026", unresolvedCount: 2, recurrenceFlag: true },
+  { assetId: "HVAC_001", category: "Dao động nhiệt độ hồi gió", occurrences: 4, latestDate: "28/04/2026", unresolvedCount: 1, recurrenceFlag: true },
+  { assetId: "PUMP_001", category: "Độ rung tăng", occurrences: 3, latestDate: "27/04/2026", unresolvedCount: 1, recurrenceFlag: true },
+  { assetId: "ELEVATOR_001", category: "Tiếng ồn cửa tầng", occurrences: 3, latestDate: "24/04/2026", unresolvedCount: 0, recurrenceFlag: true },
 ];
 
 export const anomalyTrend = [
@@ -388,6 +424,7 @@ export const generatorMaintenance: MaintenanceEvent[] = [
     actions: "Thay dầu, kiểm tra nước làm mát và chạy thử không tải.",
     technician: "Lê Hoàng Nam",
     followUp: true,
+    nextMaintenance: "22/03/2026",
   },
   {
     id: "LOG-000071",
@@ -396,6 +433,7 @@ export const generatorMaintenance: MaintenanceEvent[] = [
     actions: "Vệ sinh đầu cực ắc quy, đo điện áp và kiểm tra rò rỉ.",
     technician: "Phạm Gia Bảo",
     followUp: false,
+    nextMaintenance: "18/12/2025",
   },
   {
     id: "LOG-000052",
@@ -404,6 +442,7 @@ export const generatorMaintenance: MaintenanceEvent[] = [
     actions: "Kiểm tra bộ sạc, dây curoa và mức nhiên liệu.",
     technician: "Lê Hoàng Nam",
     followUp: false,
+    nextMaintenance: "18/09/2025",
   },
 ];
 
@@ -421,3 +460,10 @@ export const copilotSources: SourceDocument[] = [
     excerpt: "Xác nhận dầu, nước làm mát, nhiên liệu và điều kiện an toàn trước khi đóng tải.",
   },
 ];
+
+export const copilotSuggestedQuestions = [
+  "Vì sao thiết bị đang rủi ro cao?",
+  "Checklist kiểm tra ắc quy gồm những gì?",
+  "Cần xác minh gì trước khi chạy thử có tải?",
+  "Khi nào cần đánh dấu theo dõi?",
+] as const;

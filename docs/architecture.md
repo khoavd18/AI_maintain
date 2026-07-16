@@ -22,6 +22,7 @@ flowchart LR
     API[FastAPI<br/>src/api]
     WriteRepo[Atomic CSV write repository<br/>tickets, logs + asset dates]
     Dashboard[Streamlit<br/>src/dashboard/app.py]
+    Web[Next.js frontend<br/>live read-only views]
 
     Raw --> Validation
     Raw --> API
@@ -37,6 +38,7 @@ flowchart LR
     Processed --> API
     API --> Dashboard
     Dashboard -->|POST/PATCH| API
+    API --> Web
     API --> WriteRepo
     WriteRepo -->|atomic replace| Raw
 
@@ -85,8 +87,9 @@ Chi tiết formula và definitions: [Analytics pipeline](analytics.md).
 - `src/api/csv_repository.py` kiểm tra minimum schema, duplicate ID và dùng `os.replace` để tránh partial file replacement.
 - `src/dashboard/app.py` là Streamlit entrypoint canonical.
 - `src/dashboard/api_client.py` là HTTP boundary giữa dashboard và API.
+- `frontend/src/lib/api` và `frontend/src/hooks` là typed read boundary cho Next.js; browser responses được Zod validate trước khi hiển thị.
 
-Streamlit chỉ gọi FastAPI. Năm views canonical là `Tổng quan`, `Thiết bị và rủi ro`, `Ticket workspace`, `Bất thường và lỗi lặp lại` và `Trợ lý bảo trì`. RAG availability không quyết định health của manager dashboard.
+Streamlit và Next.js chỉ gọi FastAPI, không đọc CSV trực tiếp. Streamlit giữ write workflow local hiện tại. Next.js Milestone 2 chỉ kết nối read endpoints cho `Tổng quan`, `Thiết bị`, dynamic asset detail, `Ticket workspace` và `Bất thường`; write controls được disable hoặc ghi rõ chưa kết nối, còn Copilot content vẫn là fixture. RAG availability không quyết định health của manager dashboard.
 
 ## Local Write Boundary
 

@@ -55,6 +55,7 @@ Chi tiết và tiêu chí thành công: [docs/mvp_scope.md](docs/mvp_scope.md).
 - preventive maintenance status, recurring issue và maintenance KPI snapshots;
 - CSV-backed FastAPI cho asset, analytics, Copilot context và local ticket/log writes;
 - Streamlit dashboard với năm workflow views cho manager và technician;
+- Next.js manager frontend dùng live FastAPI read endpoints, runtime Zod validation và read-only ticket workspace;
 - Qdrant-based SOP/checklist retrieval với metadata filters và relevance gate;
 - deterministic Maintenance Copilot response có sources, safety notice và safe fallback.
 
@@ -74,6 +75,7 @@ flowchart LR
     Processed --> API[FastAPI]
     API --> Dashboard[Streamlit]
     Dashboard -->|POST/PATCH ticket + log| API
+    API --> Web[Next.js frontend<br/>live reads]
     API -->|atomic replace| Raw
 
     Docs[documents.csv] --> RAG[RAG indexing/retrieval]
@@ -299,6 +301,19 @@ Current dashboard views:
 - `Trợ lý bảo trì`: asset/ticket context, existing retrieval, sources và technician disclaimer.
 
 Dashboard lấy dữ liệu qua `API_BASE_URL`, mặc định `http://localhost:8000`.
+
+## Next.js Frontend
+
+`frontend/` cung cấp một manager-facing frontend thay thế để minh họa UX web hiện đại. Các routes `Tổng quan`, `Thiết bị`, dynamic asset detail, `Ticket` và `Bất thường` dùng live FastAPI read endpoints qua TanStack Query; Zod kiểm tra response contract trước khi adapters tạo display models.
+
+```powershell
+cd frontend
+Copy-Item .env.example .env.local
+npm install
+npm run dev
+```
+
+Mặc định `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000`. Ticket controls trong Next.js hiện chỉ đọc và được ghi rõ chưa kết nối; Streamlit workflow hiện tại không bị thay thế hoặc xóa. Copilot page của Next.js vẫn dùng response fixture cho tới dedicated frontend Copilot milestone. Chi tiết: [frontend/README.md](frontend/README.md).
 
 ## RAG Maintenance Copilot
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarClock, CircleDot, ClipboardList, Info, Wrench } from "lucide-react";
+import { CalendarClock, CircleDot } from "lucide-react";
 
 import { ChartCard } from "@/components/chart-card";
 import { RiskContributionChart, RiskHistoryChart } from "@/components/dashboard-charts";
@@ -11,211 +11,94 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui-states";
 import {
-  anomalies,
-  generatorMaintenance,
-  generatorRiskContributions,
-  generatorRiskHistory,
-} from "@/lib/mock-data";
-import type { Asset, RiskContribution, Ticket } from "@/lib/types";
+  adaptAnomaly,
+  adaptMaintenanceLog,
+  adaptRiskContributions,
+  adaptRiskHistory,
+  adaptTicket,
+} from "@/lib/adapters";
+import type { AssetDetailsResponse } from "@/lib/api/schemas";
+import { formatDate, formatTimestamp, presentContributingFactors } from "@/lib/formatters";
+import type { Asset } from "@/lib/types";
 
-interface AssetDetailTabsProps {
-  asset: Asset;
-  assetTickets: Ticket[];
-}
-
-export function AssetDetailTabs({ asset, assetTickets }: AssetDetailTabsProps) {
-  const assetAnomalies = anomalies.filter((record) => record.assetId === asset.id);
-  const isPrimaryDemoAsset = asset.id === "GENERATOR_002";
-  const history = isPrimaryDemoAsset
-    ? generatorRiskHistory
-    : [0.78, 0.82, 0.85, 0.88, 0.92, 0.96, 1].map((factor, index) => ({
-        date: `${24 + index}/04`,
-        score: Number((asset.riskScore * factor).toFixed(2)),
-      }));
-  const contributions = isPrimaryDemoAsset
-    ? generatorRiskContributions
-    : buildMockContributions(asset);
+export function AssetDetailTabs({ asset, details }: { asset: Asset; details: AssetDetailsResponse }) {
+  const anomalies = details.recent_anomalies.map(adaptAnomaly);
+  const tickets = details.recent_tickets.map(adaptTicket);
+  const maintenance = details.recent_maintenance_logs.map(adaptMaintenanceLog);
+  const history = adaptRiskHistory(details.risk_history);
+  const contributions = adaptRiskContributions(details.latest_risk);
+  const explanations = presentContributingFactors(details.risk_contributing_factors);
 
   return (
-    <Tabs defaultValue="overview" className="mt-6">
+    <Tabs defaultValue="risk" className="mt-6">
       <div className="overflow-x-auto pb-1">
         <TabsList aria-label="Thông tin chi tiết thiết bị" className="min-w-max">
-          <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="anomaly">Anomaly</TabsTrigger>
           <TabsTrigger value="ticket">Ticket</TabsTrigger>
           <TabsTrigger value="maintenance">Bảo trì</TabsTrigger>
+          <TabsTrigger value="recurring">Lỗi lặp lại</TabsTrigger>
+          <TabsTrigger value="metadata">Thông tin</TabsTrigger>
         </TabsList>
       </div>
 
-      <TabsContent value="overview" className="mt-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader><CardTitle>Dữ liệu quan sát</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <FactRow label="Trạng thái vận hành" value={asset.status} />
-              <FactRow label="Lần bảo trì gần nhất" value={asset.lastMaintenance} />
-              <FactRow label="Lần bảo trì kế tiếp" value={asset.nextMaintenance} />
-              <FactRow label="Ticket chưa xử lý" value={`${asset.unresolvedTickets}`} />
-              <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
-                <p className="flex items-center gap-2 text-xs font-semibold text-orange-900">
-                  <AlertTriangle className="size-4" aria-hidden="true" />
-                  Bất thường gần nhất
-                </p>
-                <p className="mt-1 text-sm leading-6 text-orange-950">{asset.latestAnomaly}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle>Khuyến nghị hỗ trợ</CardTitle></CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                <p className="flex items-center gap-2 text-xs font-semibold text-blue-900">
-                  <ClipboardList className="size-4" aria-hidden="true" />
-                  Hành động gợi ý
-                </p>
-                <p className="mt-2 text-sm leading-6 text-blue-950">{asset.recommendedAction}</p>
-              </div>
-              <div className="mt-4 flex gap-2 text-xs leading-5 text-muted-foreground">
-                <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                <p>Quản lý và kỹ thuật viên xác minh hiện trường trước khi quyết định công việc bảo trì.</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </TabsContent>
-
       <TabsContent value="risk" className="mt-4">
-        <div className="grid gap-4 xl:grid-cols-2">
-          <ChartCard
-            title="Đóng góp vào risk score"
-            description="Các thành phần giải thích điểm ưu tiên hiện tại"
-            summary={`Tổng đóng góp mô phỏng bằng risk score ${asset.riskScore.toFixed(2)}; đây không phải xác suất hỏng hóc.`}
-          >
-            <RiskContributionChart data={contributions} assetId={asset.id} />
-          </ChartCard>
-          <ChartCard
-            title="Lịch sử risk score"
-            description="Bảy ngày trong batch gần nhất"
-            summary={`Điểm mới nhất ${asset.riskScore.toFixed(2)} ở mức ${asset.riskLevel}.`}
-          >
-            <RiskHistoryChart data={history} assetId={asset.id} />
-          </ChartCard>
-        </div>
-        <Card className="mt-4">
-          <CardHeader><CardTitle>Giải thích theo yếu tố</CardTitle></CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {contributions.map((item) => (
-              <div key={item.factor} className="rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">{item.factor}</p>
-                  <span className="font-mono text-sm font-semibold text-orange-700">+{item.value.toFixed(2)}</span>
-                </div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.explanation}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        {!details.latest_risk ? (
+          <Card><EmptyState title="Chưa có risk score" description="Batch analytics hiện tại chưa có risk record cho thiết bị này." /></Card>
+        ) : (
+          <>
+            <div className="grid gap-4 xl:grid-cols-2">
+              <ChartCard title="Đóng góp vào risk score" description="Thành phần theo công thức risk canonical" summary={`Risk score ${details.latest_risk.final_risk_score.toFixed(2)} là điểm ưu tiên, không phải xác suất hỏng hóc.`}>
+                <RiskContributionChart data={contributions} assetId={asset.id} />
+              </ChartCard>
+              <ChartCard title="Lịch sử risk score" description="Các ngày có trong batch analytics" summary={`Điểm mới nhất ${details.latest_risk.final_risk_score.toFixed(2)} ở mức ${details.latest_risk.risk_level}.`}>
+                <RiskHistoryChart data={history} assetId={asset.id} />
+              </ChartCard>
+            </div>
+            <Card className="mt-4">
+              <CardHeader><CardTitle>Giải thích theo yếu tố</CardTitle></CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {contributions.filter((item) => item.value > 0).map((item) => (
+                  <div key={item.factor} className="rounded-lg border p-3"><div className="flex items-center justify-between gap-2"><p className="text-sm font-medium">{item.factor}</p><span className="font-mono text-sm font-semibold text-orange-700">+{item.value.toFixed(2)}</span></div><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.explanation}</p></div>
+                ))}
+                {explanations.map((explanation) => <p key={explanation} className="rounded-lg bg-muted p-3 text-xs leading-5 text-muted-foreground">{explanation}</p>)}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </TabsContent>
 
       <TabsContent value="anomaly" className="mt-4">
-        <DataTableShell title="Bất thường gần đây" description={`Các tín hiệu batch liên quan ${asset.id}`}>
-          {assetAnomalies.length === 0 ? (
-            <EmptyState title="Không có bất thường gần đây" description="Không có anomaly record trong tập mock hiện tại cho thiết bị này." />
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ngày</TableHead>
-                    <TableHead>Loại</TableHead>
-                    <TableHead>Lý do</TableHead>
-                    <TableHead className="text-right">Score</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {assetAnomalies.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>{record.date}</TableCell>
-                      <TableCell>{record.anomalyType}</TableCell>
-                      <TableCell className="min-w-72 text-muted-foreground">{record.reason}</TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{record.score.toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+        <DataTableShell title="Bất thường gần đây" description={`Tín hiệu batch liên quan ${asset.id}`}>
+          {anomalies.length === 0 ? <EmptyState title="Không có bất thường gần đây" description="Không có anomaly record được gắn cờ trong phạm vi trả về." /> : (
+            <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Ngày</TableHead><TableHead>Metric</TableHead><TableHead>Loại</TableHead><TableHead>Lý do</TableHead><TableHead className="text-right">Score</TableHead></TableRow></TableHeader><TableBody>{anomalies.map((record) => <TableRow key={record.id}><TableCell>{record.date}</TableCell><TableCell>{record.metric}</TableCell><TableCell>{record.anomalyType}</TableCell><TableCell className="min-w-72 text-muted-foreground">{record.reason}</TableCell><TableCell className="text-right font-semibold tabular-nums">{record.score.toFixed(2)}</TableCell></TableRow>)}</TableBody></Table></div>
           )}
         </DataTableShell>
       </TabsContent>
 
       <TabsContent value="ticket" className="mt-4">
-        {assetTickets.length === 0 ? (
-          <Card><EmptyState title="Chưa có ticket" description="Thiết bị chưa có ticket trong dữ liệu mock hiện tại." /></Card>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {assetTickets.map((ticket) => <TicketCard key={ticket.id} ticket={ticket} />)}
-          </div>
-        )}
+        {tickets.length === 0 ? <Card><EmptyState title="Chưa có ticket" description="Thiết bị chưa có ticket trong phạm vi dữ liệu trả về." /></Card> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{tickets.map((ticket) => <TicketCard key={ticket.id} ticket={ticket} />)}</div>}
       </TabsContent>
 
       <TabsContent value="maintenance" className="mt-4">
-        <Card>
-          <CardHeader><CardTitle>Lịch sử bảo trì gần đây</CardTitle></CardHeader>
-          <CardContent>
-            {isPrimaryDemoAsset ? (
-              <ol className="relative ml-2 border-l">
-                {generatorMaintenance.map((event) => (
-                  <li key={event.id} className="relative pb-6 pl-6 last:pb-0">
-                    <span className="absolute -left-2 top-0 flex size-4 items-center justify-center rounded-full bg-white ring-2 ring-primary">
-                      <CircleDot className="size-2 text-primary" aria-hidden="true" />
-                    </span>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="font-mono text-xs font-medium text-primary">{event.id}</p>
-                        <p className="mt-1 text-sm font-medium">{event.actions}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{event.technician}</p>
-                      </div>
-                      <div className="shrink-0 text-left sm:text-right">
-                        <p className="text-xs font-medium">{event.date}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{event.result}</p>
-                      </div>
-                    </div>
-                    {event.followUp && (
-                      <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-amber-700">
-                        <CalendarClock className="size-3.5" aria-hidden="true" />
-                        Cần theo dõi
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <EmptyState title="Chưa có timeline mock" description="Timeline chi tiết đang được minh họa cho GENERATOR_002." icon={Wrench} />
-            )}
-          </CardContent>
-        </Card>
+        <Card><CardHeader><CardTitle>Lịch sử bảo trì gần đây</CardTitle></CardHeader><CardContent>
+          {maintenance.length ? <ol className="relative ml-2 border-l">{maintenance.map((event) => <li key={event.id} className="relative pb-6 pl-6 last:pb-0"><span className="absolute -left-2 top-0 flex size-4 items-center justify-center rounded-full bg-white ring-2 ring-primary"><CircleDot className="size-2 text-primary" aria-hidden="true" /></span><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-mono text-xs font-medium text-primary">{event.id}</p><p className="mt-1 text-sm font-medium">{event.actions}</p><p className="mt-1 text-xs text-muted-foreground">{event.technician}</p></div><div className="shrink-0 text-left sm:text-right"><p className="text-xs font-medium">{event.date}</p><p className="mt-1 text-xs text-muted-foreground">{event.result}</p></div></div>{event.followUp && <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-amber-700"><CalendarClock className="size-3.5" aria-hidden="true" />Cần theo dõi, lịch kế tiếp {event.nextMaintenance}</p>}</li>)}</ol> : <EmptyState title="Chưa có maintenance log" description="Không có log bảo trì trong phạm vi dữ liệu trả về." />}
+        </CardContent></Card>
+      </TabsContent>
+
+      <TabsContent value="recurring" className="mt-4">
+        <DataTableShell title="Vấn đề lặp lại" description="Nhóm theo failure category trong lịch sử ticket">
+          {details.recurring_issues.length === 0 ? <EmptyState title="Chưa có nhóm lỗi" description="Không có lịch sử đủ để tạo nhóm lỗi cho thiết bị này." /> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nhóm lỗi</TableHead><TableHead className="text-right">Số lần</TableHead><TableHead className="text-right">Chưa xử lý</TableHead><TableHead>Gần nhất</TableHead><TableHead>Kết luận</TableHead></TableRow></TableHeader><TableBody>{details.recurring_issues.map((issue) => <TableRow key={`${issue.asset_id}-${issue.failure_category}`}><TableCell className="font-medium">{issue.failure_category}</TableCell><TableCell className="text-right tabular-nums">{issue.occurrence_count}</TableCell><TableCell className="text-right tabular-nums">{issue.unresolved_count}</TableCell><TableCell>{formatTimestamp(issue.last_occurrence)}</TableCell><TableCell>{issue.recurrence_flag ? "Đạt ngưỡng lặp lại" : `Chưa đạt ngưỡng ${issue.recurrence_threshold}`}</TableCell></TableRow>)}</TableBody></Table></div>}
+        </DataTableShell>
+      </TabsContent>
+
+      <TabsContent value="metadata" className="mt-4">
+        <Card><CardHeader><CardTitle>Thông tin thiết bị</CardTitle></CardHeader><CardContent className="grid gap-x-8 gap-y-3 md:grid-cols-2"><FactRow label="Asset ID" value={asset.id} /><FactRow label="Tên thiết bị" value={asset.name} /><FactRow label="Loại thiết bị" value={asset.type} /><FactRow label="Vị trí" value={asset.location} /><FactRow label="Mức độ quan trọng" value={asset.criticality} /><FactRow label="Trạng thái" value={asset.status} /><FactRow label="Ngày lắp đặt" value={formatDate(details.asset_profile.installation_date)} /><FactRow label="Bảo trì gần nhất" value={asset.lastMaintenance} /><FactRow label="Bảo trì kế tiếp" value={asset.nextMaintenance} /></CardContent></Card>
       </TabsContent>
     </Tabs>
   );
 }
 
 function FactRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b pb-3 last:border-0 last:pb-0">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-right text-sm font-medium">{value}</span>
-    </div>
-  );
-}
-
-function buildMockContributions(asset: Asset): RiskContribution[] {
-  const values = [0.38, 0.24, 0.18, 0.14, 0.06];
-  const labels = ["Bất thường", "Bảo trì", "Ticket", "Mức độ quan trọng", "Runtime"];
-  return labels.map((factor, index) => ({
-    factor,
-    value: Number((asset.riskScore * values[index]).toFixed(2)),
-    explanation: "Đóng góp minh họa từ dữ liệu mock cho màn hình chi tiết.",
-  }));
+  return <div className="flex items-center justify-between gap-4 border-b pb-3 last:border-0 last:pb-0"><span className="text-sm text-muted-foreground">{label}</span><span className="text-right text-sm font-medium">{value}</span></div>;
 }
