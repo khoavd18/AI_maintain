@@ -1,8 +1,8 @@
 # AI Maintenance Copilot
 
-Nền tảng decision-support cho bảo trì thiết bị, sử dụng Vietnamese synthetic data, batch anomaly detection, explainable risk scoring và RAG retrieval trên SOP/checklist.
+Nền tảng decision-support cho bảo trì thiết bị, kết hợp auditable asset lifecycle, preventive planning, standalone work orders, Vietnamese batch analytics, explainable risk scoring và RAG retrieval trên SOP/checklist.
 
-> Trạng thái: portfolio MVP đã hoàn thiện trong phạm vi đã khóa. Repository không phải production-ready và không thay thế CMMS/S-Maintain.
+> Trạng thái: MVP đang chuyển sang internal pilot architecture. PostgreSQL đã là transactional source of truth, nhưng repository chưa production-ready và không thay thế CMMS/S-Maintain.
 
 ## Bài Toán
 
@@ -20,8 +20,10 @@ Hệ thống là lớp hỗ trợ quyết định. Manager và technician chịu
 MVP tập trung vào:
 
 - thông tin asset cơ bản;
+- hồ sơ kỹ thuật, location hierarchy, lifecycle, warranty, attachment và QR lookup có xác thực;
 - ticket và maintenance history;
-- preventive maintenance tracking;
+- preventive maintenance plan theo recurring interval có kiểm soát;
+- standalone preventive/corrective/inspection work order, checklist execution, evidence, completion và independent verification;
 - operational data theo batch;
 - anomaly detection và risk prioritization;
 - recurring issue analysis và maintenance KPI ở mức mô tả;
@@ -32,13 +34,12 @@ Synthetic data foundation hiện tập trung vào 27 assets thuộc HVAC, pump v
 Không thuộc phạm vi:
 
 - spare-parts inventory;
-- QR code;
 - resident hoặc technician mobile app;
 - vendor/contract management;
 - complex approval workflow;
 - real-time IoT streaming;
-- enterprise authentication/authorization;
-- automatic production work-order creation;
+- SSO, MFA, external identity provider và enterprise IAM integration;
+- hidden/distributed production scheduler hoặc startup work-order generation;
 - exact failure-time prediction.
 
 Chi tiết và tiêu chí thành công: [docs/mvp_scope.md](docs/mvp_scope.md).
@@ -53,36 +54,49 @@ Chi tiết và tiêu chí thành công: [docs/mvp_scope.md](docs/mvp_scope.md).
 - rule-based signals kết hợp Isolation Forest scoring;
 - explainable risk scoring và top risky assets;
 - preventive maintenance status, recurring issue và maintenance KPI snapshots;
-- CSV-backed FastAPI cho asset, analytics, Copilot context và local ticket/log writes;
-- Streamlit dashboard với năm workflow views cho manager và technician;
-- Next.js manager frontend dùng live FastAPI read endpoints, runtime Zod validation và read-only ticket workspace;
+- PostgreSQL-backed FastAPI cho asset, ticket, preventive plan, checklist template, work order và maintenance-log transactions, giữ nguyên legacy API contracts;
+- Alembic migrations, idempotent CSV seed import, optimistic concurrency và analytics snapshot export;
+- local/internal-pilot authentication, RBAC và append-only PostgreSQL audit log;
+- auditable asset registration, rich technical/warranty profile, hierarchical locations, lifecycle/operational transitions và archive/restore không phá lịch sử;
+- attachment metadata trong PostgreSQL, bytes trong safe local storage, checksum-verified download và deterministic opaque QR lookup;
+- deterministic preventive recurrence/generation, concurrency-safe work-order numbers, immutable checklist snapshots và auditable work-order state machine;
+- corrective work order từ ticket không tự resolve incident; completion tạo đúng một MaintenanceLog và verification cập nhật asset dates;
+- Streamlit legacy development status page; protected product workflows dùng Next.js;
+- Next.js manager frontend dùng live FastAPI reads/writes, runtime Zod validation và ticket-to-maintenance workflow;
 - Qdrant-based SOP/checklist retrieval với metadata filters và relevance gate;
 - deterministic Maintenance Copilot response có sources, safety notice và safe fallback.
 
-Các production concerns như scheduler, authentication, audit logging, observability và deployment hardening không thuộc portfolio MVP hiện tại.
+Các production concerns như SSO/MFA, distributed rate limiting, scheduler, centralized observability, managed secret storage và deployment hardening chưa thuộc internal pilot hiện tại.
 
 ## Canonical Architecture
 
-Primary architecture là **CSV-first** và **batch-first**.
+Architecture là **PostgreSQL-primary cho transactional data** và **CSV batch-first cho analytics**.
 
 ```mermaid
 flowchart LR
-    Raw[Raw Vietnamese CSVs] --> Validation[CSV validation]
-    Validation --> Features[Daily features<br/>src/features/build_features.py]
-    Features --> Anomaly[Batch anomalies<br/>src/models/anomaly_detection.py]
-    Anomaly --> Risk[Explainable risk<br/>src/risk/risk_scoring.py]
-    Risk --> Processed[Processed CSVs]
-    Processed --> API[FastAPI]
-    API --> Dashboard[Streamlit]
-    Dashboard -->|POST/PATCH ticket + log| API
-    API --> Web[Next.js frontend<br/>live reads]
-    API -->|atomic replace| Raw
+    Seed[Synthetic Vietnamese CSV seed] --> Import[Validate + idempotent import]
+    Migration[Alembic migrations] --> DB[(PostgreSQL<br/>assets, plans, work orders,<br/>tickets, logs, identity, audit)]
+    Import --> DB
+    Files[(Local attachment storage<br/>single-node pilot)]
+    DB <--> Service[Repositories + business services]
+    Service <--> Files
+    Service <--> API[FastAPI<br/>unchanged contracts]
+    CLI[Explicit generation CLI] --> Service
+    Service --> WO[Plan occurrence<br/>deterministic work order]
+    API -->|public health only| Dashboard[Streamlit legacy status]
+    API <--> Web[Next.js authenticated frontend]
 
-    Docs[documents.csv] --> RAG[RAG indexing/retrieval]
+    DB --> Snapshot[Validated analytics snapshot]
+    Seed -->|readings + documents| Snapshot
+    Snapshot --> Features[Daily features]
+    Features --> Anomaly[Batch anomalies]
+    Anomaly --> Risk[Explainable risk]
+    Risk --> Processed[Processed CSV analytics]
+    Processed --> Service
+
+    Seed --> RAG[RAG indexing/retrieval]
     RAG --> Qdrant[(Qdrant)]
     Qdrant --> API
-
-    Validation -. optional .-> Postgres[(PostgreSQL<br/>experimental)]
 ```
 
 Canonical analytics implementations:
@@ -93,30 +107,39 @@ Canonical analytics implementations:
 | Anomaly detection | `src/models/anomaly_detection.py` | `data/processed/anomaly_results.csv` |
 | Risk scoring | `src/risk/risk_scoring.py` | `data/processed/risk_scores.csv` |
 
-FastAPI đọc processed CSV qua service layer và ghi hẹp vào raw ticket/log CSV bằng atomic replacement. Streamlit chỉ gọi FastAPI, không đọc hoặc ghi CSV trực tiếp.
+FastAPI đọc transactional records qua repository/service layer và đọc latest processed CSV qua analytics service. Streamlit/Next.js chỉ gọi FastAPI. PostgreSQL unavailable làm API startup fail rõ ràng; normal product mode không fallback sang mutable CSV.
 
-PostgreSQL được giữ như optional/experimental structured-storage path. Nó không cần thiết để chạy main data pipeline, API, dashboard hoặc non-RAG pages. Xem [docs/architecture.md](docs/architecture.md).
+CSV vẫn dùng cho synthetic generation, seed/reset, database-to-analytics snapshot và batch artifacts. Qdrant chỉ phục vụ RAG. Xem [docs/architecture.md](docs/architecture.md).
 
 ## End-to-End User Story
 
-1. Manager mở dashboard và xem maintenance risk summary.
-2. Manager chọn top risky asset.
-3. Hệ thống tách measured facts khỏi recommendation; manager tạo inspection ticket và gán technician.
-4. Technician chuyển ticket sang `Đang xử lý`, xem asset/ticket context và tham khảo SOP/checklist từ Copilot.
-5. Technician ghi maintenance result, resolve ticket hoặc giữ follow-up.
-6. Dashboard thông báo analytics chưa đổi ngay; batch pipeline tiếp theo mới cập nhật features, anomalies, KPI và risk ranking.
+1. Chief Engineer version hóa checklist, tạo preventive plan và preview occurrence theo timezone/business date.
+2. Authorized actor chạy dry-run rồi generate; retry/concurrent call vẫn chỉ tạo một work order cho mỗi plan due date.
+3. Manager mở dashboard, xem risk/overdue/source, tạo corrective/inspection work order khi cần và assign technician.
+4. Technician mở assigned work order trên web/mobile width, start, hold/resume, ghi checklist/evidence và complete công việc.
+5. Completion tạo đúng một MaintenanceLog; technician không thể tự verify theo default rule.
+6. Chief Engineer hoặc Property Manager review evidence rồi verify; asset maintenance dates cập nhật transactionally. Linked ticket vẫn chỉ resolve bằng action explicit.
+7. Copilot cung cấp SOP/checklist có nguồn. Dashboard thông báo Risk Score/KPI chỉ đổi sau analytics batch tiếp theo.
 
 Quy trình nghiệp vụ chi tiết: [docs/business_process.md](docs/business_process.md).
 
 ## Data Sources
 
-Raw synthetic CSVs:
+Runtime transactional source:
+
+- PostgreSQL `assets`;
+- PostgreSQL `maintenance_tickets`;
+- PostgreSQL `maintenance_logs`.
+
+Canonical synthetic seed và batch sources:
 
 - `data/raw/assets.csv`
 - `data/raw/sensor_readings.csv`
 - `data/raw/maintenance_tickets.csv`
 - `data/raw/maintenance_logs.csv`
 - `data/raw/documents.csv`
+
+`src/database/export_snapshot.py` xuất PostgreSQL transactions và ghép generated readings/documents vào `data/analytics_input/` trước khi chạy batch. Tại boundary này, snapshot chuẩn hóa `next_maintenance_date` của asset/log theo legacy fixed interval để giữ nguyên validated analytics contract; lịch plan-derived thực tế vẫn nằm trong PostgreSQL plan/work order và không bị ghi đè.
 
 Canonical processed outputs:
 
@@ -127,13 +150,13 @@ Canonical processed outputs:
 - `data/processed/recurring_issues.csv`
 - `data/processed/maintenance_kpis.csv`
 
-Default generation tạo 27 assets và 120 ngày hourly readings. Generator không tạo raw risk result hoặc raw anomaly label; analytics output chỉ được tạo bởi canonical processed pipelines. Đây là synthetic demo data, không phải production dataset hoặc bằng chứng model accuracy.
+Default generation tạo 27 assets, 42 tickets, 86 logs và 120 ngày hourly readings. Generator không tạo raw risk result hoặc raw anomaly label; analytics output chỉ được tạo bởi canonical processed pipelines. Đây là synthetic demo data, không phải production dataset hoặc bằng chứng model accuracy.
 
 Minimum field definitions: [docs/data_contract.md](docs/data_contract.md).
 
 ## Vietnamese Data Design
 
-Code, module, column và API field dùng tiếng Anh. Business values và nội dung hiển thị cho user dùng tiếng Việt.
+Code, module, column và API field dùng tiếng Anh. PostgreSQL lưu stable internal English enum codes; repository mapping trả business values và nội dung hiển thị bằng tiếng Việt.
 
 Ví dụ:
 
@@ -208,6 +231,25 @@ Canonical maintenance analytics cũng nằm trong `src/features/build_features.p
 
 Sau lần generate mặc định đã verify, outputs gồm 27 preventive rows, 25 asset/category recurring rows và 1 KPI snapshot. Đây là reporting trên synthetic data, không phải business-performance measurement.
 
+## Authentication, RBAC Và Audit
+
+Normal product mode yêu cầu đăng nhập. `POST /auth/login` trả access token ngắn hạn để Next.js giữ **trong memory**; refresh token ngẫu nhiên chỉ nằm trong `HttpOnly` cookie và được lưu ở PostgreSQL dưới dạng SHA-256 hash. Refresh rotation thu hồi session cũ, logout thu hồi active session, còn đổi mật khẩu hoặc vô hiệu hóa tài khoản thu hồi toàn bộ refresh sessions. Frontend không lưu token trong `localStorage`.
+
+FastAPI kiểm tra permission ở server cho mọi route ngoại trừ `GET /health`. UI chỉ ẩn action không phù hợp để cải thiện trải nghiệm; đây không phải authorization boundary. Role và permission canonical nằm tại `src/security/permissions.py`, còn frontend nhận permission từ API thay vì duy trì một role matrix riêng.
+
+| Role | Quyền chính trong milestone này |
+|---|---|
+| `administrator` | Toàn bộ permission; quản lý user và xem audit |
+| `property_manager` | Đọc plan/WO/analytics; tạo, assign, cancel, reopen và verify WO; quản lý ticket/lifecycle và xem audit; không chỉnh preventive schedule hoặc checklist kỹ thuật |
+| `chief_engineer` | Tạo/update plan, version checklist, run generation và quản lý đầy đủ technical WO workflow; không quản lý user/audit |
+| `technician` | Chỉ execute/complete assigned WO, ghi checklist/evidence và ticket/log được giao; không assign hoặc tự verify |
+| `helpdesk` | Đọc limited WO status, tạo ticket chưa phân công và cập nhật field giới hạn; không tạo plan/WO hoặc ghi checklist |
+| `storekeeper` | Đọc asset và WO identity/status; không có inventory/stock operation |
+
+Asset permissions bổ sung gồm `assets:create`, `assets:update`, `assets:change_status`, `assets:archive`, `assets:restore`; location và attachment có permission read/create/update/archive hoặc read/create/delete riêng. Property Manager quản lý lifecycle/location/archive, Chief Engineer quản lý hồ sơ kỹ thuật và attachments, Technician chỉ có operational-status update giới hạn. FastAPI vẫn là security boundary.
+
+Mỗi business mutation thành công ghi audit event trong cùng PostgreSQL transaction. Audit state chỉ lấy field allow-list, không chứa password, token, cookie, Authorization header hoặc secret; trigger database chặn `UPDATE` và `DELETE`. Login failure và authorization denial chỉ lưu safe metadata. Xem threat model, permission matrix đầy đủ và event list tại [docs/architecture.md](docs/architecture.md).
+
 ## FastAPI Contract
 
 Existing endpoints được giữ nguyên:
@@ -236,30 +278,74 @@ Manager workflow endpoints:
 - `PATCH /tickets/{ticket_id}`
 - `POST /maintenance/logs`
 
+Asset lifecycle endpoints được thêm theo hướng additive; legacy `GET /assets` và asset analytics responses không đổi:
+
+- `GET /assets/options`, `GET /assets/catalog`, `POST /assets`;
+- `GET /assets/{asset_id}/profile`, `PATCH /assets/{asset_id}`;
+- `POST /assets/{asset_id}/operational-status`;
+- `POST /assets/{asset_id}/lifecycle-transition`;
+- `POST /assets/{asset_id}/archive`, `POST /assets/{asset_id}/restore`;
+- `GET /assets/{asset_id}/history`, `GET /assets/{asset_id}/qr`;
+- `GET /asset-lookup/{lookup_token}`;
+- `GET /locations`, `POST /locations`, `PATCH /locations/{location_id}`, `POST /locations/{location_id}/archive`;
+- `GET|POST /assets/{asset_id}/attachments`;
+- `GET|DELETE /assets/{asset_id}/attachments/{attachment_id}`.
+
+Identity và administration endpoints được thêm theo hướng additive:
+
+- `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`;
+- `GET /auth/me`, `POST /auth/change-password`;
+- `GET /users`, `POST /users`, `PATCH /users/{user_id}`;
+- `GET /users/roles`;
+- `GET /audit-logs` với filters và pagination metadata.
+
+Preventive maintenance và work-order endpoints được thêm theo hướng additive:
+
+- `GET|POST /maintenance-plans`, `GET|PATCH /maintenance-plans/{plan_id}`;
+- `POST /maintenance-plans/{plan_id}/pause|resume|archive`;
+- `GET /maintenance-plans/{plan_id}/occurrences`;
+- `POST /maintenance-plans/generate/dry-run`, `POST /maintenance-plans/generate`;
+- `GET|POST /checklist-templates`, `GET /checklist-templates/{template_id}`;
+- `POST /checklist-templates/{template_id}/versions|archive`;
+- `GET|POST /work-orders`, `GET|PATCH /work-orders/{work_order_id}`;
+- `POST /work-orders/{work_order_id}/assign|transition|checklist|complete|verify|cancel|reopen`;
+- `GET|POST /tickets/{ticket_id}/work-orders`;
+- `GET|POST /work-orders/{work_order_id}/attachments`, `GET|DELETE /work-orders/{work_order_id}/attachments/{attachment_id}`;
+- `GET /work-orders/calendar`, `GET /work-orders/metrics`, `GET /maintenance/options`.
+
+Plan/work-order list endpoints có pagination và filters. Missing resource trả `404`; invalid transition, duplicate active corrective WO hoặc stale version trả `409`; request field invalid trả `422`. Overdue là derived field. Generation dry-run không write; real generation lock plan và dùng unique `(preventive_plan_id, due_date)` để retry/concurrent call không tạo duplicate.
+
+`GET /health` là public. Tất cả route business còn lại cần Bearer access token và permission phù hợp. `/docs`, `/redoc` và OpenAPI schema chỉ được bật ở `development`/`test`.
+
 Các list endpoint hỗ trợ filters theo data contract. `/assets/{asset_id}/details` gom asset profile, latest risk, preventive status, risk history, anomaly, ticket, log và recurring issues mà không thay đổi RAG logic.
 
-Write endpoints chỉ dành cho local single-user portfolio demo. Chúng kiểm tra enum, relationship, chronology, status transition, duplicate ID và stage CSV trước khi replace; maintenance-log write đồng bộ asset maintenance dates và rollback handled failures. Không có concurrent-user locking, crash-safe multi-file commit hoặc production transaction isolation. Ghi ticket/log không chạy lại analytics ngay.
+Legacy write endpoints giữ nguyên request/response contract. New planning routes dùng explicit schemas và PostgreSQL transactions. Work-order completion tạo đúng một linked MaintenanceLog; verification bởi actor khác cập nhật asset maintenance dates. Creating/completing/verifying WO không resolve ticket và không chạy lại analytics ngay.
 
 Ví dụ:
 
 ```bash
 curl http://localhost:8000/health
-curl http://localhost:8000/summary
-curl "http://localhost:8000/assets/risk/top?limit=5"
-curl http://localhost:8000/assets/GENERATOR_002/details
-curl "http://localhost:8000/maintenance/preventive?maintenance_status=overdue"
-curl "http://localhost:8000/maintenance/recurring-issues?recurrence_flag=true"
-curl http://localhost:8000/maintenance/kpis
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{"identifier":"manager.demo","password":"<DEMO_PASSWORD>"}'
+
+# Lấy access_token từ response login và chỉ giữ trong memory của client.
+curl http://localhost:8000/summary -H "Authorization: Bearer <ACCESS_TOKEN>"
+curl "http://localhost:8000/assets/risk/top?limit=5" -H "Authorization: Bearer <ACCESS_TOKEN>"
+curl http://localhost:8000/assets/GENERATOR_002/details -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 
 Tạo và nhận inspection ticket:
 
 ```bash
 curl -X POST http://localhost:8000/tickets \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"asset_id":"GENERATOR_002","issue_description":"Kiểm tra khả năng khởi động theo tín hiệu risk batch.","priority":"Cao","failure_category":"Lỗi điện","technician_id":"TECH_001","manager_note":"Ưu tiên kiểm tra trong tuần."}'
 
 curl -X PATCH http://localhost:8000/tickets/TCK-000043 \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"status":"Đang xử lý","technician_id":"TECH_002","note":"Đã nhận kiểm tra."}'
 ```
@@ -270,20 +356,40 @@ Sau kiểm tra, ghi log rồi resolve ticket khi kết quả không cần follow
 
 ```bash
 curl -X POST http://localhost:8000/maintenance/logs \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{"ticket_id":"TCK-000043","asset_id":"GENERATOR_002","maintenance_date":"2026-07-15","inspection_result":"Ắc quy yếu, đầu cực oxy hóa.","actions_taken":"Vệ sinh đầu cực và kiểm tra điện áp.","parts_replaced":"Không thay vật tư","technician_note":"Đã chạy thử tại chỗ.","maintenance_result":"Đã xử lý","follow_up_required":false,"next_maintenance_date":"2026-11-12"}'
+  -d '{"ticket_id":"TCK-000043","asset_id":"GENERATOR_002","maintenance_date":"2026-07-18","inspection_result":"Ắc quy yếu, đầu cực oxy hóa.","actions_taken":"Vệ sinh đầu cực và kiểm tra điện áp.","parts_replaced":"Không thay vật tư","technician_note":"Đã chạy thử tại chỗ.","maintenance_result":"Đã xử lý","follow_up_required":false,"next_maintenance_date":"2026-11-15"}'
 
 curl -X PATCH http://localhost:8000/tickets/TCK-000043 \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"status":"Đã xử lý","note":"Đã hoàn tất kiểm tra."}'
 ```
 
 `next_maintenance_date` phải bằng ngày thực hiện cộng maintenance interval của asset. API không tự recalculation risk/KPI sau các request này.
 
+Preview/generate preventive work order bằng actor có `maintenance_generation:run`:
+
+```bash
+curl "http://localhost:8000/maintenance-plans/<PLAN_ID>/occurrences?date_from=2026-07-20&date_to=2026-10-20" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+
+curl -X POST http://localhost:8000/maintenance-plans/generate/dry-run \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" -H "Content-Type: application/json" \
+  -d '{"as_of_date":"2026-07-20","plan_id":"<PLAN_ID>"}'
+
+curl -X POST http://localhost:8000/maintenance-plans/generate \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" -H "Content-Type: application/json" \
+  -d '{"as_of_date":"2026-07-20","plan_id":"<PLAN_ID>"}'
+```
+
+Technician dùng action endpoints theo `expected_version`; completion gửi một maintenance outcome và backend tạo log, frontend không gửi record thứ hai. Reviewer khác technician gọi `POST /work-orders/{id}/verify`. Exact request schemas có tại local `/docs` trong development.
+
 Copilot request:
 
 ```bash
 curl -X POST http://localhost:8000/copilot/ask \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"question":"Vì sao GENERATOR_002 đang rủi ro cao?","asset_id":"GENERATOR_002","top_k":5}'
 ```
@@ -292,19 +398,19 @@ Request giữ `question`, optional `asset_id` và `top_k`; có thể thêm optio
 
 ## Streamlit Dashboard
 
-Current dashboard views:
-
-- `Tổng quan`: KPI, ticket/risk/preventive distributions và top priorities;
-- `Thiết bị và rủi ro`: asset filters, risk badges, measured facts, recommendation và action tạo inspection ticket;
-- `Ticket workspace`: ba trạng thái, assignment/update, related asset, maintenance result và Copilot handoff;
-- `Bất thường và lỗi lặp lại`: anomaly signals và deterministic recurring groups;
-- `Trợ lý bảo trì`: asset/ticket context, existing retrieval, sources và technician disclaimer.
-
-Dashboard lấy dữ liệu qua `API_BASE_URL`, mặc định `http://localhost:8000`.
+Streamlit được giữ làm **legacy development client** theo strategy B. App chỉ gọi public `/health`, hiển thị trạng thái API và hướng người dùng sang Next.js; mọi protected analytics/write/Copilot workflow đã bị vô hiệu hóa. Không có hidden compatibility route hoặc auth bypass.
 
 ## Next.js Frontend
 
-`frontend/` cung cấp một manager-facing frontend thay thế để minh họa UX web hiện đại. Các routes `Tổng quan`, `Thiết bị`, dynamic asset detail, `Ticket` và `Bất thường` dùng live FastAPI read endpoints qua TanStack Query; Zod kiểm tra response contract trước khi adapters tạo display models.
+`frontend/` cung cấp authenticated operational frontend. Bên cạnh asset/ticket/analytics/Copilot, Product Milestone 4 thêm:
+
+- `/maintenance/plans`, `/maintenance/plans/new`, `/maintenance/plans/[planId]` cho recurrence, occurrence preview, lifecycle và explicit generation;
+- `/maintenance/checklists` cho immutable template versions và safety-critical steps;
+- `/work-orders`, `/work-orders/[workOrderId]` cho filters, assignment, execution, checklist, evidence, completion, verification/cancel/reopen;
+- `/work-orders/calendar` cho bounded schedule projection, không phải scheduling source thứ hai;
+- ticket detail hiển thị linked corrective work orders; overview có additive PostgreSQL work-order metrics.
+
+Technician controls được xếp dọc ở mobile width; server vẫn enforce ownership. `/scan/assets/[lookupToken]` là web route tối ưu cho mobile, không phải native app và vẫn yêu cầu đăng nhập.
 
 ```powershell
 cd frontend
@@ -313,7 +419,7 @@ npm install
 npm run dev
 ```
 
-Mặc định `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000`. Ticket controls trong Next.js hiện chỉ đọc và được ghi rõ chưa kết nối; Streamlit workflow hiện tại không bị thay thế hoặc xóa. Copilot page của Next.js vẫn dùng response fixture cho tới dedicated frontend Copilot milestone. Chi tiết: [frontend/README.md](frontend/README.md).
+Mặc định `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000`. Next.js có login, session restoration, permission-aware navigation/actions, user management và audit views. Access token chỉ ở memory; API client thực hiện đúng một refresh/retry khi gặp eligible `401`. Sau logout, Query cache và auth memory được xóa. Existing asset, ticket, maintenance và Copilot contracts không đổi. Chi tiết: [frontend/README.md](frontend/README.md).
 
 ## RAG Maintenance Copilot
 
@@ -326,7 +432,7 @@ Current RAG workflow:
 5. Thay thế toàn bộ Qdrant collection `maintenance_knowledge` và upsert stable chunk IDs.
 6. Retrieve top-k chunks với `asset_type` filter; `document_type` và `failure_category` là optional filters.
 7. Loại chunk dưới relevance threshold và chỉ compose answer khi còn nguồn đủ liên quan.
-8. Kết hợp retrieved guidance với structured asset facts từ CSV-backed service.
+8. Kết hợp retrieved guidance với structured asset/ticket facts từ PostgreSQL và latest batch analytics.
 9. Tạo deterministic Vietnamese response với năm phần: tình trạng, checklist, nguồn, an toàn và giới hạn.
 
 Document coverage hiện tại:
@@ -357,18 +463,18 @@ Ví dụ câu hỏi trong phạm vi:
 
 ## Setup
 
-Yêu cầu: Python 3.11+.
+Yêu cầu: Python 3.11+, Docker và Node.js cho Next.js frontend.
 
 Dependency groups:
 
 | Nhóm | Vai trò |
 |---|---|
-| Core | CSV pipeline, FastAPI, Streamlit, scikit-learn, Qdrant client và configuration |
+| Core | FastAPI, Streamlit, batch analytics, SQLAlchemy, psycopg, Alembic và Qdrant client |
 | `rag` | `sentence-transformers` cho multilingual E5 embeddings |
 | `dev` | pytest và Ruff |
-| `postgres` | SQLAlchemy và psycopg cho optional/experimental database path |
+| `postgres` | Compatibility extra rỗng; PostgreSQL dependencies nay thuộc Core |
 
-Canonical full-repository install dùng tất cả extras để chạy được demo và toàn bộ tests. PostgreSQL service vẫn không cần cho main demo.
+Canonical full-repository install giữ tên extras cũ để command tương thích. PostgreSQL là prerequisite của normal product demo; Qdrant chỉ là prerequisite của Copilot retrieval.
 
 Configuration có sensible local defaults. Có thể tạo local `.env` bằng:
 
@@ -381,13 +487,30 @@ Các biến hữu ích:
 | Variable | Default | Dùng cho |
 |---|---|---|
 | `APP_NAME` | `AI Maintenance Copilot` | FastAPI title |
+| `APP_ENVIRONMENT` | `development` | Bật local docs và áp dụng security validation theo môi trường |
 | `API_BASE_URL` | `http://localhost:8000` | Streamlit gọi FastAPI |
+| `CORS_ALLOWED_ORIGINS` | hai local Next.js origins | Explicit browser origins với credentials |
+| `TRUSTED_HOSTS` | local host names | Host header allow-list |
+| `TOKEN_SIGNING_SECRET` | rỗng ở local | Ephemeral ở dev/test; bắt buộc secret >=32 ký tự ở pilot/production |
+| `ACCESS_TOKEN_LIFETIME_MINUTES` | `15` | JWT access lifetime |
+| `REFRESH_SESSION_LIFETIME_DAYS` | `7` | Revocable refresh-session lifetime |
+| `AUTH_COOKIE_SECURE` | `false` ở local | Bắt buộc `true` ngoài dev/test và cần HTTPS |
+| `AUTH_COOKIE_SAMESITE` | `lax` | Explicit refresh/CSRF cookie policy |
+| `LOGIN_RATE_LIMIT_ATTEMPTS` | `5` | Basic per-process failed-login threshold |
+| `STORAGE_BACKEND` | `postgresql` | Normal runtime; `csv` chỉ explicit fixture mode |
+| `DATABASE_URL` | local PostgreSQL URL | Transactional source of truth |
+| `DATABASE_CONNECT_TIMEOUT_SECONDS` | `5` | Startup connection timeout |
+| `TEST_DATABASE_URL` | local database kết thúc `_test` | Isolated integration tests |
+| `ATTACHMENT_STORAGE_BACKEND` | `local` | Storage abstraction; chỉ local implementation trong milestone này |
+| `ATTACHMENT_STORAGE_ROOT` | `data/attachments` | Private local file root, không được serve trực tiếp |
+| `ATTACHMENT_MAX_SIZE_BYTES` | `10485760` | Giới hạn mỗi PDF/PNG/JPG/JPEG |
+| `FRONTEND_BASE_URL` | `http://localhost:3000` | Origin dùng để tạo opaque QR lookup URL |
 | `QDRANT_URL` | `http://localhost:6333` | RAG indexing/retrieval |
+| `QDRANT_HTTP_PORT` | `6333` | Local Docker host port cho Qdrant REST |
 | `QDRANT_COLLECTION` | `maintenance_knowledge` | Qdrant collection |
 | `EMBEDDING_MODEL_NAME` | `intfloat/multilingual-e5-small` | Local embeddings |
-| `DATABASE_URL` | local PostgreSQL URL | Chỉ optional database experiment |
 
-Các PostgreSQL credentials trong `.env.example` chỉ là local Docker defaults, không phải production secrets. File `.env` được gitignore.
+Các PostgreSQL credentials trong `.env.example` chỉ là local Docker defaults, không phải production secrets. `TOKEN_SIGNING_SECRET` cố ý để rỗng; không được dùng ephemeral dev secret cho pilot. File `.env` được gitignore.
 
 Linux/macOS:
 
@@ -410,17 +533,43 @@ python -m pip install -e ".[dev,rag,postgres]"
 PowerShell không cần `make`:
 
 ```powershell
+docker compose up -d postgres qdrant
 python -m src.data_generation.generate_data
 python -m src.ingestion.validation
-python -m src.features.build_features
+python -m alembic upgrade head
+python -m src.ingestion.load_data --dry-run
+python -m src.ingestion.load_data
+python -m src.database.export_snapshot --replace
+python -m src.features.build_features --input-dir data/analytics_input
 python -m src.models.anomaly_detection
 python -m src.risk.risk_scoring
-python -m src.features.build_features --analysis preventive
-python -m src.features.build_features --analysis recurring
-python -m src.features.build_features --analysis kpis
-docker compose up -d qdrant
+python -m src.features.build_features --input-dir data/analytics_input --analysis maintenance
 python -m src.rag.index_documents
 ```
+
+Importer từ chối database không rỗng. Chỉ dùng `python -m src.ingestion.load_data --replace` khi chủ động reset transactional demo data về canonical seed.
+
+Tạo administrator đầu tiên bằng interactive password prompt; lệnh không in mật khẩu và từ chối normalized username/email bị trùng:
+
+```powershell
+python -m src.security.cli create-admin --username admin.local --display-name "Quản trị viên local"
+```
+
+Demo roles chỉ được tạo bằng lệnh explicit khi `APP_ENVIRONMENT=development`:
+
+```powershell
+python -m src.security.cli seed-demo-users
+```
+
+Seed checklist/plan đại diện và preview/generate work order bằng các user đã tồn tại. Lệnh idempotent, không tạo account/password và không chạy ở startup:
+
+```powershell
+python -m src.maintenance_management.cli seed-development
+python -m src.maintenance_management.cli generate --dry-run --as-of 2026-07-20
+python -m src.maintenance_management.cli generate --as-of 2026-07-20
+```
+
+Thay `--as-of` bằng business date dùng cho demo. Có thể thêm `--plan-id <UUID>`; rerun real generation trả skipped và không tạo duplicate occurrence.
 
 Terminal API:
 
@@ -428,47 +577,74 @@ Terminal API:
 python -m uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Terminal dashboard:
+Terminal Next.js:
 
 ```powershell
-$env:API_BASE_URL = "http://localhost:8000"
-python -m streamlit run src/dashboard/app.py
+Set-Location frontend
+Copy-Item .env.example .env.local -ErrorAction SilentlyContinue
+npm install
+npm run dev
 ```
+
+Đăng nhập tại `http://localhost:3000/login`. Streamlit chỉ còn là optional legacy health/status page và không cung cấp protected workflows.
 
 Verify:
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/health
-$body = @{
-  question = "Máy phát điện không khởi động thì cần kiểm tra gì trước?"
-  asset_id = "GENERATOR_002"
-  top_k = 5
-} | ConvertTo-Json
-Invoke-RestMethod http://localhost:8000/copilot/ask `
-  -Method Post -ContentType "application/json; charset=utf-8" -Body $body
+$loginBody = @{ identifier = "manager.demo"; password = "<DEMO_PASSWORD>" } | ConvertTo-Json
+$login = Invoke-RestMethod http://localhost:8000/auth/login `
+  -Method Post -ContentType "application/json" -Body $loginBody -SessionVariable BrowserSession
+$headers = @{ Authorization = "Bearer $($login.access_token)" }
+Invoke-RestMethod http://localhost:8000/auth/me -Headers $headers
+Invoke-RestMethod http://localhost:8000/summary -Headers $headers
 ```
 
-Stop API/dashboard bằng `Ctrl+C`, sau đó:
+Stop API/frontend bằng `Ctrl+C`, sau đó:
 
 ```powershell
-docker compose stop qdrant
+docker compose stop
 ```
 
-Equivalent Make targets: `generate-data`, `validate-data`, `build-features`, `detect-anomalies`, `score-risk`, `build-preventive`, `build-recurring`, `build-kpis`, `qdrant-up`, `index-documents`, `run-api`, `run-dashboard`, `test`, `lint`, `qdrant-down`.
+Equivalent Make targets: `services-up`, `postgres-up`, `migrate-db`, `generate-data`, `validate-data`, `load-data`, `replace-data`, `seed-maintenance`, `generation-dry-run`, `generate-work-orders`, `export-analytics-snapshot`, `build-features`, `detect-anomalies`, `score-risk`, `build-preventive`, `build-recurring`, `build-kpis`, `index-documents`, `bootstrap-admin`, `seed-demo-users`, `run-api`, `run-dashboard`, `run-frontend`, `create-test-db`, `test`, `test-postgres`, `lint`, `frontend-lint`, `frontend-test` và `frontend-build`.
 
-Demo 5–7 phút: [docs/demo_script.md](docs/demo_script.md).
+Demo 10–12 phút: [docs/demo_script.md](docs/demo_script.md).
 
-## Optional PostgreSQL Experiment
+## PostgreSQL Operations
 
-PostgreSQL không nằm trong primary runtime path. Chỉ chạy các bước sau khi muốn thử SQLAlchemy schema và raw CSV loading:
+Schema chỉ được quản lý bằng Alembic:
 
 ```powershell
 docker compose up -d postgres
-python -m src.database.init_db
+python -m alembic upgrade head
+python -m alembic current
+python -m alembic check
+```
+
+Dry-run và first import:
+
+```powershell
+python -m src.ingestion.load_data --dry-run
+python -m src.ingestion.load_data
+```
+
+Explicit canonical reset sau khi đã backup dữ liệu cần giữ:
+
+```powershell
 python -m src.ingestion.load_data --replace
 ```
 
-Database path hiện không cấp dữ liệu cho FastAPI hoặc Streamlit.
+`--replace` xóa PM4 development plans/templates/work orders/evidence metadata trước khi khôi phục canonical `27/42/86`; private attachment backup/cleanup vẫn là trách nhiệm operator. Chạy lại `seed-development` sau reset nếu cần PM4 demo data.
+
+Dedicated test database:
+
+```powershell
+python -m src.database.create_test_database
+$env:TEST_DATABASE_URL = "postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot_test"
+python -m pytest -m postgres
+```
+
+Tests từ chối database name không kết thúc `_test` và không mutate developer/demo database.
 
 ## Verification
 
@@ -479,37 +655,59 @@ python -m ruff check .
 
 Lần verify Milestone 4.5 ngày 2026-07-15: `122 passed`, Ruff và `git diff --check` đều đạt. Streamlit AppTest và live health smoke đạt; OpenAPI có đủ ba write methods. Manual `GENERATOR_002` workflow trên isolated CSV copies đã tạo/assign/resolve ticket, ghi log, qua full raw validation, mở Copilot checklist có nguồn và xác nhận risk/KPI không đổi trước batch tiếp theo. Còn một `StarletteDeprecationWarning` chỉ thuộc test client, được giải thích trong [troubleshooting](docs/troubleshooting.md). Các kết quả này xác nhận tính tái lập của portfolio demo, không chứng minh production readiness hoặc model accuracy.
 
+Lần verify Frontend Milestone 3 ngày 2026-07-16: backend `125 passed`, frontend `43 passed`, Ruff, ESLint, Next.js production build và `git diff --check` đều đạt. Live workflow trên temporary CSV tạo `TCK-000043`, `LOG-000087`, đi qua assignment, `Đang xử lý`, maintenance result có follow-up và resolve; ticket/log xuất hiện đúng một lần, asset detail được refresh, còn risk/KPI không đổi. Sau test, canonical files vẫn giữ 27 assets, 42 tickets, 86 maintenance logs và 77.760 sensor readings.
+
+Lần verify Frontend Milestone 4 ngày 2026-07-16: backend `125 passed`, frontend `61 passed`, focused RAG/API tests `20 passed`; Ruff, ESLint, Next.js production build, Markdown link check và `git diff --check` đều đạt. Live `GENERATOR_002` asset/ticket handoff retrieve đúng source máy phát điện với `retrieval_status=success`, sources và safety notice. Unrelated question trả zero-source fallback; khi dừng Qdrant, Copilot trả `unavailable` trong khi API/analytics/assets vẫn hoạt động, sau đó retry thành công khi Qdrant được khởi động lại. Desktop 1440px và mobile 390px route checks không có horizontal clipping. Canonical CSV counts và SHA-256 được kiểm tra, không có data file nào thay đổi trong Git worktree. Các kết quả này xác nhận demo workflow, không phải production readiness hoặc RAG accuracy.
+
+Lần verify Product Milestone 1 ngày 2026-07-18: clean Alembic downgrade/upgrade đạt revision `20260718_0001`; CSV import dry-run và import thật xác nhận `27` assets, `42` tickets, `86` maintenance logs; analytics snapshot xác nhận thêm `77.760` readings và `6` documents. PostgreSQL-focused suite đạt `15 passed`, full backend đạt `140 passed`, Streamlit AppTest đạt `1 passed`, frontend đạt `61 passed`; Ruff, ESLint, Next.js production build, Alembic schema check, Markdown link check và `git diff --check` đều đạt. Concurrency, FK, status transition, log-before-resolution, atomic rollback và optimistic conflict đều có integration test trên isolated `_test` database. Restart container giữ nguyên migration revision và row counts. Live `GENERATOR_002` workflow tạo `TCK-000043` và `LOG-000087`, resolve ticket, giữ batch risk/KPI chưa đổi và Copilot trả một grounded source với safety notice; toàn bộ existing Next.js routes trả `200`. Đây là kết quả local internal-pilot verification, không phải bằng chứng production readiness, model accuracy hoặc business impact.
+
+Lần verify Product Milestone 2 ngày 2026-07-18: clean Alembic downgrade/upgrade đạt revision `20260718_0002` và `alembic check` không có schema drift; explicit admin bootstrap và năm development roles thành công trên isolated `_test` database. Full backend đạt `156 passed`, frontend đạt `74 passed`; Ruff, ESLint, Next.js production build, Markdown link check, secret scan và `git diff --check` đều đạt. Live role workflow tạo `TCK-000043`, manager gán `TECH_002`, technician ghi `LOG-000087`, manager resolve; helpdesk/technician forbidden actions trả `403`, unauthenticated/revoked access trả `401`, Copilot vẫn trả response. Audit có đủ ticket/log/user actions, không lộ credential fields và database trigger từ chối sửa event. PostgreSQL restart giữ revision, 27 assets, 43 tickets, 87 logs, 5 users và 24 audit events. Đây là local internal-pilot security verification, không phải production security certification.
+
+Lần verify Product Milestone 3 ngày 2026-07-18: clean Alembic downgrade/upgrade đạt revision `20260718_0003`, `alembic check` không có schema drift; seed dry-run/import giữ `27/42/86` và tạo 7 deterministic locations. Full PostgreSQL-enabled backend đạt `162 passed`, frontend đạt `80 passed`; Ruff, ESLint và Next.js production build đều đạt. Temporary analytics snapshot giữ đúng 10 legacy asset columns và tạo `3.240` feature/anomaly/risk rows cùng `27/25/1` maintenance reports. Live role workflow tạo `PM3_DEMO_ASSET`, upload/download một checksum-matched technical manual, archive/restore, xác nhận archived QR trả `410`, technician/helpdesk forbidden actions trả `403`, rồi tạo `TCK-000043` và `LOG-000087`. PostgreSQL restart giữ revision cùng `28` assets, `43` tickets, `87` logs, một active attachment và `29` audit events. Next.js login/assets/detail/QR/tickets/Copilot routes trả `200`. Đây là local internal-pilot verification, không phải production readiness, security certification hoặc business-impact evidence.
+
 ## Limitations
 
 - Synthetic data chưa được kiểm chứng bằng maintenance history thực tế.
 - Analytics thresholds và risk weights là transparent demo heuristics, chưa được hiệu chuẩn trên dữ liệu thực tế.
 - Synthetic chronology chỉ mô phỏng quy trình đơn giản và chưa được đối chiếu với quy tắc lịch bảo trì thực tế của một cơ sở cụ thể.
-- API hiện phục vụ processed CSV, không có scheduler hoặc cache invalidation strategy cho production.
+- API phục vụ PostgreSQL transactions cùng processed CSV analytics, chưa có scheduler hoặc production cache invalidation strategy.
+- Preventive generation chỉ chạy qua explicit API/CLI; chưa có production scheduler, distributed worker, notification hoặc missed-run operations.
+- Recurrence chỉ hỗ trợ bounded interval day/week/month/year. Chưa có calendar exceptions, holiday rules hoặc arbitrary RRULE.
+- Legacy asset `next_maintenance_date` là compatibility aggregate từ active plans; plan-specific dates và calendar mới là operational detail.
+- Analytics snapshot cố ý project maintenance dates về fixed-interval legacy contract. Vì vậy preventive plan/work-order calendar là operational source cho scheduling, còn batch preventive KPI hiện vẫn phản ánh contract cũ.
+- Reopen một completed-but-unverified work order giữ append-only linked MaintenanceLog và không tạo log thứ hai; chưa có full record-amendment/countersign workflow.
 - Isolation Forest và risk formula chưa được đánh giá trên labeled failure outcomes.
 - Copilot có relevance threshold minh bạch nhưng chưa có labeled retrieval evaluation dataset hoặc hiệu chuẩn trên tài liệu thực tế.
 - Sáu SOP/checklist là synthetic/illustrative và không thay thế tài liệu nhà sản xuất.
 - Deterministic composer là extractive decision support, không phải diagnosis hoặc generative reasoning.
-- Dashboard là manager-facing portfolio workflow, chưa có production caching, accessibility audit hoặc browser-level regression suite.
-- CSV writes dùng atomic replacement nhưng không có locking; chỉ phù hợp một local portfolio user và không an toàn cho concurrent production users.
+- Next.js là authenticated internal-pilot workflow, chưa có production caching, accessibility audit hoặc browser-level regression suite; Streamlit chỉ còn legacy status client.
+- PostgreSQL workflow có transactions, foreign keys, sequences, optimistic conflict detection và append-only audit events nhưng chưa có load test hoặc production operations hardening.
+- Attachment bytes dùng atomic local storage cho single-node pilot; chưa có S3-compatible implementation, malware scanning, object versioning hoặc distributed transaction giữa file store và PostgreSQL.
+- QR là lookup identifier có xác thực, không phải access-control credential; chưa có fleet label operations, camera-scanner test matrix hoặc offline workflow.
 - Ticket/log mới không làm risk hoặc KPI đổi ngay; cần chạy lại canonical batch pipeline.
-- Không có production auth, audit logging, observability hoặc deployment hardening.
+- Work-order completion/verification không resolve linked ticket và không trigger analytics; hai action cần được operator thực hiện riêng.
+- Local auth chưa có SSO, MFA, account recovery, distributed login throttling, key rotation, centralized observability hoặc external security review.
+- Refresh cookie cần HTTPS và `Secure=true` ngoài local; `.env.example` chỉ là development configuration.
 
 ## Cleanup Result
 
-Milestone 6 đã kiểm tra imports, tests và docs rồi xóa duplicate anomaly/risk implementations, ingestion helpers, sample-data wrapper, root Streamlit wrapper và proposal rỗng. Optional PostgreSQL modules được giữ vì vẫn có compatibility tests. Chi tiết evidence: [docs/architecture.md](docs/architecture.md).
+Milestone 6 đã xóa duplicate anomaly/risk implementations, ingestion helpers, sample-data wrapper và duplicate dashboard entrypoint. Product Milestone 1 sau đó hợp nhất PostgreSQL modules thành canonical transactional path; CSV repository chỉ còn compatibility adapter. Chi tiết: [docs/architecture.md](docs/architecture.md).
 
 ## Repository Layout
 
 ```text
 src/config/           Settings và Vietnamese value mappings
 src/data_generation/  Synthetic maintenance data
-src/ingestion/        CSV validation; optional database loading
-src/database/         Optional/experimental SQLAlchemy path
+src/ingestion/        CSV validation và PostgreSQL seed import
+src/database/         Canonical models, migrations và analytics snapshot export
+src/repositories/     Storage-neutral contract, PostgreSQL và CSV adapters
+src/asset_management/ Asset lifecycle, hierarchy, attachment storage và QR helpers
+src/maintenance_management/ Preventive recurrence, work-order state machine, routes và CLI
 src/features/         Canonical daily feature pipeline
 src/models/           Canonical anomaly pipeline
 src/risk/             Canonical risk pipeline
 src/rag/              Document retrieval và Copilot composition
-src/api/              CSV-backed FastAPI
+src/api/              Storage-neutral FastAPI services và routes
 src/dashboard/        Streamlit app và API client
 tests/                Automated tests
 docs/                 Scope, architecture, process, contracts và demo docs

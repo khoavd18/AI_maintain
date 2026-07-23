@@ -4,7 +4,6 @@ import type {
   MaintenanceEvent,
   RecurringIssue,
   RiskContribution,
-  SourceDocument,
   Ticket,
 } from "@/lib/types";
 
@@ -445,25 +444,3 @@ export const generatorMaintenance: MaintenanceEvent[] = [
     nextMaintenance: "18/09/2025",
   },
 ];
-
-export const copilotSources: SourceDocument[] = [
-  {
-    title: "SOP kiểm tra máy phát điện dự phòng",
-    section: "Mục 3.2 - Hệ thống khởi động",
-    relevance: 0.91,
-    excerpt: "Đo điện áp ắc quy, kiểm tra đầu cực và bộ sạc trước khi chạy thử.",
-  },
-  {
-    title: "Checklist bảo trì máy phát điện hàng tháng",
-    section: "Bước 4 - Chạy thử có tải",
-    relevance: 0.86,
-    excerpt: "Xác nhận dầu, nước làm mát, nhiên liệu và điều kiện an toàn trước khi đóng tải.",
-  },
-];
-
-export const copilotSuggestedQuestions = [
-  "Vì sao thiết bị đang rủi ro cao?",
-  "Checklist kiểm tra ắc quy gồm những gì?",
-  "Cần xác minh gì trước khi chạy thử có tải?",
-  "Khi nào cần đánh dấu theo dõi?",
-] as const;

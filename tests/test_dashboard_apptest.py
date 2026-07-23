@@ -59,7 +59,7 @@ class FakeMaintenanceApiClient:
         }
 
 
-def test_dashboard_renders_interactive_workflow(monkeypatch) -> None:
+def test_dashboard_explicitly_disables_protected_legacy_workflow(monkeypatch) -> None:
     monkeypatch.setattr(
         api_client_module,
         "MaintenanceApiClient",
@@ -68,30 +68,12 @@ def test_dashboard_renders_interactive_workflow(monkeypatch) -> None:
     app = AppTest.from_file("src/dashboard/app.py", default_timeout=10).run()
 
     assert not app.exception
-    tab_labels = [tab.label for tab in app.tabs]
-    for expected_label in [
-        "Tổng quan",
-        "Thiết bị và rủi ro",
-        "Ticket workspace",
-        "Bất thường và lỗi lặp lại",
-        "Trợ lý bảo trì",
-        "Mới tạo",
-        "Đang xử lý",
-        "Đã xử lý",
-    ]:
-        assert expected_label in tab_labels
-    button_labels = [button.label for button in app.button]
-    assert "Xem chi tiết" in button_labels
-    assert "Tạo ticket kiểm tra" in button_labels
-    assert "Mở Copilot checklist" in button_labels
-    assert "Lưu cập nhật" in button_labels
-
-    next(button for button in app.button if button.label == "Tạo ticket kiểm tra").click()
-    app.run()
-
-    assert not app.exception
-    assert any(area.label == "Mô tả kiểm tra đề xuất" for area in app.text_area)
-    assert any(area.label == "Ghi chú manager (khuyến nghị)" for area in app.text_area)
+    assert not app.tabs
+    rendered_text = " ".join(message.value for message in [*app.warning, *app.info])
+    assert "legacy" in rendered_text
+    assert "authentication" in rendered_text
+    assert "Next.js" in rendered_text
+    assert not app.button
 
 
 def _asset_overview() -> dict[str, Any]:

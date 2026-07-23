@@ -7,6 +7,7 @@ from src.api.routes import _copilot_service
 from src.api.services import AssetNotFoundError
 from src.rag.copilot import SAFE_FALLBACK, CopilotAnswer, MaintenanceCopilot
 from src.rag.vector_store import QdrantUnavailableError
+from tests.auth_helpers import authorize_app
 
 
 def test_copilot_ask_endpoint_shape() -> None:
@@ -14,6 +15,7 @@ def test_copilot_ask_endpoint_shape() -> None:
 
     app = create_app()
     app.dependency_overrides[_copilot_service] = lambda: FakeCopilot()
+    authorize_app(app)
     client = TestClient(app)
 
     response = client.post(
@@ -43,6 +45,7 @@ def test_copilot_api_returns_safe_fallback_when_qdrant_is_unavailable() -> None:
         ApiAssetService(),
         UnavailableApiRetriever(),
     )
+    authorize_app(app)
     client = TestClient(app)
 
     response = client.post(
@@ -60,12 +63,17 @@ def test_copilot_api_returns_safe_fallback_when_qdrant_is_unavailable() -> None:
     assert SAFE_FALLBACK in payload["answer"]
     assert "internal" not in response.text
 
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["status"] in {"ok", "degraded"}
+
 
 def test_copilot_api_handles_invalid_asset_and_question_length() -> None:
     """Invalid asset IDs and oversized questions should use explicit HTTP errors."""
 
     app = create_app()
     app.dependency_overrides[_copilot_service] = lambda: MissingAssetCopilot()
+    authorize_app(app)
     client = TestClient(app)
 
     invalid_asset = client.post(

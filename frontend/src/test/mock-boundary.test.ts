@@ -9,12 +9,15 @@ const liveFiles = [
   "src/app/assets/[assetId]/page.tsx",
   "src/app/tickets/page.tsx",
   "src/app/anomalies/page.tsx",
+  "src/app/copilot/page.tsx",
   "src/components/asset-browser.tsx",
   "src/components/asset-detail-view.tsx",
   "src/components/asset-detail-tabs.tsx",
   "src/components/ticket-workspace.tsx",
   "src/components/anomaly-workspace.tsx",
   "src/components/dashboard-charts.tsx",
+  "src/components/copilot-workspace.tsx",
+  "src/components/source-card.tsx",
 ];
 
 describe("mock data boundary", () => {

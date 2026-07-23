@@ -19,7 +19,10 @@ export interface Asset {
   riskLevel: RiskLevel | null;
   maintenanceStatus: MaintenanceStatus | null;
   lastMaintenance: string;
+  lastMaintenanceDateIso?: string;
   nextMaintenance: string;
+  nextMaintenanceDateIso?: string;
+  maintenanceIntervalDays?: number;
   overdueDays: number;
   unresolvedTickets: number;
   contributingFactors: string;
@@ -36,8 +39,12 @@ export interface Ticket {
   status: TicketStatus;
   technician: string;
   createdAt: string;
+  createdAtIso?: string;
+  resolvedAtIso?: string | null;
   updatedAt: string;
   waitingTime: string;
+  managerNote?: string | null;
+  note?: string | null;
 }
 
 export interface AnomalyRecord {
@@ -65,6 +72,7 @@ export interface RecurringIssue {
 
 export interface MaintenanceEvent {
   id: string;
+  ticketId?: string | null;
   date: string;
   result: string;
   actions: string;
@@ -77,11 +85,4 @@ export interface RiskContribution {
   factor: string;
   value: number;
   explanation: string;
-}
-
-export interface SourceDocument {
-  title: string;
-  section: string;
-  relevance: number;
-  excerpt: string;
 }

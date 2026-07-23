@@ -3,8 +3,11 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
+import { resetAuthSessionForTests } from "@/lib/api/auth-session";
+
 afterEach(() => {
   cleanup();
+  resetAuthSessionForTests();
   vi.unstubAllGlobals();
 });
 
@@ -31,4 +34,9 @@ Object.defineProperty(window, "matchMedia", {
     removeEventListener: () => undefined,
     dispatchEvent: () => false,
   }),
+});
+
+Object.defineProperty(Element.prototype, "scrollIntoView", {
+  value: () => undefined,
+  configurable: true,
 });

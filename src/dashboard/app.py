@@ -99,7 +99,7 @@ RECURRING_COLUMNS = [
 
 
 def main() -> None:
-    """Render the focused manager and technician workflow."""
+    """Render only public status for the legacy Streamlit development client."""
 
     st.set_page_config(page_title="AI Maintenance Copilot", layout="wide")
     st.title("AI Maintenance Copilot")
@@ -116,39 +116,24 @@ def main() -> None:
 
     if health.get("status") != "ok":
         st.warning(
-            "API đang hoạt động nhưng một số CSV nguồn hoặc analytics output chưa sẵn sàng. "
+            "API đang hoạt động nhưng transactional storage hoặc analytics output chưa sẵn sàng. "
             "Hãy chạy lại batch pipeline."
         )
     else:
         st.sidebar.success("Đã kết nối API")
 
-    try:
-        with st.spinner("Đang tải danh mục thiết bị..."):
-            assets = records_to_dataframe(client.list_assets())
-    except ApiClientError as exc:
-        _render_data_error(exc)
-        return
-
-    _render_safety_notice()
-    tabs = st.tabs(
-        [
-            "Tổng quan",
-            "Thiết bị và rủi ro",
-            "Ticket workspace",
-            "Bất thường và lỗi lặp lại",
-            "Trợ lý bảo trì",
-        ]
+    st.warning(
+        "Streamlit là client development legacy. Các workflow được bảo vệ đã bị vô hiệu hóa "
+        "để không tạo đường bypass authentication."
     )
-    with tabs[0]:
-        render_overview(client, assets)
-    with tabs[1]:
-        render_assets_and_risk(client, assets)
-    with tabs[2]:
-        render_ticket_workspace(client, assets)
-    with tabs[3]:
-        render_anomalies_and_recurring(client)
-    with tabs[4]:
-        render_maintenance_copilot(client, assets)
+    st.info(
+        "Sử dụng Next.js tại http://localhost:3000 để đăng nhập, xem analytics, xử lý ticket "
+        "và dùng Maintenance Copilot."
+    )
+    st.metric(
+        "Trạng thái FastAPI",
+        "Đã kết nối" if health.get("status") == "ok" else "Degraded",
+    )
 
 
 def render_overview(client: MaintenanceApiClient, assets: pd.DataFrame) -> None:
@@ -480,7 +465,7 @@ def render_ticket_workspace(client: MaintenanceApiClient, assets: pd.DataFrame) 
         st.info("Chuyển ticket sang Đang xử lý trước khi ghi kết quả kiểm tra.")
 
     st.caption(
-        "Ticket và log được ghi vào raw CSV. Risk/KPI hiện tại giữ nguyên cho đến lần chạy batch "
+        "Ticket và log được ghi vào PostgreSQL. Risk/KPI hiện tại giữ nguyên cho đến lần chạy batch "
         "analytics tiếp theo."
     )
 
@@ -1131,7 +1116,7 @@ def _render_connection_error(api_base_url: str, error: ApiClientError) -> None:
 
 
 def _render_data_error(error: ApiClientError) -> None:
-    st.error("API đã kết nối nhưng CSV nguồn hoặc analytics output chưa sẵn sàng.")
+    st.error("API đã kết nối nhưng transactional storage hoặc analytics output chưa sẵn sàng.")
     st.caption(str(error))
 
 

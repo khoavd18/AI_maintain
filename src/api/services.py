@@ -1,4 +1,4 @@
-"""CSV-backed data access services for the FastAPI layer."""
+"""Storage-neutral transactional services plus CSV-backed batch analytics."""
 
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
@@ -9,13 +9,34 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from src.api.csv_repository import CsvWriteRepository, commit_csv_writes
+from src.asset_management.service import AssetManagementService
+from src.asset_management.storage import LocalAttachmentStorage
 from src.config.value_mappings import (
     MAINTENANCE_RESULT_CODE_TO_VI,
     MAINTENANCE_TYPE_CODE_TO_VI,
     RISK_LEVEL_CODE_TO_VI,
     STATUS_CODE_TO_VI,
 )
+from src.config.settings import get_settings
+from src.database.session import get_session_factory
+from src.repositories.contracts import MaintenanceRepository, StoredRecord
+from src.repositories.csv import (
+    ASSET_REQUIRED_COLUMNS,
+    MAINTENANCE_LOG_REQUIRED_COLUMNS,
+    TICKET_REQUIRED_COLUMNS,
+    CsvMaintenanceRepository,
+)
+from src.repositories.postgres import PostgresMaintenanceRepository
+from src.repositories.postgres_assets import PostgresAssetRepository
+from src.security.audit import AuditContext
+
+__all__ = [
+    "ASSET_REQUIRED_COLUMNS",
+    "MAINTENANCE_LOG_REQUIRED_COLUMNS",
+    "TICKET_REQUIRED_COLUMNS",
+    "ProcessedDataService",
+    "get_processed_data_service",
+]
 
 RAW_DATA_DIR = Path("data/raw")
 PROCESSED_DATA_DIR = Path("data/processed")
@@ -31,7 +52,19 @@ RECURRING_ISSUE_FILE = PROCESSED_DATA_DIR / "recurring_issues.csv"
 MAINTENANCE_KPI_FILE = PROCESSED_DATA_DIR / "maintenance_kpis.csv"
 FACILITY_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 
-TICKET_REQUIRED_COLUMNS = {
+ASSET_COLUMNS = [
+    "asset_id",
+    "asset_name",
+    "asset_type",
+    "location",
+    "criticality",
+    "status",
+    "installation_date",
+    "last_maintenance_date",
+    "maintenance_interval_days",
+    "next_maintenance_date",
+]
+TICKET_COLUMNS = [
     "ticket_id",
     "asset_id",
     "issue_description",
@@ -41,8 +74,10 @@ TICKET_REQUIRED_COLUMNS = {
     "created_at",
     "resolved_at",
     "technician_id",
-}
-MAINTENANCE_LOG_REQUIRED_COLUMNS = {
+    "manager_note",
+    "note",
+]
+MAINTENANCE_LOG_COLUMNS = [
     "log_id",
     "ticket_id",
     "asset_id",
@@ -56,19 +91,7 @@ MAINTENANCE_LOG_REQUIRED_COLUMNS = {
     "maintenance_result",
     "follow_up_required",
     "next_maintenance_date",
-}
-ASSET_REQUIRED_COLUMNS = {
-    "asset_id",
-    "asset_name",
-    "asset_type",
-    "location",
-    "criticality",
-    "status",
-    "installation_date",
-    "last_maintenance_date",
-    "maintenance_interval_days",
-    "next_maintenance_date",
-}
+]
 
 
 class ProcessedDataNotFoundError(FileNotFoundError):
@@ -84,7 +107,7 @@ class TicketNotFoundError(ValueError):
 
 
 class ProcessedDataService:
-    """Read and query raw and processed CSV contracts for the API."""
+    """Compose transactional persistence with immutable batch analytics snapshots."""
 
     def __init__(
         self,
@@ -97,6 +120,8 @@ class ProcessedDataService:
         preventive_path: Path = PREVENTIVE_FILE,
         recurring_issue_path: Path = RECURRING_ISSUE_FILE,
         maintenance_kpi_path: Path = MAINTENANCE_KPI_FILE,
+        repository: MaintenanceRepository | None = None,
+        asset_management: AssetManagementService | None = None,
     ) -> None:
         self.feature_path = feature_path
         self.anomaly_path = anomaly_path
@@ -107,37 +132,42 @@ class ProcessedDataService:
         self.preventive_path = preventive_path
         self.recurring_issue_path = recurring_issue_path
         self.maintenance_kpi_path = maintenance_kpi_path
+        self.repository = repository or CsvMaintenanceRepository(
+            asset_path=asset_path,
+            ticket_path=ticket_path,
+            maintenance_log_path=maintenance_log_path,
+        )
+        settings = get_settings()
+        if asset_management is not None:
+            self.asset_management = asset_management
+        else:
+            session_factory = getattr(self.repository, "session_factory", None)
+            asset_repository = (
+                PostgresAssetRepository(session_factory)
+                if session_factory is not None
+                else None
+            )
+            self.asset_management = AssetManagementService(
+                asset_repository,
+                LocalAttachmentStorage(settings.attachment_storage_root),
+                attachment_max_size_bytes=settings.attachment_max_size_bytes,
+                frontend_base_url=settings.frontend_base_url,
+            )
 
     @property
     def assets(self) -> pd.DataFrame:
-        return _load_csv(
-            self.asset_path,
-            "asset master",
-            date_columns=[
-                "installation_date",
-                "last_maintenance_date",
-                "next_maintenance_date",
-            ],
-        )
+        return _repository_frame(self.repository.list_assets(), ASSET_COLUMNS)
 
     @property
     def tickets(self) -> pd.DataFrame:
-        return _load_csv(
-            self.ticket_path,
-            "maintenance tickets",
-            datetime_columns=["created_at", "resolved_at"],
-        )
+        return _repository_frame(self.repository.list_tickets(), TICKET_COLUMNS)
 
     @property
     def maintenance_logs(self) -> pd.DataFrame:
-        frame = _load_csv(
-            self.maintenance_log_path,
-            "maintenance logs",
-            date_columns=["maintenance_date", "next_maintenance_date"],
+        return _repository_frame(
+            self.repository.list_maintenance_logs(),
+            MAINTENANCE_LOG_COLUMNS,
         )
-        if "follow_up_required" in frame.columns:
-            frame["follow_up_required"] = _boolean_series(frame["follow_up_required"])
-        return frame
 
     @property
     def features(self) -> pd.DataFrame:
@@ -204,7 +234,11 @@ class ProcessedDataService:
     def get_health(self) -> dict[str, object]:
         """Return availability without making optional RAG a health dependency."""
 
-        raw_available = all(path.exists() for path in self._raw_paths())
+        try:
+            self.repository.check_health()
+            raw_available = True
+        except (OSError, RuntimeError, ValueError):
+            raw_available = False
         analytics_available = self._analytics_available()
         return {
             "status": "ok" if raw_available and analytics_available else "degraded",
@@ -288,9 +322,7 @@ class ProcessedDataService:
         return _records(overview)
 
     def get_asset(self, asset_id: str) -> dict[str, Any]:
-        assets = self.assets
-        _ensure_asset_exists(asset_id, assets)
-        return _records(assets[assets["asset_id"] == asset_id].head(1))[0]
+        return dict(self._get_asset_record(asset_id).values)
 
     def list_risks(
         self,
@@ -399,6 +431,7 @@ class ProcessedDataService:
         status: str | None = None,
         priority: str | None = None,
         failure_category: str | None = None,
+        technician_id: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         frame = self.tickets
@@ -408,14 +441,21 @@ class ProcessedDataService:
         frame = _filter_equals(frame, "status", status)
         frame = _filter_equals(frame, "priority", priority)
         frame = _filter_equals(frame, "failure_category", failure_category)
+        frame = _filter_equals(frame, "technician_id", technician_id)
         frame = frame.sort_values("created_at", ascending=False).head(limit)
         return _records(frame)
+
+    def get_ticket(self, ticket_id: str) -> dict[str, Any]:
+        """Return one transactional ticket for authorization and workflow views."""
+
+        return dict(self._get_ticket_stored_record(ticket_id).values)
 
     def list_maintenance_logs(
         self,
         asset_id: str | None = None,
         maintenance_result: str | None = None,
         follow_up_required: bool | None = None,
+        technician_id: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         frame = self.maintenance_logs
@@ -425,6 +465,7 @@ class ProcessedDataService:
         frame = _filter_equals(frame, "maintenance_result", maintenance_result)
         if follow_up_required is not None:
             frame = frame[frame["follow_up_required"] == follow_up_required]
+        frame = _filter_equals(frame, "technician_id", technician_id)
         frame = frame.sort_values("maintenance_date", ascending=False).head(limit)
         return _records(frame)
 
@@ -437,17 +478,15 @@ class ProcessedDataService:
         failure_category: str,
         technician_id: str,
         manager_note: str | None = None,
+        audit_context: AuditContext | None = None,
     ) -> dict[str, Any]:
-        """Create one open inspection ticket in the local raw CSV."""
+        """Create one open inspection ticket in configured transactional storage."""
 
         self.get_asset(asset_id)
+        if self.asset_management.repository is not None:
+            self.asset_management.ensure_ticket_allowed(asset_id)
         created_at = _utc_now()
-        repository = CsvWriteRepository(
-            self.ticket_path,
-            id_column="ticket_id",
-            required_columns=TICKET_REQUIRED_COLUMNS,
-        )
-        record = repository.append_generated(
+        record = self.repository.create_ticket(
             {
                 "asset_id": asset_id,
                 "issue_description": issue_description,
@@ -460,16 +499,22 @@ class ProcessedDataService:
                 "manager_note": manager_note,
                 "note": None,
             },
-            prefix="TCK",
+            audit_context=audit_context,
         )
-        return self._get_ticket_record(record["ticket_id"])
+        return dict(record.values)
 
-    def update_ticket(self, ticket_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+    def update_ticket(
+        self,
+        ticket_id: str,
+        updates: dict[str, Any],
+        audit_context: AuditContext | None = None,
+    ) -> dict[str, Any]:
         """Apply a small validated ticket update and enforce linear status transitions."""
 
         if not updates:
             raise ValueError("Cần cung cấp ít nhất một trường để cập nhật.")
-        ticket = self._get_ticket_record(ticket_id)
+        stored_ticket = self._get_ticket_stored_record(ticket_id)
+        ticket = stored_ticket.values
         for field in ("status", "priority", "technician_id"):
             if field in updates and updates[field] is None:
                 raise ValueError(f"{field} không được để trống khi cập nhật.")
@@ -515,13 +560,13 @@ class ProcessedDataService:
         elif "resolved_at" in normalized_updates:
             raise ValueError("resolved_at chỉ được dùng khi ticket ở trạng thái Đã xử lý.")
 
-        repository = CsvWriteRepository(
-            self.ticket_path,
-            id_column="ticket_id",
-            required_columns=TICKET_REQUIRED_COLUMNS,
+        updated = self.repository.update_ticket(
+            ticket_id,
+            normalized_updates,
+            expected_version=stored_ticket.version,
+            audit_context=audit_context,
         )
-        repository.update(ticket_id, normalized_updates)
-        return self._get_ticket_record(ticket_id)
+        return dict(updated.values)
 
     def create_maintenance_log(
         self,
@@ -536,11 +581,14 @@ class ProcessedDataService:
         maintenance_result: str,
         follow_up_required: bool,
         next_maintenance_date: date,
+        audit_context: AuditContext | None = None,
     ) -> dict[str, Any]:
         """Record one technician result without recalculating batch analytics."""
 
-        asset = self.get_asset(asset_id)
-        ticket = self._get_ticket_record(ticket_id)
+        stored_asset = self._get_asset_record(asset_id)
+        asset = stored_asset.values
+        stored_ticket = self._get_ticket_stored_record(ticket_id)
+        ticket = stored_ticket.values
         if ticket["asset_id"] != asset_id:
             raise ValueError("asset_id không khớp với ticket đã chọn.")
         if ticket["status"] != STATUS_CODE_TO_VI["in_progress"]:
@@ -573,12 +621,7 @@ class ProcessedDataService:
                 "follow_up_required không nhất quán với maintenance_result."
             )
 
-        log_repository = CsvWriteRepository(
-            self.maintenance_log_path,
-            id_column="log_id",
-            required_columns=MAINTENANCE_LOG_REQUIRED_COLUMNS,
-        )
-        log_write = log_repository.prepare_append_generated(
+        created = self.repository.create_maintenance_log(
             {
                 "ticket_id": ticket_id,
                 "asset_id": asset_id,
@@ -593,36 +636,34 @@ class ProcessedDataService:
                 "follow_up_required": follow_up_required,
                 "next_maintenance_date": next_maintenance_date.isoformat(),
             },
-            prefix="LOG",
+            last_maintenance_date=maintenance_date,
+            next_maintenance_date=next_maintenance_date,
+            expected_asset_version=stored_asset.version,
+            expected_ticket_version=stored_ticket.version,
+            audit_context=audit_context,
         )
-        asset_repository = CsvWriteRepository(
-            self.asset_path,
-            id_column="asset_id",
-            required_columns=ASSET_REQUIRED_COLUMNS,
-        )
-        asset_write = asset_repository.prepare_update(
-            asset_id,
-            {
-                "last_maintenance_date": maintenance_date.isoformat(),
-                "next_maintenance_date": next_maintenance_date.isoformat(),
-            },
-        )
-        commit_csv_writes([log_write, asset_write])
-        return self._get_maintenance_log_record(log_write.record["log_id"])
+        return dict(created.values)
 
     def _get_ticket_record(self, ticket_id: str) -> dict[str, Any]:
-        frame = self.tickets
-        matches = frame[frame["ticket_id"].astype(str) == ticket_id]
-        if matches.empty:
+        return dict(self._get_ticket_stored_record(ticket_id).values)
+
+    def _get_asset_record(self, asset_id: str) -> StoredRecord:
+        record = self.repository.get_asset(asset_id)
+        if record is None:
+            raise AssetNotFoundError(f"Unknown asset_id: {asset_id}")
+        return record
+
+    def _get_ticket_stored_record(self, ticket_id: str) -> StoredRecord:
+        record = self.repository.get_ticket(ticket_id)
+        if record is None:
             raise TicketNotFoundError(f"Không tìm thấy ticket_id: {ticket_id}")
-        return _records(matches.head(1))[0]
+        return record
 
     def _get_maintenance_log_record(self, log_id: str) -> dict[str, Any]:
-        frame = self.maintenance_logs
-        matches = frame[frame["log_id"].astype(str) == log_id]
-        if matches.empty:
+        record = self.repository.get_maintenance_log(log_id)
+        if record is None:
             raise ValueError(f"Không tìm thấy log_id vừa tạo: {log_id}")
-        return _records(matches.head(1))[0]
+        return dict(record.values)
 
     def get_asset_details(self, asset_id: str, limit: int = 10) -> dict[str, Any]:
         """Return the manager-facing consolidated asset workflow payload."""
@@ -686,9 +727,6 @@ class ProcessedDataService:
             "latest_recommendation": latest_risk.get("recommended_action"),
         }
 
-    def _raw_paths(self) -> list[Path]:
-        return [self.asset_path, self.ticket_path, self.maintenance_log_path]
-
     def _analytics_paths(self) -> list[Path]:
         return [
             self.feature_path,
@@ -730,7 +768,25 @@ class ProcessedDataService:
 
 @lru_cache(maxsize=1)
 def get_processed_data_service() -> ProcessedDataService:
-    return ProcessedDataService()
+    settings = get_settings()
+    if settings.storage_backend == "csv":
+        repository: MaintenanceRepository = CsvMaintenanceRepository(
+            asset_path=ASSET_FILE,
+            ticket_path=TICKET_FILE,
+            maintenance_log_path=MAINTENANCE_LOG_FILE,
+        )
+    else:
+        repository = PostgresMaintenanceRepository(
+            get_session_factory(settings.database_url)
+        )
+    return ProcessedDataService(repository=repository)
+
+
+def _repository_frame(
+    records: list[StoredRecord],
+    columns: list[str],
+) -> pd.DataFrame:
+    return pd.DataFrame([record.values for record in records], columns=columns)
 
 
 def _load_csv(

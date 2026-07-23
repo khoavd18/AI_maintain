@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { vi } from "vitest";
 
 import OverviewPage from "@/app/page";
 import { AnomalyWorkspace } from "@/components/anomaly-workspace";
@@ -9,10 +10,15 @@ import { AssetDetailView } from "@/components/asset-detail-view";
 import { TicketWorkspace } from "@/components/ticket-workspace";
 import {
   anomalyFixture,
+  assetCatalogFixture,
   assetDetailsFixture,
+  assetOptionsFixture,
+  assetProfileFixture,
   assetsFixture,
   healthFixture,
   kpiFixture,
+  logFixture,
+  locationFixture,
   preventiveFixture,
   recurringFixture,
   summaryFixture,
@@ -20,7 +26,21 @@ import {
 } from "@/test/fixtures";
 import { mockApi, renderWithQuery } from "@/test/test-utils";
 
-describe("live read-only screens", () => {
+const pushRoute = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushRoute, replace: vi.fn() }),
+  usePathname: () => "/assets",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+const assetManagementMocks = {
+  "/assets/catalog": assetCatalogFixture,
+  "/assets/options": assetOptionsFixture,
+  "/locations": [locationFixture],
+  "/assets": assetsFixture,
+};
+
+describe("live API screens", () => {
   it("renders overview values from mocked API responses", async () => {
     mockApi({
       "/assets": assetsFixture,
@@ -36,7 +56,16 @@ describe("live read-only screens", () => {
   });
 
   it("renders and filters the live asset list", async () => {
-    mockApi({ "/assets": assetsFixture });
+    mockApi({
+      ...assetManagementMocks,
+      "/assets/catalog": (input: string | URL | Request) => {
+        const query = new URL(input instanceof Request ? input.url : String(input)).searchParams.get("search");
+        const items = query
+          ? assetCatalogFixture.items.filter((asset) => `${asset.asset_id} ${asset.asset_name}`.includes(query))
+          : assetCatalogFixture.items;
+        return { ...assetCatalogFixture, items, total: items.length };
+      },
+    });
     renderWithQuery(<AssetBrowser />);
 
     expect(await screen.findAllByText("GENERATOR_002")).not.toHaveLength(0);
@@ -47,26 +76,21 @@ describe("live read-only screens", () => {
 
   it("keeps missing optional analytics visibly empty", async () => {
     mockApi({
-      "/assets": [
-        {
-          ...assetsFixture[1],
-          risk_score: null,
-          risk_level_code: null,
-          risk_level: null,
-          maintenance_status: null,
-          maintenance_status_display: null,
-        },
-      ],
+      ...assetManagementMocks,
+      "/assets/catalog": { ...assetCatalogFixture, items: [assetCatalogFixture.items[1]], total: 1 },
+      "/assets": [{ ...assetsFixture[1], risk_score: null, risk_level_code: null, risk_level: null, maintenance_status: null, maintenance_status_display: null }],
     });
     renderWithQuery(<AssetBrowser />);
 
-    expect((await screen.findAllByText("Chưa có risk")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Chưa có lịch").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Chưa có batch")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2026-07-02").length).toBeGreaterThan(0);
   });
 
   it("renders live asset details and handles an unknown asset", async () => {
     mockApi({
       "/assets/GENERATOR_002/details?limit=20": assetDetailsFixture,
+      "/assets/GENERATOR_002/profile": assetProfileFixture,
+      "/assets/options": assetOptionsFixture,
     });
     const first = renderWithQuery(<AssetDetailView assetId="GENERATOR_002" />);
     expect(await screen.findByText("Máy phát điện dự phòng 002")).toBeInTheDocument();
@@ -76,18 +100,36 @@ describe("live read-only screens", () => {
 
     mockApi({
       "/assets/UNKNOWN_999/details?limit=20": { status: 404, body: { detail: "missing" } },
+      "/assets/UNKNOWN_999/profile": { status: 404, body: { detail: "missing" } },
     });
     renderWithQuery(<AssetDetailView assetId="UNKNOWN_999" />);
     expect(await screen.findByText("Không tìm thấy UNKNOWN_999")).toBeInTheDocument();
   });
 
-  it("renders tickets from the API without enabled write controls", async () => {
-    mockApi({ "/tickets?limit=1000": ticketsFixture, "/assets": assetsFixture });
+  it("keeps transactional asset management available when analytics is unavailable", async () => {
+    mockApi({
+      "/assets/GENERATOR_002/profile": assetProfileFixture,
+      "/assets/GENERATOR_002/details?limit=20": { status: 503, body: { detail: "analytics unavailable" } },
+      "/assets/options": assetOptionsFixture,
+    });
+    renderWithQuery(<AssetDetailView assetId="GENERATOR_002" />);
+
+    expect(await screen.findByText("Hồ sơ kỹ thuật và lifecycle")).toBeInTheDocument();
+    expect(await screen.findByText("Analytics batch chưa sẵn sàng")).toBeInTheDocument();
+    expect(screen.getByText("Cummins")).toBeInTheDocument();
+  });
+
+  it("renders tickets from the API with the live workflow entry point", async () => {
+    mockApi({
+      "/tickets?limit=1000": ticketsFixture,
+      "/assets": assetsFixture,
+      "/maintenance/logs?limit=1000": [logFixture],
+    });
     renderWithQuery(<TicketWorkspace />);
 
     expect(await screen.findAllByText("TCK-000041")).not.toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Tạo ticket (sắp kết nối)" })).toBeDisabled();
-    expect(screen.getByText("Live API · chỉ đọc")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tạo ticket" })).toBeEnabled();
+    expect(screen.getByText("Live FastAPI · PostgreSQL transactions")).toBeInTheDocument();
   });
 
   it("renders anomaly events and recurring issues from the API", async () => {
@@ -106,20 +148,21 @@ describe("live read-only screens", () => {
     renderWithQuery(<AppShell><div>Nội dung</div></AppShell>);
 
     expect(await screen.findByText("API: đã kết nối")).toBeInTheDocument();
-    expect(screen.getByText("RAG: chưa kết nối")).toBeInTheDocument();
+    expect(screen.getByText("Analytics: sẵn sàng")).toBeInTheDocument();
+    expect(screen.getByText("RAG: chưa kiểm tra")).toBeInTheDocument();
     expect(screen.getByText("Dữ liệu synthetic")).toBeInTheDocument();
   });
 
   it("shows empty and safe 503 states", async () => {
-    mockApi({ "/assets": [] });
+    mockApi({ ...assetManagementMocks, "/assets/catalog": { ...assetCatalogFixture, items: [], total: 0, total_pages: 0 }, "/assets": [] });
     const empty = renderWithQuery(<AssetBrowser />);
-    expect(await screen.findByText("Không tìm thấy thiết bị")).toBeInTheDocument();
+    expect(await screen.findByText("Không tìm thấy asset")).toBeInTheDocument();
     empty.unmount();
 
-    mockApi({ "/assets": { status: 503, body: { detail: "D:\\secret\\risk.csv" } } });
+    mockApi({ ...assetManagementMocks, "/assets/catalog": { status: 503, body: { detail: "D:\\secret\\risk.csv" } } });
     renderWithQuery(<AssetBrowser />);
-    expect(await screen.findByText("Chưa tải được danh mục thiết bị")).toBeInTheDocument();
-    expect(screen.getByText(/batch analytics/)).toBeInTheDocument();
+    expect(await screen.findByText("Chưa tải được danh mục asset")).toBeInTheDocument();
+    expect(screen.getByText(/FastAPI/)).toBeInTheDocument();
     expect(screen.queryByText(/secret/)).not.toBeInTheDocument();
   });
 });

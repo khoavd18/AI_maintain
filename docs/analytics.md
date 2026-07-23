@@ -1,10 +1,10 @@
 # Analytics Pipeline Canonical
 
-> Ticket và maintenance log được ghi từ dashboard là raw inputs cho lần chạy batch tiếp theo. Write endpoints không thay đổi feature, anomaly, risk, preventive, recurring hoặc KPI output ngay tại thời điểm lưu.
+> Ticket và maintenance log được ghi vào PostgreSQL. Chỉ database-to-analytics snapshot tiếp theo mới biến chúng thành batch inputs; write endpoints không thay đổi feature, anomaly, risk, preventive, recurring hoặc KPI output ngay tại thời điểm lưu.
 
 ## Phạm Vi
 
-Analytics chạy theo batch trên synthetic CSV data. Kết quả dùng để ưu tiên kiểm tra và hỗ trợ giải thích; không phải failure probability, không dự đoán thời điểm hỏng và không tự động quyết định maintenance action.
+Analytics chạy theo batch trên validated CSV snapshot gồm PostgreSQL transactions và generated operational data. Kết quả dùng để ưu tiên kiểm tra và hỗ trợ giải thích; không phải failure probability, không dự đoán thời điểm hỏng và không tự động quyết định maintenance action.
 
 Production path chỉ sử dụng:
 
@@ -114,6 +114,31 @@ Output: `data/processed/maintenance_kpis.csv`, gồm một snapshot tại ngày 
 | `high_critical_risk_asset_count` | Assets ở level `high` hoặc `critical` tại ngày risk mới nhất |
 
 Average/median resolution time không được gọi là MTTR vì ticket data không bảo đảm mọi ticket là repair event. Pipeline không tính MTBF do không có failure-event contract đủ chặt.
+
+## Product Milestone 4 Compatibility Bridge
+
+Preventive plans và work orders là PostgreSQL transactional views, không thay formula analytics ở trên.
+
+- Mỗi plan giữ `next_due_date` riêng. Transactional `assets.next_maintenance_date` là ngày sớm nhất của active plans sau verified maintenance; nếu không có active plan, service giữ legacy interval/log fallback.
+- Work-order completion tạo một MaintenanceLog nhưng chưa đổi Risk Score/KPI processed CSV. Verification cập nhật transactional asset maintenance dates, nhưng analytics chỉ thấy dữ liệu sau `export_snapshot` và full batch run.
+- Existing CSV validator yêu cầu fixed interval. Vì vậy `export_snapshot` tạo compatibility projection: asset `next_maintenance_date = last_maintenance_date + maintenance_interval_days`, và log `next_maintenance_date = maintenance_date + maintenance_interval_days`. PostgreSQL vẫn giữ nguyên plan-derived operational dates.
+- Preventive plan/work-order calendar và work-order metrics là operational views từ PostgreSQL. Existing batch preventive/KPI formulas tiếp tục dùng legacy interval projection trong milestone này; không diễn giải hai view là cùng một scheduling metric.
+- Work-order status/checklist/evidence không được thêm làm feature, anomaly hoặc risk input trong milestone này.
+
+`GET /work-orders/metrics` là reporting transaction riêng, không thay `maintenance_kpis.csv`:
+
+| Metric | Định nghĩa |
+|---|---|
+| `total_work_orders` | Số WO trong PostgreSQL query scope hiện tại |
+| `by_status` | Count theo canonical WO status |
+| `overdue_count` | Non-verified/non-cancelled WO khi `due_date + grace_period_days < as_of_date` |
+| `upcoming_preventive_count` | Preventive WO non-terminal có due date trong `[as_of_date, as_of_date + 30 ngày]` |
+| `completed_count` | WO ở `completed` hoặc `verified` |
+| `verified_count` | WO ở `verified` |
+| `completed_on_time_count` | Completed/verified WO có `completed_at` không sau due + grace |
+| `technician_workload.open_count` | Assigned WO chưa verified/cancelled theo technician |
+
+Các metric được gắn nhãn synthetic/internal-pilot. Completion percentage không được gọi là reliability/predictive accuracy; MTTR, MTBF, downtime và cost vẫn ngoài scope.
 
 ## Limitations
 

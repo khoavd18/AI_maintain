@@ -1,11 +1,17 @@
 export type ApiErrorCode =
   | "configuration"
+  | "unauthenticated"
+  | "forbidden"
   | "not_found"
   | "validation"
   | "analytics_unavailable"
+  | "rag_unavailable"
   | "network"
   | "timeout"
   | "invalid_response"
+  | "business_rule"
+  | "conflict"
+  | "write_unavailable"
   | "server";
 
 interface ApiErrorOptions {
@@ -13,19 +19,32 @@ interface ApiErrorOptions {
   message: string;
   status?: number;
   retryable?: boolean;
+  ambiguousWrite?: boolean;
+  fieldErrors?: Record<string, string>;
 }
 
 export class UserSafeApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status?: number;
   readonly retryable: boolean;
+  readonly ambiguousWrite: boolean;
+  readonly fieldErrors: Record<string, string>;
 
-  constructor({ code, message, status, retryable = false }: ApiErrorOptions) {
+  constructor({
+    code,
+    message,
+    status,
+    retryable = false,
+    ambiguousWrite = false,
+    fieldErrors = {},
+  }: ApiErrorOptions) {
     super(message);
     this.name = "UserSafeApiError";
     this.code = code;
     this.status = status;
     this.retryable = retryable;
+    this.ambiguousWrite = ambiguousWrite;
+    this.fieldErrors = fieldErrors;
   }
 }
 

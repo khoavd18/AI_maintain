@@ -95,3 +95,23 @@
     cursor: pointer;
   }
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .qr-print-label,
+  .qr-print-label * {
+    visibility: visible;
+  }
+
+  .qr-print-label {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: 700px;
+    border: 0;
+    box-shadow: none;
+  }
+}

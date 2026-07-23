@@ -3,12 +3,16 @@
 from fastapi.testclient import TestClient
 
 from src.api.main import create_app
+from src.api.routes import _service
+from src.api.services import ProcessedDataService
 
 
 def test_health_endpoint_returns_ok() -> None:
     """The API should expose a minimal health endpoint."""
 
-    client = TestClient(create_app())
+    app = create_app()
+    app.dependency_overrides[_service] = lambda: ProcessedDataService()
+    client = TestClient(app)
 
     response = client.get("/health")
 

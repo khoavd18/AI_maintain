@@ -19,7 +19,7 @@ class ApiClientError(RuntimeError):
 
 @dataclass(frozen=True)
 class MaintenanceApiClient:
-    """HTTP client for the CSV-backed maintenance intelligence API."""
+    """HTTP client for the maintenance intelligence API."""
 
     base_url: str = DEFAULT_API_BASE_URL
     timeout: float = DEFAULT_TIMEOUT_SECONDS

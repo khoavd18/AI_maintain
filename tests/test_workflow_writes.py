@@ -23,6 +23,7 @@ from src.api.services import (
     TICKET_REQUIRED_COLUMNS,
     ProcessedDataService,
 )
+from tests.auth_helpers import authorize_app
 
 
 @pytest.fixture
@@ -72,6 +73,7 @@ def workflow(tmp_path: Path) -> dict[str, Any]:
     )
     app = create_app()
     app.dependency_overrides[_service] = lambda: service
+    authorize_app(app)
     return {
         "client": TestClient(app),
         "service": service,

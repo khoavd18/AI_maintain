@@ -1,12 +1,17 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, MapPin, TicketPlus } from "lucide-react";
 
+import { useAuth } from "@/components/auth-provider";
 import { MaintenanceBadge, RiskBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Asset } from "@/lib/types";
+import { permissions } from "@/lib/auth";
 
 export function AssetSummaryCard({ asset }: { asset: Asset }) {
+  const auth = useAuth();
   return (
     <Card size="sm" className="relative transition-colors hover:bg-muted/30 hover:ring-primary/30">
       <Link
@@ -43,12 +48,12 @@ export function AssetSummaryCard({ asset }: { asset: Asset }) {
               <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
-          <Button asChild className="flex-1">
+          {auth.can(permissions.ticketsCreate) && <Button asChild className="flex-1">
             <Link href={`/tickets?asset=${asset.id}&action=create`}>
               <TicketPlus aria-hidden="true" />
               Tạo ticket
             </Link>
-          </Button>
+          </Button>}
         </div>
       </CardContent>
     </Card>

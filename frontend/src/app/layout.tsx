@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { AppShell } from "@/components/app-shell";
+import { AuthenticatedApplication, AuthProvider } from "@/components/auth-provider";
 import { QueryProvider } from "@/components/query-provider";
-import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
 
@@ -34,9 +33,9 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <QueryProvider>
-          <TooltipProvider>
-            <AppShell>{children}</AppShell>
-          </TooltipProvider>
+          <AuthProvider>
+            <AuthenticatedApplication>{children}</AuthenticatedApplication>
+          </AuthProvider>
         </QueryProvider>
       </body>
     </html>

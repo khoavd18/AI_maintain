@@ -1,0 +1,184 @@
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import { MaintenancePlanWorkspace } from "@/components/maintenance-plan-workspace";
+import { WorkOrderDetail } from "@/components/work-order-detail";
+import { permissions } from "@/lib/auth";
+import type { UserResponse } from "@/lib/api/schemas";
+import { mockApi, renderWithQuery } from "@/test/test-utils";
+
+const workOrderId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const technicianId = "33333333-3333-4333-8333-333333333333";
+
+describe("maintenance planning workspace", () => {
+  it("shows recurrence, status, and authorized generation actions", async () => {
+    mockApi({
+      "/maintenance-plans": {
+        items: [planFixture],
+        page: 1,
+        page_size: 100,
+        total: 1,
+        total_pages: 1,
+      },
+    });
+    renderWithQuery(<MaintenancePlanWorkspace />);
+    expect((await screen.findAllByText("PM-GENERATOR-001")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Mỗi 1 tháng").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Dry run" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Tạo plan/ })).toHaveAttribute("href", "/maintenance/plans/new");
+  });
+});
+
+describe("work-order technician workflow", () => {
+  it("shows execution controls but hides verification for a technician", async () => {
+    mockWorkOrderApi(workOrderFixture);
+    renderWithQuery(<WorkOrderDetail workOrderId={workOrderId} />, technicianUser);
+    expect(await screen.findByText("WO-2026-000001")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bắt đầu/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Xác minh kỹ thuật/ })).not.toBeInTheDocument();
+  });
+
+  it("surfaces a stale-version conflict and offers state refresh", async () => {
+    const fetchMock = mockWorkOrderApi(workOrderFixture, {
+      body: { detail: "Work order đã được người khác cập nhật. Hãy tải trạng thái mới." },
+      status: 409,
+    });
+    renderWithQuery(<WorkOrderDetail workOrderId={workOrderId} />, technicianUser);
+    fireEvent.click(await screen.findByRole("button", { name: /Bắt đầu/ }));
+    expect(await screen.findByText(/đã được người khác cập nhật/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tải trạng thái mới/ })).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(`/work-orders/${workOrderId}/transition`),
+      expect.objectContaining({ method: "POST" }),
+    ));
+  });
+});
+
+function mockWorkOrderApi(workOrder: typeof workOrderFixture, transitionResponse: unknown = { ...workOrderFixture, status: "in_progress", status_display: "Đang thực hiện", started_at: "2026-07-20T02:00:00Z", version: 2 }) {
+  return mockApi({
+    [`/work-orders/${workOrderId}`]: workOrder,
+    "/maintenance/options": maintenanceOptions,
+    [`/work-orders/${workOrderId}/attachments`]: [],
+    [`POST /work-orders/${workOrderId}/transition`]: transitionResponse,
+  });
+}
+
+const technicianUser: UserResponse = {
+  id: technicianId,
+  username: "technician.test",
+  email: null,
+  display_name: "Kỹ thuật viên test",
+  role: "technician",
+  role_display_name: "Kỹ thuật viên",
+  permissions: [
+    permissions.workOrdersRead,
+    permissions.workOrdersExecute,
+    permissions.workOrdersComplete,
+    permissions.workOrderAttachmentsRead,
+    permissions.workOrderAttachmentsCreate,
+  ],
+  technician_id: "TECH_002",
+  is_active: true,
+  created_at: "2026-07-20T00:00:00Z",
+  updated_at: "2026-07-20T00:00:00Z",
+  last_login_at: null,
+  version: 1,
+};
+
+const maintenanceOptions = {
+  plan_statuses: [{ code: "active", display_name: "Đang hoạt động" }],
+  interval_units: [{ code: "month", display_name: "Tháng" }],
+  work_order_types: [{ code: "preventive", display_name: "Phòng ngừa" }],
+  work_order_statuses: [{ code: "assigned", display_name: "Đã phân công" }],
+  checklist_response_types: [{ code: "checkbox", display_name: "Checkbox" }],
+  priorities: [{ code: "high", display_name: "Cao" }],
+  maintenance_results: [{ code: "resolved", display_name: "Đã xử lý" }],
+  evidence_categories: [{ code: "before_photo", display_name: "Ảnh trước bảo trì" }],
+  technicians: [{ id: technicianId, display_name: "Kỹ thuật viên test", role: "technician", technician_id: "TECH_002", is_active: true }],
+};
+
+const planFixture = {
+  id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  plan_code: "PM-GENERATOR-001",
+  name: "Bảo trì máy phát hàng tháng",
+  description: "Kế hoạch preventive có kiểm soát.",
+  asset_id: "GENERATOR_002",
+  asset_name: "Máy phát điện dự phòng 002",
+  schedule_type: "interval",
+  interval_value: 1,
+  interval_unit: "month",
+  recurrence_summary: "Mỗi 1 tháng",
+  recurrence_rule: null,
+  start_date: "2026-07-20",
+  end_date: "2027-07-20",
+  local_timezone: "Asia/Ho_Chi_Minh",
+  lead_time_days: 7,
+  grace_period_days: 1,
+  next_due_date: "2026-07-20",
+  last_generated_due_date: null,
+  estimated_duration_minutes: 90,
+  default_priority: "high",
+  default_priority_display: "Cao",
+  default_assignee_user_id: technicianId,
+  default_assignee_name: "Kỹ thuật viên test",
+  checklist_template_id: null,
+  checklist_template_name: null,
+  instructions: null,
+  status: "active",
+  status_display: "Đang hoạt động",
+  is_active: true,
+  paused_at: null,
+  archived_at: null,
+  archive_reason: null,
+  created_by_user_id: "11111111-1111-4111-8111-111111111111",
+  updated_by_user_id: "11111111-1111-4111-8111-111111111111",
+  created_at: "2026-07-20T00:00:00Z",
+  updated_at: "2026-07-20T00:00:00Z",
+  version: 1,
+};
+
+const workOrderFixture = {
+  id: workOrderId,
+  work_order_number: "WO-2026-000001",
+  title: "Kiểm tra máy phát điện",
+  description: "Thực hiện checklist an toàn.",
+  work_order_type: "preventive",
+  work_order_type_display: "Phòng ngừa",
+  asset_id: "GENERATOR_002",
+  asset_name: "Máy phát điện dự phòng 002",
+  location: "Sân thượng phía Đông",
+  preventive_plan_id: planFixture.id,
+  preventive_plan_code: planFixture.plan_code,
+  source_ticket_id: null,
+  assigned_to_user_id: technicianId,
+  assigned_to_name: "Kỹ thuật viên test",
+  created_by_user_id: "11111111-1111-4111-8111-111111111111",
+  verified_by_user_id: null,
+  verified_by_name: null,
+  maintenance_log_id: null,
+  priority: "high",
+  priority_display: "Cao",
+  scheduled_start_at: null,
+  scheduled_end_at: null,
+  due_date: "2026-07-20",
+  local_timezone: "Asia/Ho_Chi_Minh",
+  grace_period_days: 1,
+  is_overdue: false,
+  estimated_duration_minutes: 90,
+  started_at: null,
+  completed_at: null,
+  verified_at: null,
+  cancelled_at: null,
+  cancellation_reason: null,
+  completion_summary: null,
+  safety_notes: null,
+  labor_minutes: null,
+  status: "assigned",
+  status_display: "Đã phân công",
+  hold_reason: null,
+  created_at: "2026-07-20T00:00:00Z",
+  updated_at: "2026-07-20T00:00:00Z",
+  version: 1,
+  checklist: [],
+  history: [],
+};

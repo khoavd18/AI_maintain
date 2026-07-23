@@ -4,15 +4,19 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
+  Bot,
   CalendarClock,
   CircleCheckBig,
+  ClipboardList,
   Clock3,
   Repeat2,
   TicketCheck,
   TicketPlus,
+  ShieldCheck,
   Wrench,
 } from "lucide-react";
 
+import { useAuth } from "@/components/auth-provider";
 import { DataTableShell } from "@/components/data-table-shell";
 import { OverviewCharts, type DistributionDatum } from "@/components/dashboard-charts";
 import { KpiCard } from "@/components/kpi-card";
@@ -27,10 +31,13 @@ import {
   useMaintenanceKpisQuery,
   usePreventiveQuery,
   useTicketsQuery,
+  useWorkOrderMetricsQuery,
 } from "@/hooks/use-api-queries";
 import { adaptAsset, adaptTicket } from "@/lib/adapters";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import { permissions } from "@/lib/auth";
 import { formatDurationHours, formatPercentage } from "@/lib/formatters";
+import { todayIso } from "@/lib/maintenance";
 
 const riskOrder = ["Thấp", "Trung bình", "Cao", "Khẩn cấp"] as const;
 const riskColors = ["#16a34a", "#d97706", "#ea580c", "#dc2626"];
@@ -40,10 +47,12 @@ const preventiveOrder = ["Chưa đến hạn", "Sắp đến hạn", "Quá hạn
 const preventiveColors = ["#16a34a", "#d97706", "#dc2626"];
 
 export default function OverviewPage() {
+  const auth = useAuth();
   const assetsQuery = useAssetsQuery();
   const ticketsQuery = useTicketsQuery({ limit: 1000 });
   const kpisQuery = useMaintenanceKpisQuery();
   const preventiveQuery = usePreventiveQuery();
+  const workOrderMetrics = useWorkOrderMetricsQuery(todayIso(), auth.can(permissions.workOrdersRead));
   const queries = [assetsQuery, ticketsQuery, kpisQuery, preventiveQuery];
 
   if (queries.some((query) => query.isPending)) {
@@ -112,6 +121,19 @@ export default function OverviewPage() {
         <SecondaryStat label="Log cần theo dõi" value={String(kpis.follow_up_required_maintenance_count)} icon={CalendarClock} />
       </section>
 
+      {workOrderMetrics.data && (
+        <section aria-label="Điều phối work order" className="mt-6">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2"><div><h2 className="text-base font-semibold">Điều phối work order</h2><p className="mt-1 text-sm text-muted-foreground">Transactional view từ PostgreSQL, tách biệt với Risk Score batch.</p></div><Button asChild variant="ghost" size="sm"><Link href="/work-orders">Mở workspace<ArrowRight aria-hidden="true" /></Link></Button></div>
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <KpiCard label="Work order quá hạn" value={String(workOrderMetrics.data.overdue_count)} detail="Due date + grace period" icon={AlertTriangle} tone="red" />
+            <KpiCard label="Preventive sắp tới" value={String(workOrderMetrics.data.upcoming_preventive_count)} detail="Occurrence chưa phát hành" icon={CalendarClock} tone="blue" />
+            <KpiCard label="Đã hoàn tất" value={String(workOrderMetrics.data.completed_count)} detail="Bao gồm trạng thái verified" icon={ClipboardList} tone="amber" />
+            <KpiCard label="Đã xác minh" value={String(workOrderMetrics.data.verified_count)} detail="Có người xác minh độc lập" icon={ShieldCheck} tone="blue" />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">{workOrderMetrics.data.data_notice}</p>
+        </section>
+      )}
+
       <section aria-labelledby="today-priority" className="mt-6 overflow-hidden rounded-lg border border-orange-200 bg-white">
         <header className="flex flex-col justify-between gap-3 border-b border-orange-100 bg-orange-50 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
           <div>
@@ -145,7 +167,10 @@ export default function OverviewPage() {
               <p className="mt-3 text-sm leading-5">{asset.contributingFactors}</p>
               <div className="mt-3 flex gap-2">
                 <Button asChild variant="outline" className="flex-1"><Link href={`/assets/${asset.id}`}>Xem thiết bị</Link></Button>
-                <Button asChild className="flex-1"><Link href={`/tickets?asset=${asset.id}&action=create`}><TicketPlus aria-hidden="true" />Tạo ticket</Link></Button>
+                {auth.can(permissions.copilotUse) && <Button asChild variant="outline" size="icon" title="Mở Copilot theo thiết bị">
+                  <Link href={`/copilot?asset=${asset.id}`} aria-label={`Mở Copilot cho ${asset.id}`}><Bot aria-hidden="true" /></Link>
+                </Button>}
+                {auth.can(permissions.ticketsCreate) && <Button asChild className="flex-1"><Link href={`/tickets?asset=${asset.id}&action=create`}><TicketPlus aria-hidden="true" />Tạo ticket</Link></Button>}
               </div>
             </article>
           ))}
@@ -161,7 +186,7 @@ export default function OverviewPage() {
                   <TableCell><p className="font-mono text-xs font-medium text-primary">{asset.id}</p><p className="mt-1 max-w-52 truncate text-xs text-muted-foreground">{asset.name}</p></TableCell>
                   <TableCell><div className="flex flex-wrap gap-1.5">{asset.riskLevel && <RiskBadge level={asset.riskLevel} />}{asset.maintenanceStatus && <MaintenanceBadge status={asset.maintenanceStatus} />}</div><p className="mt-1.5 text-xs text-muted-foreground">Risk {asset.riskScore?.toFixed(2) ?? "chưa có dữ liệu"}</p></TableCell>
                   <TableCell className="max-w-md text-sm text-muted-foreground"><p className="line-clamp-2">{asset.contributingFactors}</p></TableCell>
-                  <TableCell><div className="flex justify-end gap-2"><Button asChild variant="outline" size="sm"><Link href={`/assets/${asset.id}`}>Xem thiết bị</Link></Button><Button asChild size="sm"><Link href={`/tickets?asset=${asset.id}&action=create`}>Tạo ticket</Link></Button></div></TableCell>
+                  <TableCell><div className="flex justify-end gap-2"><Button asChild variant="outline" size="sm"><Link href={`/assets/${asset.id}`}>Xem thiết bị</Link></Button>{auth.can(permissions.copilotUse) && <Button asChild variant="outline" size="icon-sm" title="Mở Copilot theo thiết bị"><Link href={`/copilot?asset=${asset.id}`} aria-label={`Mở Copilot cho ${asset.id}`}><Bot aria-hidden="true" /></Link></Button>}{auth.can(permissions.ticketsCreate) && <Button asChild size="sm"><Link href={`/tickets?asset=${asset.id}&action=create`}>Tạo ticket</Link></Button>}</div></TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -1,8 +1,9 @@
 """API request and response schemas."""
 
 from datetime import date, datetime
-from typing import Literal
 from typing import Any
+from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -113,6 +114,315 @@ class AssetOverviewRecord(AssetRecord):
     days_until_due: int | None = Field(default=None, ge=0)
     days_overdue: int | None = Field(default=None, ge=0)
     unresolved_ticket_count: int | None = Field(default=None, ge=0)
+
+
+class AssetProfileResponse(AssetRecord):
+    """Canonical asset lifecycle profile with legacy fields retained."""
+
+    asset_type_code: Literal["hvac", "pump", "generator"]
+    asset_category: Literal[
+        "climate_control", "water_system", "power_system", "other"
+    ]
+    asset_category_display: str
+    manufacturer: str | None
+    model: str | None
+    serial_number: str | None
+    production_year: int | None
+    location_id: UUID | None
+    location_breadcrumb: str
+    criticality_code: Literal["low", "medium", "high", "critical"]
+    lifecycle_status: Literal["planned", "active", "inactive", "retired", "archived"]
+    lifecycle_status_display: str
+    lifecycle_status_before_archive: str | None
+    operational_status: Literal[
+        "running", "warning", "fault", "under_maintenance", "out_of_service"
+    ]
+    operational_status_display: str
+    operational_status_before_archive: str | None
+    installed_at: str
+    commissioned_at: str | None
+    retired_at: str | None
+    archived_at: str | None
+    archive_reason: str | None
+    ownership_type: Literal["owned", "leased", "managed"]
+    ownership_type_display: str
+    description: str | None
+    warranty_start_date: str | None
+    warranty_end_date: str | None
+    warranty_provider: str | None
+    warranty_reference: str | None
+    created_at: str
+    updated_at: str
+    created_by_user_id: UUID | None
+    updated_by_user_id: UUID | None
+    version: int = Field(ge=1)
+    qr_lookup_token: UUID
+
+
+class AssetCatalogPage(BaseModel):
+    """Paginated asset-management catalog."""
+
+    items: list[AssetProfileResponse]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
+    total_pages: int = Field(ge=0)
+
+
+class AssetCreateRequest(BaseModel):
+    """Explicit fields accepted when registering an asset."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    asset_id: str = Field(
+        min_length=2,
+        max_length=50,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
+    asset_name: str = Field(min_length=2, max_length=200)
+    asset_type: Literal["hvac", "pump", "generator"]
+    asset_category: Literal[
+        "climate_control", "water_system", "power_system", "other"
+    ] = "other"
+    manufacturer: str | None = Field(default=None, max_length=200)
+    model: str | None = Field(default=None, max_length=200)
+    serial_number: str | None = Field(default=None, max_length=150)
+    production_year: int | None = Field(default=None, ge=1900, le=2200)
+    location_id: UUID
+    criticality: Literal["low", "medium", "high", "critical"]
+    lifecycle_status: Literal["planned", "active", "inactive"] = "active"
+    operational_status: Literal[
+        "running", "warning", "fault", "under_maintenance", "out_of_service"
+    ] = "running"
+    installed_at: datetime
+    commissioned_at: datetime | None = None
+    ownership_type: Literal["owned", "leased", "managed"] = "owned"
+    description: str | None = Field(default=None, max_length=4000)
+    warranty_start_date: date | None = None
+    warranty_end_date: date | None = None
+    warranty_provider: str | None = Field(default=None, max_length=200)
+    warranty_reference: str | None = Field(default=None, max_length=200)
+    maintenance_interval_days: int = Field(gt=0, le=3650)
+    last_maintenance_date: date
+    next_maintenance_date: date
+
+    @field_validator("installed_at", "commissioned_at")
+    @classmethod
+    def require_zoned_timestamp(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("Timestamp phải có timezone.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_chronology(self) -> "AssetCreateRequest":
+        if self.commissioned_at and self.commissioned_at < self.installed_at:
+            raise ValueError("commissioned_at không được sớm hơn installed_at.")
+        if (
+            self.warranty_start_date
+            and self.warranty_end_date
+            and self.warranty_end_date < self.warranty_start_date
+        ):
+            raise ValueError("warranty_end_date không được sớm hơn warranty_start_date.")
+        if self.next_maintenance_date < self.last_maintenance_date:
+            raise ValueError(
+                "next_maintenance_date không được sớm hơn last_maintenance_date."
+            )
+        return self
+
+
+class AssetUpdateRequest(BaseModel):
+    """Bounded asset profile update with optimistic version."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    expected_version: int = Field(ge=1)
+    asset_name: str | None = Field(default=None, min_length=2, max_length=200)
+    asset_type: Literal["hvac", "pump", "generator"] | None = None
+    asset_category: Literal[
+        "climate_control", "water_system", "power_system", "other"
+    ] | None = None
+    manufacturer: str | None = Field(default=None, max_length=200)
+    model: str | None = Field(default=None, max_length=200)
+    serial_number: str | None = Field(default=None, max_length=150)
+    production_year: int | None = Field(default=None, ge=1900, le=2200)
+    location_id: UUID | None = None
+    criticality: Literal["low", "medium", "high", "critical"] | None = None
+    installed_at: datetime | None = None
+    commissioned_at: datetime | None = None
+    ownership_type: Literal["owned", "leased", "managed"] | None = None
+    description: str | None = Field(default=None, max_length=4000)
+    warranty_start_date: date | None = None
+    warranty_end_date: date | None = None
+    warranty_provider: str | None = Field(default=None, max_length=200)
+    warranty_reference: str | None = Field(default=None, max_length=200)
+    maintenance_interval_days: int | None = Field(default=None, gt=0, le=3650)
+    last_maintenance_date: date | None = None
+    next_maintenance_date: date | None = None
+
+    @field_validator("installed_at", "commissioned_at")
+    @classmethod
+    def require_zoned_timestamp(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("Timestamp phải có timezone.")
+        return value
+
+    @model_validator(mode="after")
+    def require_update(self) -> "AssetUpdateRequest":
+        if not (self.model_fields_set - {"expected_version"}):
+            raise ValueError("Cần cung cấp ít nhất một field để cập nhật.")
+        return self
+
+
+class OperationalStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operational_status: Literal[
+        "running", "warning", "fault", "under_maintenance", "out_of_service"
+    ]
+    expected_version: int = Field(ge=1)
+
+
+class LifecycleTransitionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lifecycle_status: Literal["planned", "active", "inactive", "retired"]
+    expected_version: int = Field(ge=1)
+
+
+class AssetArchiveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    archive_reason: str = Field(min_length=5, max_length=1000)
+    expected_version: int = Field(ge=1)
+
+
+class AssetRestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    lifecycle_status: Literal["planned", "active", "inactive"] | None = None
+
+
+class LocationRecord(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    location_type: Literal["building", "floor", "room", "area", "plant"]
+    location_type_display: str
+    parent_id: UUID | None
+    breadcrumb: str
+    description: str | None
+    is_active: bool
+    asset_count: int = Field(ge=0)
+    created_at: str
+    updated_at: str
+    version: int = Field(ge=1)
+
+
+class LocationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    code: str = Field(min_length=2, max_length=50, pattern=r"^[A-Za-z0-9_-]+$")
+    name: str = Field(min_length=2, max_length=200)
+    location_type: Literal["building", "floor", "room", "area", "plant"]
+    parent_id: UUID | None = None
+    description: str | None = Field(default=None, max_length=2000)
+
+
+class LocationUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    expected_version: int = Field(ge=1)
+    code: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=50,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
+    name: str | None = Field(default=None, min_length=2, max_length=200)
+    location_type: Literal["building", "floor", "room", "area", "plant"] | None = None
+    parent_id: UUID | None = None
+    description: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_update(self) -> "LocationUpdateRequest":
+        if not (self.model_fields_set - {"expected_version"}):
+            raise ValueError("Cần cung cấp ít nhất một field để cập nhật.")
+        return self
+
+
+class VersionedRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+
+
+class AssetAttachmentRecord(BaseModel):
+    id: UUID
+    asset_id: str
+    category: Literal[
+        "asset_photo",
+        "technical_manual",
+        "warranty_document",
+        "commissioning_record",
+        "inspection_document",
+        "other",
+    ]
+    category_display: str
+    original_filename: str
+    media_type: Literal["application/pdf", "image/png", "image/jpeg"]
+    size_bytes: int = Field(gt=0)
+    checksum: str = Field(min_length=64, max_length=64)
+    uploaded_by_user_id: UUID
+    created_at: str
+    deleted_at: str | None
+    deleted_by_user_id: UUID | None
+    storage_cleanup_pending: bool | None = None
+
+
+class AssetQrResponse(BaseModel):
+    asset_id: str
+    lookup_token: UUID
+    lookup_url: str
+    svg_base64: str
+    label_text: str
+
+
+class AssetHistoryEvent(BaseModel):
+    id: str
+    occurred_at: str
+    action: str
+    event_type: str
+    summary: str
+    actor_user_id: UUID | None
+    actor_display_name: str | None
+    resource_type: str
+    resource_id: str | None
+    changed_fields: list[str]
+
+
+class AssetHistoryPage(BaseModel):
+    items: list[AssetHistoryEvent]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
+    total_pages: int = Field(ge=0)
+
+
+class AssetOption(BaseModel):
+    code: str
+    display_name: str
+
+
+class AssetOptionsResponse(BaseModel):
+    asset_types: list[AssetOption]
+    asset_categories: list[AssetOption]
+    criticalities: list[AssetOption]
+    lifecycle_statuses: list[AssetOption]
+    operational_statuses: list[AssetOption]
+    ownership_types: list[AssetOption]
+    location_types: list[AssetOption]
+    attachment_categories: list[AssetOption]
 
 
 class TicketRecord(BaseModel):

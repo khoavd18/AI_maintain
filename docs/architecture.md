@@ -1,165 +1,417 @@
-# Kiến Trúc Canonical Của MVP
+# Kiến Trúc Canonical Cho Internal Pilot
 
 ## Architecture Decision
 
-MVP sử dụng kiến trúc **CSV-first, batch-first**. Raw CSV là primary data source; processed CSV là analytics serving contract. FastAPI là boundary duy nhất cho Streamlit và các client ứng dụng.
+PostgreSQL là runtime transactional source of truth cho asset, hierarchical location, attachment metadata, ticket, preventive maintenance plan, checklist template, standalone work order, maintenance log, user identity, refresh session và audit log. FastAPI vẫn là serving và authorization boundary duy nhất. Product Milestone 4 bổ sung maintenance planning/work orders theo additive API contracts và giữ nguyên legacy asset/ticket/log, analytics và RAG behavior.
 
-PostgreSQL chỉ là optional/experimental adapter để minh họa structured storage. PostgreSQL không cần thiết để generate data, chạy analytics, khởi động FastAPI, mở dashboard hoặc sử dụng các trang không phụ thuộc RAG.
+Analytics vẫn **batch-first**. CSV không còn là mutable runtime source of truth; nó giữ bốn vai trò rõ ràng:
 
-Đây là kiến trúc portfolio/development, không phải production architecture.
+- tạo Vietnamese synthetic data;
+- seed/import và canonical demo reset;
+- snapshot từ PostgreSQL sang input contract của batch analytics;
+- lưu processed feature, anomaly, risk, preventive, recurring issue và KPI outputs.
+
+Qdrant chỉ lưu vector chunks cho RAG retrieval. Kiến trúc này là bước hướng tới internal pilot, chưa phải production-ready architecture.
 
 ## System Map
 
 ```mermaid
 flowchart LR
-    Raw[Raw Vietnamese CSVs<br/>assets, readings, tickets, logs, documents]
-    Validation[CSV validation]
-    Features[Canonical feature pipeline<br/>src/features/build_features.py]
-    Maintenance[Preventive status<br/>recurring issues<br/>maintenance KPIs]
-    Anomaly[Canonical anomaly pipeline<br/>src/models/anomaly_detection.py]
-    Risk[Canonical risk pipeline<br/>src/risk/risk_scoring.py]
-    Processed[Processed CSVs<br/>features, anomalies, risks]
-    API[FastAPI<br/>src/api]
-    WriteRepo[Atomic CSV write repository<br/>tickets, logs + asset dates]
-    Dashboard[Streamlit<br/>src/dashboard/app.py]
-    Web[Next.js frontend<br/>live read-only views]
+    Seed[Canonical synthetic CSV seed<br/>27 assets, 42 tickets, 86 logs]
+    Migration[Alembic migrations]
+    Import[Validated idempotent import]
+    DB[(PostgreSQL<br/>assets + plans + work orders<br/>tickets + logs + identity + audit)]
+    Files[(Private local attachment bytes)]
+    Repo[Repository interfaces<br/>PostgreSQL implementation]
+    Service[Business services<br/>asset + ticket + maintenance planning]
+    API[FastAPI<br/>unchanged contracts]
+    Streamlit[Streamlit legacy health client]
+    Next[Next.js authenticated frontend]
 
-    Raw --> Validation
-    Raw --> API
-    Validation --> Features
-    Validation --> Maintenance
-    Features --> Anomaly
-    Anomaly --> Risk
-    Risk --> Maintenance
-    Features --> Processed
+    Seed --> Import
+    Migration --> DB
+    Import --> DB
+    DB <--> Repo
+    Files <--> Service
+    Repo <--> Service
+    Service <--> API
+    API -->|public health only| Streamlit
+    API <--> Next
+    CLI[Explicit maintenance CLI] --> Service
+    Service -->|deterministic generation| WO[Plan occurrence -> work order]
+    Next -->|opaque authenticated lookup| QR[Mobile web QR route]
+
+    DB --> Snapshot[Validated analytics snapshot]
+    Seed -->|sensor readings + documents| Snapshot
+    Snapshot --> Features[Canonical feature pipeline]
+    Features --> Anomaly[Canonical anomaly pipeline]
+    Anomaly --> Risk[Canonical risk pipeline]
+    Risk --> Reports[Preventive, recurring, KPI snapshots]
+    Features --> Processed[(Processed CSV analytics)]
     Anomaly --> Processed
     Risk --> Processed
-    Maintenance --> Processed
-    Processed --> API
-    API --> Dashboard
-    Dashboard -->|POST/PATCH| API
-    API --> Web
-    API --> WriteRepo
-    WriteRepo -->|atomic replace| Raw
+    Reports --> Processed
+    Processed --> Service
 
-    Docs[6 Vietnamese synthetic documents] --> Chunking[Deterministic chunking<br/>source metadata]
-    Chunking --> Embeddings[Local sentence-transformers embeddings]
-    Embeddings --> Qdrant[(Qdrant<br/>replace collection on index)]
-    Qdrant --> Filters[asset_type + optional<br/>document_type + failure_category]
-    Filters --> Copilot[Relevance gate +<br/>deterministic composer]
-    API --> Copilot
+    Docs[6 Vietnamese SOP/checklist documents]
+    Docs --> Embeddings[Local embeddings]
+    Embeddings --> Qdrant[(Qdrant)]
+    Qdrant --> Copilot[RAG retrieval + relevance gate]
+    Service --> Copilot
     Copilot --> API
 
-    Validation -. optional load .-> Postgres[(PostgreSQL<br/>optional/experimental)]
+    CsvAdapter[Explicit CSV compatibility adapter]
+    CsvAdapter -. tests/demo fixtures only .-> Service
 ```
 
-## Primary Runtime Path
+## Transactional Path
 
-1. `src/data_generation/generate_data.py` tạo Vietnamese synthetic CSV data trong `data/raw`.
-2. `src/ingestion/validation.py` kiểm tra schema, reference, enum, chronology và Vietnamese business values.
-3. `src/features/build_features.py` tạo `data/processed/asset_daily_features.csv`.
-4. `src/models/anomaly_detection.py` tạo `data/processed/anomaly_results.csv`.
-5. `src/risk/risk_scoring.py` tạo `data/processed/risk_scores.csv`.
-6. `src/features/build_features.py` tạo preventive status, recurring issue và KPI snapshots từ raw contract cùng latest canonical risk output.
-7. `src/api/services.py` đọc raw/processed CSV và điều phối local ticket/log write rules.
-8. `src/api/csv_repository.py` ghi từng ticket/log file bằng temporary file và atomic replacement; không có concurrent-user locking.
-9. `src/dashboard/api_client.py` gọi FastAPI cho cả reads và writes; Streamlit không đọc hoặc ghi CSV trực tiếp.
-10. Copilot kết hợp structured asset/ticket context từ API service với SOP/checklist chunks được retrieve từ Qdrant.
+1. Alembic tạo và version schema; API không gọi `metadata.create_all()`.
+2. `src/ingestion/load_data.py` validate full synthetic dataset, tạo deterministic location hierarchy/defaults rồi import assets, tickets và logs trong một transaction.
+3. `src/repositories/contracts.py` định nghĩa storage-neutral operations.
+4. `src/repositories/postgres.py`, `postgres_assets.py` và `postgres_maintenance.py` thực thi từng bounded context, dùng PostgreSQL constraints/sequence/row locks và không được gọi trực tiếp từ routes.
+5. `src/api/services.py`, `src/asset_management/service.py` và `src/maintenance_management/service.py` giữ status transition, chronology, relationship, recurrence, generation, completion và verification rules.
+6. FastAPI routes chỉ phụ thuộc service; route không chọn storage backend.
+7. API startup kiểm tra PostgreSQL connection và migration tables. Nếu PostgreSQL không sẵn sàng, startup fail rõ ràng và không fallback sang mutable CSV.
+
+`src/repositories/csv.py` cùng `src/api/csv_repository.py` được giữ làm compatibility adapter cho isolated tests và fixtures. Adapter vẫn có atomic file replacement nhưng không phải normal product mode.
+
+## Authentication Và Session Flow
+
+```mermaid
+sequenceDiagram
+    actor User as Internal user
+    participant Web as Next.js
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    User->>Web: Nhập username/email + password
+    Web->>API: POST /auth/login
+    API->>DB: Verify Argon2id hash, active state, rate limit
+    DB-->>API: User + new RefreshSession
+    API-->>Web: Short-lived access token + HttpOnly refresh cookie + CSRF cookie
+    Web->>API: Bearer access token
+    API->>DB: Verify user version + active refresh session + permission
+    DB-->>API: Authorized actor
+    API-->>Web: Business response
+    Web->>API: POST /auth/refresh + cookie + X-CSRF-Token
+    API->>DB: Lock, revoke old session, create rotated session
+    API-->>Web: New access token + rotated cookies
+    Web->>API: POST /auth/logout + CSRF
+    API->>DB: Revoke active session + append audit event
+```
+
+- Password được hash bằng Argon2id; unknown user và wrong password trả cùng generic response.
+- Access token là signed HS256 JWT, lifetime mặc định 15 phút, giữ trong frontend memory và không ghi `localStorage`.
+- Refresh token là opaque random value trong `HttpOnly` cookie; PostgreSQL chỉ lưu SHA-256 hash. Mỗi refresh rotation thu hồi session cũ.
+- CSRF dùng readable bound token cookie + `X-CSRF-Token` cho refresh/logout; refresh cookie có explicit path, `SameSite` và `Secure` policy.
+- Mỗi protected request kiểm tra JWT, user active/version và refresh session chưa bị thu hồi, nên deactivate, password change và logout có hiệu lực ngay thay vì chờ access token hết hạn.
+- CORS cho phép credentials nhưng chỉ nhận origins explicit; trusted-host middleware từ chối host ngoài allow-list. API docs chỉ bật ở `development` và `test`.
+
+## Permission Model
+
+`src/security/permissions.py` là canonical role/permission source. `/auth/me` và `/users/roles` trả permission codes cho frontend; TypeScript không định nghĩa lại role matrix. Ký hiệu: `Có` là permission được cấp; resource rule vẫn có thể giới hạn record cụ thể.
+
+| Permission | Admin | Property Manager | Chief Engineer | Technician | Helpdesk | Storekeeper |
+|---|---|---|---|---|---|---|
+| `assets:read` | Có | Có | Có | Có | Có | Có |
+| `assets:create` | Có | Không | Có | Không | Không | Không |
+| `assets:update` | Có | Có | Có | Không | Không | Không |
+| `assets:change_status` | Có | Có | Có | Có | Không | Không |
+| `assets:archive` | Có | Có | Không | Không | Không | Không |
+| `assets:restore` | Có | Có | Không | Không | Không | Không |
+| `locations:read` | Có | Có | Có | Có | Không | Không |
+| `locations:create` | Có | Có | Có | Không | Không | Không |
+| `locations:update` | Có | Có | Có | Không | Không | Không |
+| `locations:archive` | Có | Có | Không | Không | Không | Không |
+| `attachments:read` | Có | Có | Có | Có | Không | Không |
+| `attachments:create` | Có | Có | Có | Không | Không | Không |
+| `attachments:delete` | Có | Có | Có | Không | Không | Không |
+| `tickets:read` | Có | Có | Có | Có | Có | Không |
+| `tickets:create` | Có | Có | Có | Không | Có | Không |
+| `tickets:assign` | Có | Có | Có | Không | Không | Không |
+| `tickets:update` | Có | Có | Có | Có | Có | Không |
+| `tickets:resolve` | Có | Có | Có | Có | Không | Không |
+| `maintenance_logs:read` | Có | Có | Có | Có | Không | Không |
+| `maintenance_logs:create` | Có | Không | Có | Có | Không | Không |
+| `analytics:read` | Có | Có | Có | Không | Không | Không |
+| `copilot:use` | Có | Có | Có | Có | Không | Không |
+| `users:read` | Có | Không | Không | Không | Không | Không |
+| `users:create` | Có | Không | Không | Không | Không | Không |
+| `users:update` | Có | Không | Không | Không | Không | Không |
+| `audit_logs:read` | Có | Có | Không | Không | Không | Không |
+
+Resource rules thu hẹp matrix: Property Manager chỉ sửa business/location/warranty/maintenance fields và quản lý lifecycle; Chief Engineer sửa technical profile nhưng không archive; Technician chỉ đổi operational status theo transition cho phép và không được đặt `out_of_service`. Technician chỉ thấy ticket/log được gán bằng `technician_id`; Helpdesk chỉ tạo ticket `UNASSIGNED` và update priority/note. Milestone này không có multi-tenant isolation.
+
+Work-order permissions bổ sung:
+
+| Role | Plan/template | Work order | Generation |
+|---|---|---|---|
+| Administrator | Toàn bộ | Toàn bộ | Có |
+| Property Manager | Read | Read/create/assign/update/verify/cancel/reopen + evidence | Không |
+| Chief Engineer | Read/create/update/pause/archive/version | Toàn bộ execution/verification + evidence | Có |
+| Technician | Read template | Chỉ assigned WO: read/start/hold/resume/checklist/complete/evidence | Không; không tự verify |
+| Helpdesk | Không | Limited read status | Không |
+| Storekeeper | Không | Read identity/status | Không có stock operation |
+
+FastAPI kiểm tra permission trước khi vào service; service tiếp tục kiểm tra technician ownership, asset eligibility và self-verification. Frontend chỉ ẩn/hiện control để hỗ trợ usability, không phải security boundary.
+
+## Threat Model Và Trade-Off
+
+- Mục tiêu là local/internal pilot với user nội bộ, không phải internet-facing identity platform. Hệ thống bảo vệ trước credential guessing cơ bản, stolen database token plaintext, CSRF trên cookie actions, stale/revoked session và client-side privilege hiding bị bypass.
+- Mọi môi trường ngoài local phải dùng HTTPS, `Secure=true`, signing secret ngẫu nhiên ít nhất 32 ký tự và secret injection ngoài Git.
+- Login limiter hiện in-process theo identifier, không chia sẻ giữa nhiều API instances và không thay thế gateway/WAF throttling.
+- HS256 chưa có key rotation/JWKS; chưa có SSO, MFA, recovery flow, email verification hoặc centralized session administration.
+- Audit table append-only qua application và PostgreSQL trigger, nhưng database administrator vẫn là trust boundary; chưa có external tamper-evident sink hoặc retention policy.
+- Không lưu IP address vì chưa cần cho single-building demo và để giảm dữ liệu cá nhân. User agent được giữ có giới hạn để hỗ trợ điều tra session.
+
+## Canonical Database Schema
+
+### Asset
+
+- Primary key: `asset_id`.
+- Identity/technical fields: type, category, manufacturer, model, optional normalized unique serial và production year.
+- Lifecycle và operational status là hai state độc lập; archive giữ previous state để restore explicit.
+- `location_id` tham chiếu hierarchy; legacy `location` leaf name và `installation_date` vẫn được duy trì cho analytics/API compatibility.
+- Warranty, ownership, description và maintenance dates thuộc cùng optimistic `version` profile.
+- Indexed filters gồm type, location, lifecycle, operational status, manufacturer/model và next-maintenance date.
+- Check constraints bảo vệ enum codes, chronology, archive-state completeness, interval và serial normalization.
+
+### Location
+
+- UUID primary key, unique normalized `code`, type, optional self-referencing `parent_id` và archive flag `is_active`.
+- Service duyệt ancestor chain để chặn self-parent/cycle; API trả breadcrumb đầy đủ.
+- Archive không xóa node hoặc asset được gán. Active child phải được xử lý trước khi archive parent.
+- Create/update/archive dùng optimistic `version` và audit actor.
+
+### AssetAttachment
+
+- PostgreSQL chỉ lưu metadata: UUID, asset FK, category, original filename, generated storage key, MIME, byte size, SHA-256 checksum, actor và soft-delete timestamps.
+- Bytes nằm sau `AttachmentStorage`; local implementation dùng generated key và atomic replacement trong private root.
+- Asset, metadata và audit không bị hard-delete; local byte cleanup failure được trả bằng `storage_cleanup_pending` để không giả vờ đã xóa hoàn toàn.
+
+### Ticket
+
+- Primary key: `ticket_id`, sinh từ PostgreSQL sequence `maintenance_ticket_id_seq`.
+- Foreign key `asset_id -> assets.asset_id` với delete restricted.
+- Composite unique key `(ticket_id, asset_id)` hỗ trợ relationship constraint từ maintenance log.
+- Indexed fields: `asset_id`, `status`, `created_at`.
+- Optimistic `version` phát hiện stale update.
+- Check constraints bảo vệ priority, status, failure category, resolution timestamp và chronology.
+
+### MaintenanceLog
+
+- Primary key: `log_id`, sinh từ `maintenance_log_id_seq`.
+- `asset_id` luôn bắt buộc; `ticket_id` nullable cho historical preventive log.
+- Composite foreign key `(ticket_id, asset_id)` ngăn log liên kết sai asset.
+- Append-only trong current service; không cần optimistic version.
+- Check constraints bảo vệ maintenance type/result, follow-up consistency và date chronology.
+- Optional unique `work_order_id` cùng composite FK `(work_order_id, asset_id)` cho completion path; legacy/direct logs giữ null.
+
+### PreventiveMaintenancePlan
+
+- UUID primary key, unique `plan_code`, asset FK, optional assignee/template FK và optimistic `version`.
+- Controlled interval recurrence với local business dates, explicit IANA timezone, lead/grace period, bounded next/last generated due dates.
+- Lifecycle `active/paused/archived`; không hard-delete, archived plan vẫn đọc được cùng generated work orders.
+- Partial unique generated occurrence được đặt trên WorkOrder `(preventive_plan_id, due_date)`.
+
+### ChecklistTemplate Và Snapshot
+
+- Template dùng `(code, version_number)` unique; version mới là row mới, version cũ không mutate.
+- Template items có deterministic sequence, response type, required/safety flags và coherent numeric bounds.
+- Khi tạo work order, item được copy sang `work_order_checklist_items`; execution result, actor và timestamp thuộc snapshot đó.
+
+### WorkOrder
+
+- UUID primary key, unique `work_order_number` từ PostgreSQL sequence và composite `(id, asset_id)` cho log/evidence integrity.
+- Optional source plan hoặc ticket; service bắt buộc source asset khớp work-order asset.
+- State/timestamps được bảo vệ bằng named constraints và optimistic `version`; overdue chỉ là derived response field.
+- Completion, linked maintenance log, verification actor và immutable history nằm trong PostgreSQL; evidence metadata ở `work_order_attachments`, bytes sau `AttachmentStorage`.
+
+### User
+
+- UUID primary key; normalized lowercase `username` là unique, `email` normalized là optional unique.
+- `password_hash` chỉ chứa Argon2id encoded hash và không xuất hiện trong API response/audit.
+- Stable English `role`, `is_active`, optional one-to-one `technician_id`, UTC timestamps và optimistic `version`.
+- Role hoặc active-state change tăng version và thu hồi active refresh sessions.
+
+### RefreshSession
+
+- UUID primary key và foreign key tới user; chỉ lưu hashed opaque token và hashed CSRF binding.
+- `created_at`, `expires_at`, `revoked_at`, limited `user_agent`; không lưu plaintext token hoặc IP.
+- Refresh rotation dùng row lock và chỉ một concurrent request có thể sử dụng session cũ thành công.
+
+### AuditLog
+
+- UUID primary key; UTC `occurred_at`, nullable actor FK và actor name snapshot.
+- `action`, resource, request ID, safe before/after JSON, safe metadata và outcome đều có index phù hợp cho filter/pagination.
+- Application không có update/delete API. Migration tạo PostgreSQL trigger từ chối `UPDATE`/`DELETE` để bảo vệ append-only behavior.
+- Successful business mutation và audit insert commit/rollback trong cùng transaction. Failed validation/authorization có thể ghi event độc lập với allow-listed metadata, không ghi request body nhạy cảm.
+
+## Enum Strategy
+
+PostgreSQL lưu stable English codes như `in_progress`, `electrical_issue`, `generator` và `critical`. Repository boundary dùng mappings trong `src/config/value_mappings.py` để trả lại Vietnamese display values như `Đang xử lý`, `Lỗi điện`, `Máy phát điện dự phòng` và `Rất quan trọng`.
+
+Không tạo PostgreSQL native enum trong milestone này. String code + named check constraint giúp migration dễ review. Canonical mappings duy nhất nằm trong `src/config/value_mappings.py`; API options trả code + Vietnamese label để frontend không duy trì display mapping thứ hai. Legacy API vẫn trả Vietnamese values hiện có.
+
+## Asset State Model
+
+```mermaid
+stateDiagram-v2
+    planned --> active
+    planned --> inactive
+    active --> inactive
+    inactive --> active
+    active --> retired
+    inactive --> retired
+    retired --> inactive: explicit return to service review
+    planned --> archived: archive endpoint
+    active --> archived: archive endpoint
+    inactive --> archived: archive endpoint
+    retired --> archived: archive endpoint
+    archived --> planned: restore
+    archived --> active: restore
+    archived --> inactive: restore
+```
+
+- `inactive`, `retired` và `archived` ép operational status thành `out_of_service`; restore khôi phục state an toàn có chủ đích.
+- Operational transitions dùng `running`, compatibility state `warning`, `fault`, `under_maintenance`, `out_of_service`. `warning` được giữ để không làm mất business meaning của 27 asset seed và legacy `status`.
+- Retired/archived asset không nhận ticket mới. Archive không xóa ticket, log, attachment metadata, analytics reference hoặc audit event.
+- Mọi mutation yêu cầu `expected_version`; stale write trả `409` và UI yêu cầu reload thay vì retry mù.
+
+## Attachment Và QR Security
+
+- Upload chỉ chấp nhận PDF, PNG, JPG/JPEG khi extension, claimed MIME và file signature khớp; size mặc định tối đa 10 MB. Executable, empty body, traversal filename và mismatched content bị từ chối.
+- Original filename chỉ dùng làm download label. Storage key là random allow-listed path; download luôn qua authenticated FastAPI, có `Content-Disposition: attachment` và `X-Content-Type-Options: nosniff`.
+- Download tính lại SHA-256 và fail `503` nếu bytes không khớp metadata. API/audit không trả storage key hoặc local path.
+- QR token là deterministic UUID5 theo stable `asset_id`; payload chỉ là `${FRONTEND_BASE_URL}/scan/assets/{opaque-token}`. Token không chứa asset ID, user, credential hoặc auth token và không cấp quyền.
+- `/asset-lookup/{token}` vẫn yêu cầu `assets:read`; unknown token trả `404`, archived asset trả `410`. Không có regeneration endpoint vì identity đang deterministic, nên không có regeneration audit event.
+
+## Transaction Boundary
+
+- Ticket creation là một database transaction; sequence bảo đảm generated ID không trùng khi nhiều request chạy đồng thời.
+- Asset/location create, update, status, lifecycle và archive/restore commit optimistic state cùng allow-listed audit event trong một transaction.
+- Attachment metadata + audit commit cùng transaction. Local object bytes không thể tham gia PostgreSQL transaction; upload xóa bytes nếu DB write thất bại, còn delete báo cleanup pending nếu physical delete thất bại.
+- Ticket update đọc optimistic version và rollback khi record đã stale.
+- Maintenance-log workflow lock ticket và asset, xác nhận expected versions, insert log và đồng bộ asset maintenance dates trong cùng transaction.
+- Transaction ghi log đồng thời cập nhật maintenance dates của asset và concurrency metadata của ticket; ticket status vẫn do con người cập nhật explicit qua `PATCH /tickets/{ticket_id}`.
+- Nếu insert, asset update hoặc ticket metadata update lỗi, toàn bộ request rollback; không dùng CSV-style manual rollback trong PostgreSQL implementation.
+- Ticket chỉ được resolve sau khi có linked maintenance log. Resolve vẫn là explicit `PATCH /tickets/{ticket_id}` để giữ current frontend workflow và quyết định của technician/manager.
+- Mỗi due occurrence generation lock plan row, kiểm tra existing `(plan_id, due_date)`, tạo work order/checklist snapshot/audit và chỉ cập nhật `last_generated_due_date`/`next_due_date` sau khi unit thành công. Concurrent retry trả skipped thay vì tạo duplicate.
+- Work-order completion lock WO/checklist, validate mandatory/safety results, tạo đúng một MaintenanceLog và ghi audit trong một transaction. Retry idempotent trả linkage hiện có.
+- Work-order verification yêu cầu actor khác người thực hiện, lock WO/asset, ghi verifier/timestamp, đồng bộ `last_maintenance_date` và compatibility `next_maintenance_date`, rồi audit trong một transaction.
+- Completing hoặc verifying corrective WO không đổi ticket state. Ticket resolution vẫn là action explicit qua existing ticket service.
+- Work-order evidence metadata và audit cùng PostgreSQL transaction; byte store có cùng single-node atomic-file trade-off như asset attachment.
+
+## Preventive Scheduling Semantics
+
+```mermaid
+flowchart LR
+    Plan[Active preventive plan] --> Expand[Bounded recurrence expansion]
+    Expand --> Due[Due occurrence as local date]
+    Due --> Lock[Lock plan + check unique occurrence]
+    Lock --> Snapshot[Create WO + checklist snapshot]
+    Snapshot --> Advance[Advance next_due_date]
+    Advance --> Report[Generated / skipped report]
+```
+
+- Supported subset: every N days/weeks/months/years, `N=1..366`; raw RRULE không được nhận.
+- Month-end giữ original day anchor và clamp khi tháng ngắn; leap-day clamp 28/02 ở năm không nhuận.
+- `local_timezone` phải là IANA zone; due date là business date, execution timestamps là UTC và không có silent conversion.
+- Expansion có max 256 occurrence/request và catch-up window 366 ngày. Pause không phát hành WO; resume bỏ backlog paused và derive kỳ tiếp theo từ resume date.
+- Generation chỉ chạy qua protected `POST /maintenance-plans/generate`, dry-run endpoint hoặc `src.maintenance_management.cli`. API startup không generate, không có loop/scheduler/worker ẩn.
+
+## Work-Order State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> planned
+    planned --> assigned: assign eligible technician
+    assigned --> in_progress: start
+    assigned --> on_hold: hold before start
+    on_hold --> assigned: resume before start
+    in_progress --> on_hold: hold
+    on_hold --> in_progress: resume after start
+    in_progress --> completed: checklist + result
+    completed --> verified: independent verification
+    completed --> in_progress: authorized reopen
+    planned --> cancelled
+    assigned --> cancelled
+```
+
+`started_at`, `completed_at`, `verified_at` và `cancelled_at` chỉ được service ghi ở action tương ứng. Verified records là terminal/immutable trong current milestone. Reopen trước verification giữ append-only linked MaintenanceLog và không tạo record thứ hai khi complete lại; đây là local-pilot correction behavior, chưa phải full maintenance-record amendment workflow.
+
+## Maintenance-Date Compatibility
+
+- Plan giữ due date riêng; không ép mọi kỳ vào một asset field.
+- Sau verification, `last_maintenance_date` nhận ngày của linked MaintenanceLog.
+- Transactional `assets.next_maintenance_date` là compatibility aggregate cho UI/API: ngày sớm nhất trong các active plan `next_due_date`; nếu asset chưa có active plan, service giữ fallback từ linked maintenance result/legacy interval.
+- Cancelled hoặc completed-but-unverified WO không cập nhật asset maintenance dates.
+- Analytics snapshot vẫn export đúng legacy columns và fixed-interval chronology: asset/log next date được project từ maintenance date cộng `maintenance_interval_days`. Existing validator, preventive-overdue và Risk Score formulas không đổi; plan/WO dates vẫn là transactional operational view bổ sung.
+
+## Batch Analytics Bridge
+
+`src/database/export_snapshot.py` tạo một repeatable-read snapshot từ PostgreSQL cho assets, tickets và logs; sau đó ghép `sensor_readings.csv` và `documents.csv` từ canonical generated data. Trước validation, exporter chỉ chuyển maintenance dates sang legacy fixed-interval projection; nó không update PostgreSQL. Snapshot được canonical validator kiểm tra trước khi thay thế output directory.
+
+Default output là `data/analytics_input/`. Batch flow sau đó là:
+
+```text
+PostgreSQL transaction data
+        + generated sensor/document CSV
+        -> validated analytics_input snapshot
+        -> daily features
+        -> anomaly detection
+        -> risk scoring
+        -> preventive / recurring / KPI outputs
+        -> FastAPI reads next batch
+```
+
+Ghi ticket hoặc log không tự chạy pipeline. UI phải tiếp tục thông báo Risk Score và KPI chỉ cập nhật trong batch tiếp theo.
 
 ## Canonical Analytics Implementations
 
-| Analytics stage | Canonical implementation | Canonical output |
+| Stage | Canonical implementation | Output |
 |---|---|---|
 | Daily feature engineering | `src/features/build_features.py` | `asset_daily_features.csv` |
 | Batch anomaly detection | `src/models/anomaly_detection.py` | `anomaly_results.csv` |
 | Explainable risk scoring | `src/risk/risk_scoring.py` | `risk_scores.csv` |
-| Preventive/recurrence/KPI analytics | `src/features/build_features.py` | Ba focused maintenance CSV snapshots |
+| Preventive, recurrence, KPI | `src/features/build_features.py` | Ba maintenance snapshot CSV |
 
-Chỉ các implementation trên được mở rộng trong future MVP work. Một thay đổi analytics phải đi vào canonical implementation, có test, và cập nhật data contract tương ứng.
+Formula và definitions không thay đổi trong milestone này. Xem [Analytics pipeline](analytics.md).
 
-Chi tiết formula và definitions: [Analytics pipeline](analytics.md).
+## RAG Boundary
 
-## Serving Layer
+RAG workflow không thay đổi:
 
-- `src/api/main.py` tạo FastAPI application.
-- `src/api/routes.py` giữ backward-compatible risk/anomaly/context/Copilot endpoints và bổ sung write endpoints `POST /tickets`, `PATCH /tickets/{ticket_id}`, `POST /maintenance/logs`.
-- `src/api/services.py` đọc raw asset/ticket/log CSV cùng canonical processed outputs, kiểm tra availability/freshness, thực thi ticket transition/chronology rules và không trả internal file path trong lỗi.
-- `src/api/csv_repository.py` kiểm tra minimum schema, duplicate ID và dùng `os.replace` để tránh partial file replacement.
-- `src/dashboard/app.py` là Streamlit entrypoint canonical.
-- `src/dashboard/api_client.py` là HTTP boundary giữa dashboard và API.
-- `frontend/src/lib/api` và `frontend/src/hooks` là typed read boundary cho Next.js; browser responses được Zod validate trước khi hiển thị.
+- documents được chunk deterministically;
+- local sentence-transformers tạo embeddings;
+- Qdrant lưu và filter chunks;
+- relevance gate loại retrieval không đủ liên quan;
+- deterministic composer kết hợp retrieved guidance với structured asset/ticket context từ PostgreSQL và latest batch analytics.
 
-Streamlit và Next.js chỉ gọi FastAPI, không đọc CSV trực tiếp. Streamlit giữ write workflow local hiện tại. Next.js Milestone 2 chỉ kết nối read endpoints cho `Tổng quan`, `Thiết bị`, dynamic asset detail, `Ticket workspace` và `Bất thường`; write controls được disable hoặc ghi rõ chưa kết nối, còn Copilot content vẫn là fixture. RAG availability không quyết định health của manager dashboard.
+Qdrant không lưu asset, ticket hoặc maintenance log và không tham gia database transaction.
 
-## Local Write Boundary
+## Runtime Modes
 
-Write workflow chỉ đóng vòng demo: manager tạo inspection ticket từ risk context, technician nhận ticket, ghi maintenance result và resolve hoặc giữ follow-up. Ticket request thay một raw CSV; maintenance-log request stage log cùng asset maintenance dates và rollback các file đã thay nếu một bước replace thất bại. Processed risk/KPI files không thay đổi cho đến canonical batch tiếp theo.
-
-Atomic replacement và handled-failure rollback ngăn file đích ở trạng thái ghi dở trong local workflow, nhưng không cung cấp crash-safe multi-file transaction, record locking hoặc conflict detection giữa nhiều process. Vì vậy write boundary này chỉ dành cho một local portfolio user, không phải production CMMS storage.
-
-## RAG Layer
-
-- `src/rag/document_loader.py` đọc legacy CSV fields và chuẩn hóa thành `document_id`, `document_type`, `content`, `failure_category`, `version` và `effective_date`.
-- `src/rag/chunking.py` tạo deterministic chunks, bỏ empty chunk và giữ document identity cùng `chunk_index`.
-- `src/rag/embeddings.py` tạo local embeddings.
-- `src/rag/index_documents.py` embed toàn bộ document set rồi thay thế collection; re-index cùng input không tạo duplicate và document bị xóa không để stale chunk.
-- `src/rag/vector_store.py` kiểm tra collection name, vector dimension, missing/empty collection và thực hiện metadata filtering trong Qdrant.
-- `src/rag/retriever.py` thực hiện top-k retrieval với `asset_type`, `document_type` và `failure_category` filters.
-- `src/rag/copilot.py` kiểm tra phạm vi câu hỏi, áp dụng relevance gate, kết hợp asset facts với retrieved guidance và tạo response deterministic có source/safety sections.
-
-Khi chọn asset, `asset_type` của asset là filter mặc định. Failure category và ticket description gần đây chỉ bổ sung query context; chúng không thay đổi structured facts hoặc tự động chẩn đoán lỗi. Câu hỏi nêu rõ một focused asset type khác được xem là yêu cầu cross-asset tường minh và filter theo loại được nêu.
-
-Relevance policy:
-
-- `HashEmbeddingProvider` trong tests dùng cosine threshold `0.15`; đây chỉ là deterministic lexical test double, không phải semantic quality score.
-- `SentenceTransformerEmbeddingProvider` dùng threshold `0.55`; đây là retrieval gate cấu hình cho MVP, không phải xác suất đúng và chưa được hiệu chuẩn bằng evaluation dataset thực tế.
-- Empty result, điểm dưới threshold, câu hỏi ngoài phạm vi hoặc RAG unavailable đều trả safe fallback, không dùng unrelated chunk để tạo checklist.
-
-Qdrant là dependency của RAG retrieval, không phải dependency của API health hoặc manager dashboard. Copilot hiện dùng deterministic composer; không được mô tả là LLM-generated answer hoặc automatic diagnostic system.
-
-## PostgreSQL Optional/Experimental Path
-
-Các module sau được giữ để tham khảo và thử nghiệm structured storage:
-
-- `src/database/session.py`
-- `src/database/models.py`
-- `src/database/init_db.py`
-- `src/ingestion/load_data.py`
-
-Quy tắc:
-
-- Không đưa PostgreSQL vào prerequisite của main portfolio demo.
-- Không chuyển API sang database-backed serving trong revised MVP nếu chưa có quyết định scope mới.
-- Không xem database `risk_scores` hiện tại là canonical analytics output.
-- PostgreSQL experiments không được làm gián đoạn CSV-first pipeline.
-
-## Cleanup Audit
-
-Milestone 6 tìm kiếm toàn bộ imports, function references, tests, docs và CLI entrypoints trước khi xóa. Kết quả:
-
-| Candidate | Phân loại cuối | Quyết định và canonical replacement |
+| `STORAGE_BACKEND` | Mục đích | Mutable runtime source |
 |---|---|---|
-| `src/models/anomaly.py` | Safe to remove | Không có import/test; dùng `src/models/anomaly_detection.py` |
-| `src/risk/scoring.py` | Safe to remove | Formula 55/30/15 cũ không được import; dùng `src/risk/risk_scoring.py` |
-| `src/ingestion/documents.py` | Safe to remove | Chunker duplicate không được dùng; dùng `src/rag/chunking.py` |
-| `src/ingestion/tickets.py` | Safe to remove | Normalization helper không có caller; validation canonical ở `src/ingestion/validation.py` |
-| `src/data_generation/sample_data.py` | Safe to remove | Wrapper demo không có caller; dùng `src/data_generation/generate_data.py` |
-| Root `app.py` | Safe to remove | Duplicate Streamlit entrypoint; dùng `src/dashboard/app.py` |
-| Root `proposal.md` | Safe to remove | File rỗng, không có reference |
-| `build_asset_feature_frame` | Safe to remove | Helper cho schema `value` cũ, không có caller; daily pipeline giữ nguyên |
-| `src/database/*`, `src/ingestion/load_data.py` | Compatibility-only | Retain với deprecation/status note vì optional PostgreSQL tests đang dùng |
-| `src/rag/query.py` | Actively used | Retain làm CLI query được Make target sử dụng |
+| `postgresql` | Normal product/demo mode | PostgreSQL |
+| `csv` | Explicit isolated test hoặc compatibility fixture | Temporary/local CSV copies |
 
-Generator vẫn chủ động xóa stale `data/raw/risk_scores.csv` nếu file cũ tồn tại. Đây là migration hygiene, không phải một analytics implementation khác.
+Không có automatic fallback. `STORAGE_BACKEND=postgresql` cùng database unavailable phải fail startup thay vì ghi sang CSV.
 
-## Human-in-the-Loop Boundary
+## Remaining Gaps
 
-- Anomaly và risk scores chỉ hỗ trợ prioritization.
-- Recommended action là hướng dẫn tham khảo, không phải lệnh thực thi.
-- Manager quyết định lịch và mức ưu tiên thực tế.
-- Technician xác nhận hiện trường, an toàn và maintenance result.
-- Hệ thống không tự động tạo production work order hoặc dự đoán exact failure time.
+- Local authentication/RBAC/audit phù hợp internal pilot nhưng chưa có SSO, MFA, recovery, signing-key rotation, external audit sink hoặc multi-tenancy.
+- Basic login limiter chỉ nằm trong một API process; chưa có distributed throttling hoặc lockout operations workflow.
+- Chưa có production scheduler/worker cho preventive generation, snapshot hoặc analytics batch; operator gọi API/CLI explicit.
+- Chưa có production backup automation, failover, observability hoặc connection-pool tuning theo tải thật.
+- CSV analytics snapshot replacement chưa phải distributed transaction với PostgreSQL.
+- Local attachment storage chỉ phù hợp một API node; chưa có S3-compatible implementation, malware scanner, object lifecycle/backup hoặc reconciler cho cleanup pending.
+- QR lookup đã authenticated nhưng chưa có camera/browser compatibility matrix, label fleet management hoặc offline scan.
+- Optimistic conflict hiện trả HTTP `409`; UI chưa có merge workflow phức tạp.
+- PostgreSQL local Docker defaults và development ephemeral signing secret chỉ phục vụ development/demo, không phải secret strategy cho production.
 
-## Non-Goals Của Architecture
+## Human-In-The-Loop Boundary
 
-Architecture không được mở rộng trong MVP sang inventory, QR code, mobile apps, vendor management, real-time streaming, complex approvals, enterprise auth hoặc exact failure-time prediction. Các giới hạn lâu dài cho future agents được ghi trong `AGENTS.md`.
+Risk Score là tín hiệu prioritization, không phải calibrated failure probability. Manager quyết định ưu tiên, lịch và phân công; technician xác nhận hiện trường, an toàn và maintenance result; authorized reviewer xác minh độc lập. Hệ thống có thể generate work order deterministic khi người dùng gọi explicit API/CLI, nhưng không tự chạy scheduler, tự phê duyệt, tự resolve ticket, điều khiển thiết bị hoặc dự đoán chính xác thời điểm hỏng.

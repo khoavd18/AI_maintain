@@ -18,6 +18,7 @@ from src.features.build_features import (
 )
 from src.models.anomaly_detection import run_anomaly_detection
 from src.risk.risk_scoring import run_risk_scoring
+from tests.auth_helpers import authorize_app
 
 
 @pytest.fixture(scope="module")
@@ -59,6 +60,7 @@ def api_fixture(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     )
     app = create_app()
     app.dependency_overrides[_service] = lambda: service
+    authorize_app(app)
     client = TestClient(app)
 
     return {
@@ -313,6 +315,7 @@ def test_missing_analytics_file_returns_safe_503(
     )
     app = create_app()
     app.dependency_overrides[_service] = lambda: service
+    authorize_app(app)
     response = TestClient(app).get("/maintenance/preventive")
 
     assert response.status_code == 503
@@ -342,6 +345,7 @@ def test_stale_analytics_file_returns_clear_503(
     )
     app = create_app()
     app.dependency_overrides[_service] = lambda: service
+    authorize_app(app)
     response = TestClient(app).get("/summary")
 
     assert response.status_code == 503

@@ -1,240 +1,423 @@
-# Data Contract Tối Thiểu
+# Data Contract Canonical
 
 ## Nguyên Tắc Chung
 
 - Column name, API field và technical identifier dùng tiếng Anh.
-- Business value và nội dung hiển thị cho người dùng dùng tiếng Việt.
-- Timestamp dùng ISO 8601; timestamp có timezone khi dữ liệu ở mức thời gian.
-- Date dùng định dạng `YYYY-MM-DD`.
-- CSV là primary contract của MVP; PostgreSQL không phải dependency bắt buộc.
-- Dataset synthetic mặc định gồm 27 assets thuộc HVAC, pump và generator, cùng 120 ngày readings theo giờ.
-- Raw inputs không chứa anomaly label, future outcome hoặc raw risk result.
+- Business value và user-facing explanation dùng tiếng Việt.
+- Date dùng `YYYY-MM-DD`; timestamp dùng ISO 8601 có timezone.
+- PostgreSQL là transactional source of truth cho assets, locations, attachment metadata, tickets, preventive plans, checklist templates, work orders và maintenance logs; file bytes nằm ngoài database.
+- Generated/raw CSV là seed và batch interchange contract, không phải normal mutable runtime storage.
+- Processed CSV là versioned-by-batch analytics serving contract.
+- Qdrant chỉ lưu document chunks và metadata cho RAG retrieval.
+- Risk Score dùng để prioritization, không phải failure probability hoặc exact failure-time prediction.
+
+Synthetic seed mặc định hiện có 27 assets, 42 tickets, 86 maintenance logs, 77.760 hourly sensor readings và 6 Vietnamese SOP/checklist documents.
+
+## Ownership Theo Storage
+
+| Data | Primary runtime owner | CSV role |
+|---|---|---|
+| Asset master và maintenance dates | PostgreSQL `assets` | Synthetic seed, import, analytics snapshot |
+| Location hierarchy | PostgreSQL `locations` | Deterministic nodes derived during import; không export riêng |
+| Attachment metadata | PostgreSQL `asset_attachments` | Không có CSV analytics |
+| Attachment bytes | Private `AttachmentStorage` root | Không lưu trong PostgreSQL hoặc analytics CSV |
+| Tickets | PostgreSQL `maintenance_tickets` | Synthetic seed, import, analytics snapshot |
+| Maintenance logs | PostgreSQL `maintenance_logs` | Synthetic seed, import, analytics snapshot |
+| Preventive plans | PostgreSQL `preventive_maintenance_plans` | Development seed explicit; không thuộc canonical 27/42/86 import |
+| Checklist template versions/items | PostgreSQL `checklist_templates`, `checklist_template_items` | Development seed explicit; work order giữ snapshot |
+| Work orders/checklist execution | PostgreSQL `work_orders`, `work_order_checklist_items` | Transactional product data; không thay đổi historical CSV counts |
+| Work-order evidence metadata/bytes | PostgreSQL `work_order_attachments` + private `AttachmentStorage` | Không export sang analytics CSV |
+| User identities | PostgreSQL `users` | Không export sang analytics CSV |
+| Refresh sessions | PostgreSQL `refresh_sessions` | Không có CSV; chỉ lưu token/CSRF hash |
+| Security/business audit | PostgreSQL `audit_logs` | Không có CSV; paginated read qua API |
+| Operational readings | Generated CSV | Batch analytics input |
+| Feature/anomaly/risk/report outputs | Processed CSV | Canonical batch output |
+| SOP/checklist chunks | Qdrant | Documents CSV là indexing source |
+
+## Enum Mapping
+
+PostgreSQL lưu internal English code. Repository trả Vietnamese display value và nhận lại đúng Vietnamese API value hiện có.
+
+| Field | Internal code examples | API/CSV display examples |
+|---|---|---|
+| `asset_type` | `hvac`, `pump`, `generator` | `Máy lạnh`, `Máy bơm nước`, `Máy phát điện dự phòng` |
+| `criticality` | `medium`, `high`, `critical` | `Trung bình`, `Cao`, `Rất quan trọng` |
+| `lifecycle_status` | `planned`, `active`, `inactive`, `retired`, `archived` | `Đang lập kế hoạch`, `Đang hoạt động`, `Tạm ngừng`, `Đã ngừng sử dụng`, `Đã lưu trữ` |
+| `operational_status` | `running`, `warning`, `fault`, `under_maintenance`, `out_of_service` | `Đang vận hành`, `Cảnh báo`, `Có lỗi`, `Đang bảo trì`, `Ngừng phục vụ` |
+| Legacy Asset `status` projection | mapped từ `operational_status` | `Bình thường`, `Cảnh báo`, `Sự cố` |
+| `asset_category` | `climate_control`, `water_system`, `power_system`, `other` | Vietnamese display label |
+| `ownership_type` | `owned`, `leased`, `managed` | `Sở hữu`, `Thuê`, `Quản lý hộ` |
+| Ticket `status` | `open`, `in_progress`, `resolved` | `Mới tạo`, `Đang xử lý`, `Đã xử lý` |
+| `priority` | `low`, `medium`, `high`, `critical` | `Thấp`, `Trung bình`, `Cao`, `Khẩn cấp` |
+| `failure_category` | `electrical_issue`, `sensor_issue` | `Lỗi điện`, `Lỗi cảm biến` |
+| `maintenance_type` | `preventive`, `corrective`, `inspection`, `emergency` | Vietnamese maintenance type |
+| `maintenance_result` | `resolved`, `partially_resolved`, `monitoring_required`, `vendor_required` | `Đã xử lý`, `Đã xử lý một phần`, `Cần theo dõi`, `Cần hỗ trợ chuyên môn` |
+| Plan `status` | `active`, `paused`, `archived` | `Đang hoạt động`, `Tạm dừng`, `Đã lưu trữ` |
+| `interval_unit` | `day`, `week`, `month`, `year` | `Ngày`, `Tuần`, `Tháng`, `Năm` |
+| Work-order `status` | `planned`, `assigned`, `in_progress`, `on_hold`, `completed`, `verified`, `cancelled` | Vietnamese display label từ API options |
+| Checklist `response_type` | `checkbox`, `pass_fail`, `numeric`, `text` | Vietnamese display label từ API options |
+
+Canonical mappings nằm tại `src/config/value_mappings.py`. `vendor_required` chỉ có nghĩa cần hỗ trợ chuyên môn; không tạo vendor-management feature.
 
 ## Assets
 
-Primary source hiện tại: `data/raw/assets.csv`.
+PostgreSQL table: `assets`. Seed/snapshot file: `assets.csv`.
 
-| Field | Type | Required | Ý nghĩa | Trạng thái hiện tại |
-|---|---|---:|---|---|
-| `asset_id` | string | Có | Định danh ổn định của thiết bị | Có |
-| `asset_name` | string | Có | Tên hiển thị tiếng Việt | Có |
-| `asset_type` | string | Có | Loại thiết bị bằng business value tiếng Việt | Có |
-| `location` | string | Có | Vị trí thiết bị | Có |
-| `criticality` | string | Có | Mức độ quan trọng | Có |
-| `status` | string | Có | Trạng thái vận hành/nghiệp vụ | Có |
-| `installation_date` | date | Có | Ngày lắp đặt, phải trước observation window | Có |
-| `last_maintenance_date` | date | Có | Ngày maintenance log mới nhất trong toàn bộ generated history | Có |
-| `maintenance_interval_days` | integer > 0 | Có | Chu kỳ preventive maintenance theo loại asset | Có |
-| `next_maintenance_date` | date | Có | `last_maintenance_date + maintenance_interval_days` | Có |
+| Field | DB type | Required | API exposure | Rule |
+|---|---|---:|---:|---|
+| `asset_id` | varchar(50) | Có | Có | Primary key ổn định |
+| `asset_name` | varchar(200) | Có | Có | Vietnamese display name |
+| `asset_type` | varchar(40) | Có | Có, mapped | Chỉ focused `hvac`, `pump`, `generator` |
+| `asset_category` | varchar(40) | Có | Rich profile | Stable code, default theo type khi import |
+| `manufacturer`, `model` | varchar(200)/null | Không | Rich profile | Optional technical identity |
+| `serial_number` | varchar(150)/null | Không | Rich profile | Trim + uppercase; unique khi có |
+| `production_year` | integer/null | Không | Rich profile | 1900–2200 |
+| `location_id` | UUID/null | Có với service write | Rich profile | FK `locations`; nullable ở DB chỉ để migrate legacy rows an toàn |
+| `location` | varchar(200) | Có | Legacy + rich | Compatibility leaf label đồng bộ theo location assignment |
+| `criticality` | varchar(20) | Có | Có, mapped | Named check constraint |
+| `lifecycle_status` | varchar(20) | Có | Rich profile | `planned/active/inactive/retired/archived` |
+| `operational_status` | varchar(30) | Có | Rich profile | Tách khỏi lifecycle; legacy `status` được project từ field này |
+| `lifecycle_status_before_archive`, `operational_status_before_archive` | varchar/null | Có điều kiện | Rich profile | Chỉ dùng cho explicit restore |
+| `installed_at` | timestamptz | Có | Rich profile | UTC; source cho compatibility installation date |
+| `installation_date` | date | Có | Legacy + snapshot | Preserved analytics contract |
+| `commissioned_at`, `retired_at`, `archived_at` | timestamptz/null | Không/điều kiện | Rich profile | Chronology và lifecycle controlled |
+| `archive_reason` | text/null | Có khi archived | Rich profile | Không rỗng khi lifecycle archived |
+| `ownership_type` | varchar(20) | Có | Rich profile | Stable enum code |
+| `description` | text/null | Không | Rich profile | Tối đa 4.000 ký tự ở API |
+| `warranty_start_date`, `warranty_end_date` | date/null | Không | Rich profile | End không trước start |
+| `warranty_provider`, `warranty_reference` | varchar(200)/null | Không | Rich profile | Optional business reference |
+| `last_maintenance_date` | date | Có | Có | Đồng bộ khi tạo maintenance log |
+| `maintenance_interval_days` | integer | Có | Có | Lớn hơn 0 |
+| `next_maintenance_date` | date | Có | Có | PostgreSQL: earliest active-plan due/fallback; snapshot: `last_maintenance_date + maintenance_interval_days` |
+| `version` | integer | Có | Rich profile | `expected_version` bắt buộc cho mutation |
+| `created_at`, `updated_at` | timestamptz | Có | Rich profile | UTC database/ORM timestamps |
+| `created_by_user_id`, `updated_by_user_id` | UUID/null | Không với imported rows | Rich profile | FK actor cho user-created records |
+| `qr_token` | UUID | Có | API field `qr_lookup_token` | Deterministic UUID5, unique; không phải credential |
 
-Allowed `asset_type`: `Máy lạnh`, `Máy bơm nước`, `Máy phát điện dự phòng`.
+`GET /assets` và analytics snapshot tiếp tục trả đúng legacy fields. Rich management contract dùng `/assets/catalog` và `/assets/{asset_id}/profile` với code/display siblings, location breadcrumb và version.
 
-Allowed `criticality`: `Trung bình`, `Cao`, `Rất quan trọng`. Allowed `status`: `Bình thường`, `Cảnh báo`.
+## Locations
+
+PostgreSQL table: `locations`; không có mutable CSV source riêng.
+
+| Field | Rule |
+|---|---|
+| `id` | UUID primary key |
+| `code` | 2–50 ký tự, trim + uppercase, unique |
+| `name` | Vietnamese display name |
+| `location_type` | `building`, `floor`, `room`, `area`, `plant` |
+| `parent_id` | Optional self-FK; không self-parent/cycle |
+| `description` | Optional text |
+| `is_active` | False nghĩa archived-in-place; assigned assets được giữ |
+| `created_at`, `updated_at` | UTC timestamps |
+| `created_by_user_id`, `updated_by_user_id` | Optional actor FK cho imported rows, required by service context for mutations |
+| `version` | Optimistic concurrency |
+
+API trả thêm computed `breadcrumb` và `asset_count`; hai field này không persist. Active parent/child rules được kiểm tra ở service.
+
+## Asset Attachments
+
+PostgreSQL table: `asset_attachments`; bytes nằm trong `AttachmentStorage`.
+
+| Field | Rule |
+|---|---|
+| `id`, `asset_id` | UUID primary key + restricted asset FK |
+| `category` | `asset_photo`, `technical_manual`, `warranty_document`, `commissioning_record`, `inspection_document`, `other` |
+| `original_filename` | Display/download name, không bao giờ làm storage path |
+| `storage_key` | Generated unique private key; không xuất API/audit |
+| `media_type` | Chỉ `application/pdf`, `image/png`, `image/jpeg` sau signature validation |
+| `size_bytes` | Dương và không vượt configured limit |
+| `checksum` | 64-character SHA-256; verify lại khi download |
+| `uploaded_by_user_id`, `created_at` | Required actor + UTC timestamp |
+| `deleted_at`, `deleted_by_user_id` | Soft-delete metadata; active list bỏ record đã xóa |
+
+Không có inline preview endpoint. Download dùng attachment disposition và authorization trên mọi request.
 
 ## Tickets
 
-Primary source hiện tại: `data/raw/maintenance_tickets.csv`.
+PostgreSQL table: `maintenance_tickets`. Seed/snapshot file: `maintenance_tickets.csv`.
 
-| Field | Type | Required | Ý nghĩa |
-|---|---|---:|---|
-| `ticket_id` | string | Có | Định danh ticket |
-| `asset_id` | string | Có | Asset liên quan |
-| `issue_description` | string | Có | Mô tả sự cố tiếng Việt |
-| `priority` | string | Có | Mức ưu tiên |
-| `status` | string | Có | Trạng thái ticket |
-| `failure_category` | string | Có | Nhóm sự cố dùng cho recurring issue analysis |
-| `created_at` | datetime | Có | Thời điểm tạo |
-| `resolved_at` | datetime/null | Có điều kiện | Có giá trị khi ticket đã xử lý |
-| `technician_id` | string | Có | Định danh technician được gán |
-| `manager_note` | string/null | Không | Ghi chú của manager khi tạo ticket từ risk context |
-| `note` | string/null | Không | Ghi chú cập nhật gần nhất trong local workflow |
+| Field | DB type | Required | API exposure | Rule |
+|---|---|---:|---:|---|
+| `ticket_id` | varchar(50) | Có | Có | Primary key; runtime ID từ PostgreSQL sequence |
+| `asset_id` | varchar(50) | Có | Có | FK đến `assets`, delete restricted |
+| `issue_description` | text | Có | Có | 5–1.000 ký tự ở request schema |
+| `priority` | varchar(20) | Có | Có, mapped | Bốn canonical priorities |
+| `status` | varchar(20) | Có | Có, mapped | `open -> in_progress -> resolved` |
+| `failure_category` | varchar(40) | Có | Có, mapped | Tám focused categories |
+| `created_at` | timestamptz | Có | Có | Server tạo, timezone-safe |
+| `resolved_at` | timestamptz/null | Có điều kiện | Có | Chỉ có khi status `resolved` |
+| `technician_id` | varchar(50) | Có | Có | Technician được gán |
+| `manager_note` | text/null | Không | Có | Ghi chú khi manager tạo ticket |
+| `note` | text/null | Không | Có | Ghi chú update gần nhất |
+| `version` | integer | Có | Không | Optimistic concurrency |
+| `updated_at` | timestamptz | Có | Không | Storage metadata |
 
-Allowed `status`: `Mới tạo`, `Đang xử lý`, `Đã xử lý`. Chỉ ticket `Đã xử lý` có `resolved_at`; timestamp này không được sớm hơn `created_at`.
+Constraints:
 
-Write workflow chỉ cho phép transition tuyến tính `Mới tạo -> Đang xử lý -> Đã xử lý`; cập nhật cùng trạng thái được phép để đổi priority, technician hoặc note. Ticket phải có maintenance log liên kết trước khi chuyển sang `Đã xử lý`. `created_at` do server tạo theo UTC, còn `resolved_at` phải có timezone và không được nằm trong tương lai.
+- `(ticket_id, asset_id)` unique để maintenance log có thể dùng composite FK;
+- `resolved_at >= created_at`;
+- unresolved status phải có `resolved_at = null`;
+- resolved status phải có `resolved_at`;
+- service chỉ cho phép cùng status hoặc transition tuyến tính;
+- ticket phải có linked maintenance log trước khi resolve.
+
+Indexes: `asset_id`, `status`, `created_at`. API không expose `version`, vì vậy request/response contract của frontend không đổi; stale write được trả HTTP `409`.
 
 ## Maintenance Logs
 
-Primary source hiện tại: `data/raw/maintenance_logs.csv`.
+PostgreSQL table: `maintenance_logs`. Seed/snapshot file: `maintenance_logs.csv`.
 
-| Field | Type | Required | Ý nghĩa | Trạng thái hiện tại |
-|---|---|---:|---|---|
-| `log_id` | string | Có | Định danh maintenance log | Có |
-| `ticket_id` | string/null | Có điều kiện | Ticket nguồn khi log là corrective maintenance | Có |
-| `asset_id` | string | Có | Asset được bảo trì | Có |
-| `maintenance_date` | date | Có | Ngày thực hiện | Có |
-| `maintenance_type` | string | Có | Preventive, corrective hoặc inspection bằng tiếng Việt | Có |
-| `technician_id` | string | Có | Định danh người thực hiện | Có |
-| `inspection_result` | string | Có | Kết quả kiểm tra bằng tiếng Việt | Có |
-| `actions_taken` | string | Có | Hành động đã thực hiện | Có |
-| `parts_replaced` | string/null | Không | Mô tả part đã thay, không phải inventory transaction | Có |
-| `technician_note` | string | Có | Ghi chú bàn giao hoặc theo dõi | Có |
-| `maintenance_result` | string | Có | Kết quả maintenance theo canonical enum | Có |
-| `follow_up_required` | boolean | Có | Có khi result chưa xử lý hoàn toàn | Có |
-| `next_maintenance_date` | date | Có | `maintenance_date + maintenance_interval_days` | Có |
+| Field | DB type | Required | API exposure | Rule |
+|---|---|---:|---:|---|
+| `log_id` | varchar(50) | Có | Có | Primary key; runtime ID từ PostgreSQL sequence |
+| `ticket_id` | varchar(50)/null | Có điều kiện | Có | Null cho historical preventive log |
+| `work_order_id` | UUID/null | Không | Có qua work-order detail | Unique FK; historical/direct API logs giữ null |
+| `asset_id` | varchar(50) | Có | Có | FK đến asset |
+| `maintenance_date` | date | Có | Có | Không trước ticket hoặc latest asset maintenance |
+| `maintenance_type` | varchar(30) | Có | Có, mapped | Runtime form tạo `corrective` |
+| `technician_id` | varchar(50) | Có | Có | Kế thừa ticket trong current workflow |
+| `inspection_result` | text | Có | Có | Field observation |
+| `actions_taken` | text | Có | Có | Hành động thực tế |
+| `parts_replaced` | text/null | Không | Có | Historical text, không phải inventory transaction |
+| `technician_note` | text | Có | Có | Handover/follow-up note |
+| `maintenance_result` | varchar(30) | Có | Có, mapped | Canonical result |
+| `follow_up_required` | boolean | Có | Có | False chỉ khi result `resolved` |
+| `next_maintenance_date` | date | Có | Có | PostgreSQL giữ operational next date; snapshot project `maintenance_date + maintenance_interval_days` |
+| `created_at` | timestamptz | Có | Không | Storage metadata |
+| `updated_at` | timestamptz | Có | Không | Storage metadata; log hiện append-only |
 
-Allowed `maintenance_result`:
+Composite FK `(ticket_id, asset_id) -> maintenance_tickets(ticket_id, asset_id)` và `(work_order_id, asset_id) -> work_orders(id, asset_id)` ngăn liên kết sai asset ở database level. Existing direct maintenance-log API vẫn lock asset/ticket, insert log và cập nhật maintenance dates như trước. Work-order completion dùng transaction riêng được mô tả dưới đây.
 
-- `Đã xử lý` (`resolved`);
-- `Đã xử lý một phần` (`partially_resolved`);
-- `Cần theo dõi` (`monitoring_required`);
-- `Cần hỗ trợ chuyên môn` (`vendor_required`).
+## Preventive Maintenance Plans
 
-`follow_up_required = false` chỉ khi result là `Đã xử lý`; các result còn lại yêu cầu follow-up. Tên code trong ngoặc dùng trong mapping nội bộ, còn CSV giữ business value tiếng Việt.
+PostgreSQL table: `preventive_maintenance_plans`. Plan mô tả recurring intent, không phải executable job.
 
-`parts_replaced` có thể được giữ như lịch sử hành động nhưng không được mở rộng thành spare-parts inventory.
+| Nhóm field | Fields | Contract |
+|---|---|---|
+| Identity | `id`, `plan_code`, `name`, `description`, `asset_id` | UUID PK; `plan_code` unique; asset FK delete restricted |
+| Recurrence | `schedule_type`, `interval_value`, `interval_unit`, `recurrence_rule`, `start_date`, `end_date`, `local_timezone` | `schedule_type=interval`; N=1–366; unit chỉ day/week/month/year; `recurrence_rule` null trong current subset; timezone phải là IANA hợp lệ |
+| Release/overdue | `lead_time_days`, `grace_period_days`, `next_due_date`, `last_generated_due_date` | 0–365 ngày; due dates là business dates; next due được service derive |
+| Defaults | `estimated_duration_minutes`, `default_priority`, `default_assignee_user_id`, `checklist_template_id`, `instructions` | Assignee phải là active technician; template active và tương thích asset type |
+| Lifecycle | `status`, `is_active`, `paused_at`, `archived_at`, `archive_reason` | Pause/archive không hard-delete; archived plan chỉ đọc; paused plan không generate |
+| Concurrency/audit | creator/updater IDs, UTC timestamps, `version` | Mỗi mutation yêu cầu optimistic version và ghi audit cùng transaction |
 
-Log được tạo từ ticket trong local workflow dùng `maintenance_type = Bảo trì sửa chữa` và kế thừa `technician_id` đang được gán trên ticket. `asset_id` phải khớp ticket, ticket phải ở trạng thái `Đang xử lý`, `maintenance_date` không được trước ngày tạo ticket hoặc nằm trong tương lai, và `next_maintenance_date` phải theo đúng maintenance interval của asset.
+Recurrence semantics:
 
-Khi log được ghi thành công, `assets.last_maintenance_date` và `assets.next_maintenance_date` của cùng asset được đồng bộ để raw dataset vẫn qua canonical validation và sẵn sàng cho batch tiếp theo.
+- monthly/yearly giữ anchor ngày bắt đầu; nếu tháng không có ngày 29/30/31 thì clamp vào cuối tháng rồi quay lại anchor ở tháng sau;
+- leap-day yearly recurrence clamp vào 28/02 ở năm không nhuận;
+- expansion bị giới hạn 256 occurrence mỗi request và catch-up chỉ xét trailing 366 ngày;
+- pause không tạo uncontrolled backlog; resume đặt lại `next_due_date` từ ngày resume;
+- schedule update không viết lại work order đã generate;
+- overdue là phép tính `as_of_date > due_date + grace_period_days`, không có writable overdue status.
 
-## CSV Write Contract
+## Checklist Template Versions
 
-- `POST /tickets`, `PATCH /tickets/{ticket_id}` và `POST /maintenance/logs` chỉ ghi raw workflow CSV; log creation đồng bộ asset maintenance dates nhưng không ghi processed analytics.
-- Ticket ID và log ID được tạo theo canonical sequence, đồng thời được kiểm tra trùng trước khi ghi.
-- Mỗi file đích được stage trong cùng thư mục, flush dữ liệu rồi dùng atomic replacement. Maintenance-log request stage cả log và asset master; lỗi replace được rollback về các bản gốc đã backup.
-- Không có cross-process lock, database transaction isolation hoặc crash-safe multi-file commit. Write path này chỉ phù hợp local single-user portfolio MVP và không an toàn cho concurrent production users.
-- Sau khi ghi, risk, preventive, recurrence và KPI snapshots vẫn phản ánh batch trước đó cho đến khi canonical analytics pipeline được chạy lại.
+Tables: `checklist_templates`, `checklist_template_items`.
+
+| Field | Contract |
+|---|---|
+| `id`, `code`, `version_number` | UUID PK; `(code, version_number)` unique; version mới tạo row mới |
+| `name`, `asset_type`, `description`, `status` | Plain text, không nhận executable HTML; archived version vẫn đọc được |
+| Item `sequence` | Unique trong template, liên tục từ 1, tối đa 100 items |
+| Item `instruction`, `guidance` | Plain text có giới hạn độ dài |
+| `response_type` | `checkbox`, `pass_fail`, `numeric`, `text`; N/A là result chỉ khi `allow_not_applicable=true` |
+| `is_required`, `safety_critical` | Required item phải hoàn tất; safety-critical `fail` chặn completion |
+| numeric fields | `expected_unit`, `minimum_value`, `maximum_value` chỉ dùng cho numeric; min không lớn hơn max |
+
+Work order copy các item sang `work_order_checklist_items`; template version sau đó không thể thay đổi history của work order cũ.
+
+## Work Orders
+
+PostgreSQL table: `work_orders`. Một row là một executable maintenance job trên đúng một asset.
+
+| Nhóm field | Fields | Contract |
+|---|---|---|
+| Identity | `id`, `work_order_number`, `title`, `description`, `work_order_type` | UUID PK; number sinh bằng PostgreSQL sequence và unique dưới concurrency |
+| Source | `asset_id`, `preventive_plan_id`, `source_ticket_id` | Asset bắt buộc; plan/ticket optional; source relationship phải cùng asset |
+| People/result | `assigned_to_user_id`, `created_by_user_id`, `verified_by_user_id`, `maintenance_log_id` | Assignee là active technician; verifier khác actor completion; one-to-one maintenance log |
+| Planning | priority, UTC scheduled timestamps, `due_date`, `local_timezone`, `grace_period_days`, duration | Scheduled end không trước start; due date là local business date |
+| Execution | `started_at`, `completed_at`, `verified_at`, `cancelled_at`, reasons/summary/safety/labor | UTC chronology phải phù hợp state; cancellation cần reason |
+| State | `status`, `hold_reason` | Canonical state machine; overdue không lưu ở đây |
+| Concurrency/audit | UTC create/update, `version` | Stale expected version trả HTTP 409; mọi transition audit trong transaction |
+
+Canonical state machine:
+
+```text
+planned -> assigned -> in_progress -> completed -> verified
+              |             |
+              +-> on_hold <-+
+planned/assigned -> cancelled
+completed -> in_progress  (explicit authorized reopen)
+```
+
+- work order cần eligible assignee trước khi start;
+- completion cần mandatory checklist và không có safety-critical fail;
+- completion tạo/link đúng một `MaintenanceLog`; repeated request không tạo log trùng;
+- verification cập nhật `last_maintenance_date` và compatibility `next_maintenance_date` transactionally;
+- verify/cancel không tự resolve source ticket;
+- verified work order và evidence của nó chỉ đọc trong current milestone.
+
+## Work-Order Evidence
+
+`work_order_attachments` lưu UUID, work-order/asset FK, category, generated storage key, filename, MIME, size, SHA-256, actor và soft-delete fields. API không trả storage key/path. Categories: `before_photo`, `after_photo`, `inspection_document`, `completion_document`, `safety_document`, `other`. MIME/signature/extension, configured size, checksum, authenticated resource scope và `nosniff` download dùng cùng security contract với asset attachment.
+
+## User Identity Contract
+
+`users` là local/internal-pilot identity store:
+
+| Field | Rule |
+|---|---|
+| `id` | UUID primary key; API trả UUID, client không tự tạo |
+| `username` | 3–100 ký tự, normalize lowercase + trim, unique |
+| `email` | Optional, normalize lowercase + trim, unique khi có |
+| `password_hash` | Argon2id encoded hash, không bao giờ xuất qua API/audit |
+| `display_name` | 2–200 ký tự, dùng làm actor snapshot |
+| `role` | Stable English code trong sáu role canonical |
+| `technician_id` | Optional unique link cho technician resource scope |
+| `is_active` | Inactive user không login/refresh/access được |
+| `created_at`, `updated_at`, `last_login_at` | UTC timezone-aware timestamps |
+| `version` | Optimistic concurrency và access-token invalidation |
+
+API `UserResponse` bổ sung `role_display_name` tiếng Việt và sorted `permissions`; không chứa hash hoặc session token. User create yêu cầu password 12–256 ký tự. Username/email trùng sau normalize bị từ chối.
+
+## Refresh Session Contract
+
+| Field | Rule |
+|---|---|
+| `id` | UUID session identifier, được bind trong access token |
+| `user_id` | Required FK tới `users`, cascade khi user bị xóa ở DB administration layer |
+| `token_hash` | Unique SHA-256 hash của opaque refresh token; không lưu plaintext |
+| `csrf_token_hash` | SHA-256 hash của CSRF binding token |
+| `created_at`, `expires_at`, `revoked_at` | UTC; active khi chưa revoke và chưa hết hạn |
+| `user_agent` | Optional, truncate 300 ký tự; không lưu Authorization/cookie |
+
+Refresh cookie và CSRF cookie là HTTP transport state, không thuộc JSON response. Rotation tạo session mới và revoke session cũ atomically. Logout revoke đúng active session; password change/deactivation revoke toàn bộ sessions của user.
+
+## Audit Log Contract
+
+| Field | Rule |
+|---|---|
+| `id`, `occurred_at` | UUID + UTC timestamp |
+| `actor_user_id` | Nullable FK cho failure không xác định được actor |
+| `actor_display_name` | Snapshot để giữ ngữ cảnh hiển thị |
+| `action` | Stable dotted code, ví dụ `auth.login_succeeded`, `ticket.status_changed` |
+| `resource_type`, `resource_id` | Entity/action target, ID nullable khi chưa tồn tại |
+| `request_id` | Correlation ID do middleware chấp nhận/tạo |
+| `before_state`, `after_state` | Optional allow-listed JSON projection, không phải raw model/request |
+| `metadata` | Optional safe bounded metadata |
+| `outcome` | `success`, `failure` hoặc `denied` theo event |
+
+Các event hiện có bao gồm login/session/user; asset/location/lifecycle/attachment; ticket/log; preventive plan create/update/schedule/pause/resume/archive/generation; checklist template create/version/archive; work-order generate/create/assign/start/hold/resume/checklist/complete/reopen/verify/cancel; evidence upload/delete; maintenance-log linkage và asset-date update. Application không cung cấp update/delete endpoint cho audit; database trigger chặn sửa/xóa. Audit projection loại password, hash, token, cookie, Authorization header, attachment storage key/path/body, raw checklist payload, secret và oversized text.
+
+`GET /audit-logs` trả `{items, page, page_size, total, total_pages}` và hỗ trợ filter theo action, resource type, outcome, actor. Quyền đọc audit không cho quyền thay đổi event.
+
+## Transactional Import Contract
+
+`src/ingestion/load_data.py`:
+
+- chạy full canonical CSV validation trước khi kết nối write;
+- tạo deterministic `FACILITY-ROOT` và một location child cho mỗi legacy location, rồi import assets, tickets và maintenance logs;
+- chuyển Vietnamese values sang internal codes;
+- gán category theo asset type, lifecycle `active`, ownership `owned`, `installed_at` từ installation date và deterministic QR token;
+- import toàn bộ ba table trong một transaction;
+- không tự tạo plan/template/work order. `--replace` xóa PM4 transactional demo rows theo FK order trước khi khôi phục canonical 27/42/86; PM4 seed chạy bằng command riêng;
+- đồng bộ ID sequences theo maximum imported `TCK-*` và `LOG-*`;
+- từ chối database không rỗng nếu không có `--replace`;
+- `--dry-run` không ghi dữ liệu;
+- `--replace` là explicit canonical demo reset và vẫn atomic;
+- duplicate, FK hoặc check-constraint error rollback toàn bộ import.
+
+## Analytics Snapshot Contract
+
+`src/database/export_snapshot.py` đọc assets, tickets và logs trong một PostgreSQL `REPEATABLE READ` transaction. Command ghép hai generated pass-through files:
+
+- `sensor_readings.csv`;
+- `documents.csv`.
+
+Toàn bộ staging directory phải qua `validate_csv_dataset` trước khi replace `data/analytics_input/`. Processed analytics không đọc trực tiếp PostgreSQL trong milestone này. Exporter không thay đổi transactional rows: nó project asset/log next dates về fixed-interval contract trong staging để giữ validator và analytics formulas hiện có.
+
+Asset snapshot cố ý chỉ có 10 legacy columns: ID/name/type/location/criticality/status, installation date, maintenance dates và interval. Plan-specific due dates, lifecycle, warranty, attachment và QR fields không đi vào formula. Retired/archived rows vẫn được giữ trong snapshot để bảo toàn reference/history; pipeline hiện chưa tự loại chúng. Đây là documented compatibility behavior, không phải quyết định production scheduling.
 
 ## Operational Readings
 
-Primary source hiện tại: `data/raw/sensor_readings.csv`. Đây là batch input, không phải real-time stream.
+Primary source: generated `sensor_readings.csv`. Đây là batch input, không phải real-time stream.
 
-| Field | Type | Required | Ý nghĩa |
-|---|---|---:|---|
-| `reading_id` | string | Có | Định danh reading |
-| `asset_id` | string | Có | Asset liên quan |
-| `timestamp` | datetime | Có | Thời điểm đo |
-| `energy_kwh` | number | Có | Điện năng tiêu thụ |
-| `runtime_hours` | number | Có | Thời gian vận hành trong kỳ đo |
-| `temperature` | number | Có | Nhiệt độ |
-| `vibration` | number | Có điều kiện | Độ rung khi phù hợp với loại thiết bị |
-| `status` | string | Có | Trạng thái reading |
+| Field | Type | Rule |
+|---|---|---|
+| `reading_id` | string | Unique |
+| `asset_id` | string | Phải tồn tại trong snapshot asset master |
+| `timestamp` | zoned datetime | Unique với `asset_id` |
+| `energy_kwh` | float | Không âm |
+| `temperature` | float | Không âm trong synthetic contract |
+| `vibration` | float | Không âm |
+| `runtime_hours` | float | 0–24 |
+| `status` | string | Vietnamese business value |
 
-Raw readings không chứa `pressure`, `anomaly_type`, `is_anomaly` hoặc future outcome. Controlled anomalies chỉ được thể hiện qua numeric pattern ở một nhóm nhỏ assets. Reading status không được dùng làm ground-truth anomaly label.
+Không có anomaly label, future outcome hoặc raw risk score trong input.
 
-## SOP/Checklist Documents
+## SOP Và Checklist Documents
 
-Primary source hiện tại: `data/raw/documents.csv`.
+Indexing source: generated `documents.csv`. Canonical RAG normalization tạo:
 
-Raw CSV giữ các tên cột legacy để không làm thay đổi optional PostgreSQL loader. `src/rag/document_loader.py` chuẩn hóa chúng thành contract canonical dùng cho RAG:
+- `document_id`;
+- `document_type`;
+- `title`;
+- `asset_type`;
+- `failure_category`;
+- `version`;
+- `effective_date`;
+- `source`;
+- `content`.
 
-| Raw field | Canonical RAG field | Type | Required | Ý nghĩa |
-|---|---|---|---:|---|
-| `doc_id` | `document_id` | string | Có | Định danh ổn định của tài liệu |
-| `title` | `title` | string | Có | Tiêu đề tiếng Việt |
-| `doc_type` | `document_type` | string | Có | Checklist hoặc troubleshooting guide |
-| `asset_type` | `asset_type` | string | Có | Một trong HVAC, pump hoặc generator bằng business value tiếng Việt |
-| suy ra từ title/type | `failure_category` | string | Có điều kiện | Nhóm lỗi cho troubleshooting document; để trống với preventive checklist |
-| `raw_text` | `content` | string | Có | Nội dung tiếng Việt có cấu trúc và cảnh báo an toàn |
-| giá trị mặc định | `version` | string | Có | Phiên bản synthetic hiện tại là `1.0` |
-| ngày của `created_at` | `effective_date` | date | Có | Ngày hiệu lực minh họa, hiện là `2026-01-01` |
-| `source` | `source` | string | Có | Nguồn hiển thị/citation |
-| `clean_text` | `clean_text` | string | Có | Nội dung normalized dùng cho compatibility |
-| `created_at` | `created_at` | datetime | Có | Thời điểm tạo tài liệu synthetic |
+Qdrant payload giữ document identity, chunk index và filter metadata. Asset/ticket/log không được persist trong Qdrant.
 
-Sáu tài liệu hiện tại gồm preventive inspection và failure troubleshooting cho từng loại: HVAC cooling failure, pump vibration/abnormal noise và generator startup failure. Nội dung là synthetic/illustrative, không thay thế manual của nhà sản xuất.
+## Daily Feature Contract
 
-Mỗi indexed chunk phải có `document_id`, `title`, `document_type`, `asset_type`, `failure_category`, `version`, `effective_date` và `chunk_index`. Payload đồng thời giữ `doc_id`, `doc_type` và `text` để bảo toàn response compatibility.
+`asset_daily_features.csv` có một row cho mỗi `(asset_id, feature_date)`. Nhóm field chính:
 
-## Daily Maintenance Features
+- asset profile: type, location, criticality;
+- daily energy, runtime, temperature, vibration;
+- rolling 7-day baselines và deltas;
+- ticket counts 7/30 ngày, high-priority và unresolved counts;
+- recurring issue và follow-up counts;
+- last/next maintenance dates, days overdue;
+- criticality score.
 
-Canonical producer: `src/features/build_features.py`.
+Calculations chỉ dùng event có timestamp không muộn hơn feature date.
 
-Với mỗi `asset_id` và `feature_date`:
+## Anomaly Result Contract
 
-- `last_maintenance_date` là event gần nhất có `maintenance_date <= feature_date`;
-- `next_maintenance_date` lấy từ chính event đó;
-- `days_since_last_maintenance = feature_date - last_maintenance_date`;
-- `days_overdue = max(0, feature_date - next_maintenance_date)`.
-- `unresolved_ticket_count` chỉ tính ticket đang mở tại ngày feature;
-- `recurring_issue_count` là số failure categories đã đạt 3 occurrences tại ngày feature;
-- `follow_up_required_count` chỉ tính maintenance logs đã xảy ra đến ngày feature.
+`anomaly_results.csv` giữ backward-compatible API fields:
 
-Mọi asset phải có ít nhất một maintenance event trước hoặc đúng ngày đầu observation window. Feature pipeline không dùng future maintenance event và không fallback sang `installation_date`.
+- `asset_id`, `date`, `asset_type`, `location`;
+- measured metrics và deltas;
+- `rule_based_score`, `isolation_forest_score`, `anomaly_score` trong 0–100;
+- `is_anomaly`;
+- Vietnamese `anomaly_type` và `anomaly_reasons`.
 
-## Anomaly Results
+Không thay đổi thresholds hoặc model trong Product Milestone 1.
 
-Canonical producer: `src/models/anomaly_detection.py`.
+## Risk Result Contract
 
-| Field | Type | Required | Ý nghĩa |
-|---|---|---:|---|
-| `asset_id` | string | Có | Asset được chấm điểm |
-| `feature_date` | date | Có | Ngày feature canonical |
-| `date` | date | Có | Ngày feature |
-| `asset_type` | string | Có | Loại asset |
-| `location` | string | Có | Vị trí |
-| `rule_based_score` | number 0-100 | Có | Severity từ rule |
-| `isolation_forest_score` | number 0-100 | Có | Relative outlier score |
-| `anomaly_score` | number 0-100 | Có | Combined score |
-| `is_anomaly` | boolean | Có | Cờ bất thường theo implementation canonical |
-| `anomaly_type` | string | Có | Loại bất thường tiếng Việt |
-| `anomalous_metrics` | string | Có | Metrics đóng góp vào rule signals hoặc `none` |
-| `contributing_signals` | string | Có | Giải thích signal tiếng Việt |
-| `anomaly_reasons` | string | Có | Giải thích tiếng Việt |
+`risk_scores.csv` giữ:
 
-Các operational values và delta hiện có trong output để hỗ trợ inspection, nhưng không thay đổi minimum identity/explanation contract ở trên.
+- component scores 0–100;
+- `final_risk_score`/`risk_score` 0–100;
+- `risk_level_code` và Vietnamese `risk_level`;
+- Vietnamese `main_reasons`/`contributing_factors`;
+- Vietnamese `recommended_action`.
 
-## Risk Results
+Risk formula và labels được định nghĩa tại [Analytics pipeline](analytics.md). Score không được diễn giải là xác suất hỏng.
 
-Canonical producer: `src/risk/risk_scoring.py`.
+## Maintenance Report Contracts
 
-| Field | Type | Required | Ý nghĩa |
-|---|---|---:|---|
-| `asset_id` | string | Có | Asset được chấm điểm |
-| `feature_date` | date | Có | Ngày feature canonical |
-| `date` | date | Có | Ngày risk score |
-| `asset_name` | string | Có | Tên hiển thị |
-| `asset_type` | string | Có | Loại asset |
-| `location` | string | Có | Vị trí |
-| `anomaly_score` | number 0-100 | Có | Input bất thường |
-| `maintenance_overdue_score` | number 0-100 | Có | Thành phần quá hạn |
-| `unresolved_ticket_score` | number 0-100 | Có | Thành phần ticket chưa xử lý |
-| `recent_ticket_score` | number 0-100 | Có | Thành phần ticket gần đây |
-| `recurring_issue_score` | number 0-100 | Có | Thành phần sự cố lặp lại |
-| `criticality_score` | number 0-100 | Có | Thành phần criticality |
-| `follow_up_score` | number 0-100 | Có | Thành phần maintenance cần follow-up |
-| `runtime_score` | number 0-100 | Có | Thành phần runtime |
-| `final_risk_score` | number 0-100 | Có | Điểm ưu tiên cuối cùng |
-| `risk_score` | number 0-100 | Có | Alias canonical của `final_risk_score` |
-| `risk_level_code` | string | Có | `low`, `medium`, `high`, `critical` |
-| `risk_level` | string | Có | Mức rủi ro tiếng Việt |
-| `contributing_factors` | string | Có | Alias canonical của explanation tiếng Việt |
-| `main_reasons` | string | Có | Lý do chính tiếng Việt |
-| `recommended_action` | string | Có | Hành động tham khảo tiếng Việt |
+- `preventive_maintenance_status.csv`: due status, days until due, days overdue.
+- `recurring_issues.csv`: deterministic group theo asset/failure category.
+- `maintenance_kpis.csv`: một descriptive KPI snapshot cho latest batch date.
 
-Risk result là decision-support output. Nó không phải failure probability đã hiệu chuẩn và không dự đoán exact failure time.
+Transactional write không sửa ba files này. Chỉ snapshot + canonical batch tiếp theo mới cập nhật reports.
 
-## Preventive Maintenance Status
+## API Compatibility
 
-Canonical producer: `src/features/build_features.py`. Output: `data/processed/preventive_maintenance_status.csv`.
-
-| Field | Type | Required | Ý nghĩa |
-|---|---|---:|---|
-| `asset_id` | string | Có | Asset được phân loại |
-| `as_of_date` | date | Có | Ngày cuối observation window |
-| `last_maintenance_date` | date | Có | Maintenance event mới nhất |
-| `next_maintenance_date` | date | Có | Ngày đến hạn kế tiếp |
-| `days_until_due` | integer >= 0 | Có | Số ngày còn lại, bằng 0 nếu đã quá hạn |
-| `days_overdue` | integer >= 0 | Có | Số ngày quá hạn, bằng 0 nếu chưa quá hạn |
-| `maintenance_status` | string | Có | `not_due`, `due_soon`, `overdue` |
-| `maintenance_status_display` | string | Có | Business value tiếng Việt |
-
-## Recurring Issues
-
-Canonical producer: `src/features/build_features.py`. Output: `data/processed/recurring_issues.csv`.
-
-Mỗi hàng là một group `asset_id` + `failure_category`, gồm `occurrence_count`, `first_occurrence`, `last_occurrence`, `resolved_count`, `unresolved_count`, `recurrence_flag` và `recurrence_threshold`. Threshold canonical là 3 occurrences.
-
-## Maintenance KPIs
-
-Canonical producer: `src/features/build_features.py`. Output: `data/processed/maintenance_kpis.csv`. File gồm một batch snapshot với ticket totals/status, resolution rate/duration, preventive status counts, recurring issue count, follow-up count và latest High/Critical risk asset count. Không tính MTBF; resolution duration không được claim là MTTR.
-
-Formula, threshold và KPI definitions đầy đủ: [Analytics pipeline](analytics.md).
-
-## Compatibility Và Thay Đổi Contract
-
-- Existing FastAPI risk, anomaly, context và Copilot fields tiếp tục được giữ. Manager endpoints dùng explicit response schemas và normalize CSV blank values thành JSON `null`.
-- Future additions phải ưu tiên additive change và có test cho schema/behavior.
-- Generator không tạo raw `risk_scores.csv`; khi save, generator xóa stale raw file cũ nếu tồn tại. Canonical risk result chỉ là `data/processed/risk_scores.csv` do `src/risk/risk_scoring.py` tạo.
-- Mọi thay đổi data contract phải cập nhật file này, validation, tests và README trong cùng milestone.
+Tất cả legacy business endpoint paths, request fields, response fields, Vietnamese statuses và successful status codes được giữ. Chúng yêu cầu Bearer authentication và permission phù hợp; `GET /health` vẫn public. Rich asset/catalog/location/attachment/QR/history endpoints là additive và dùng explicit schemas; storage key/local path không xuất hiện trong response. Frontend không cần biết storage backend; HTTP `401`, `403`, `409`, `410`, `422` và `503` được map thành các error state riêng.

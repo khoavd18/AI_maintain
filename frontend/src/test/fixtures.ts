@@ -76,6 +76,169 @@ export const assetsFixture = [
   },
 ];
 
+export const locationFixture = {
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  code: "ROOFTOP-EAST",
+  name: "Sân thượng phía Đông",
+  location_type: "area",
+  location_type_display: "Khu vực",
+  parent_id: null,
+  breadcrumb: "Cơ sở chính / Sân thượng phía Đông",
+  description: null,
+  is_active: true,
+  asset_count: 1,
+  created_at: "2026-07-18T00:00:00Z",
+  updated_at: "2026-07-18T00:00:00Z",
+  version: 1,
+};
+
+export const assetProfileFixture = {
+  ...assetsFixture[0],
+  asset_type_code: "generator",
+  asset_category: "power_system",
+  asset_category_display: "Hệ thống điện",
+  manufacturer: "Cummins",
+  model: "C150D5",
+  serial_number: "GEN-002-2018",
+  production_year: 2018,
+  location_id: locationFixture.id,
+  location_breadcrumb: locationFixture.breadcrumb,
+  criticality_code: "critical",
+  lifecycle_status: "active",
+  lifecycle_status_display: "Đang hoạt động",
+  lifecycle_status_before_archive: null,
+  operational_status: "warning",
+  operational_status_display: "Cảnh báo",
+  operational_status_before_archive: null,
+  installed_at: "2018-08-26T00:00:00Z",
+  commissioned_at: "2018-08-30T00:00:00Z",
+  retired_at: null,
+  archived_at: null,
+  archive_reason: null,
+  ownership_type: "owned",
+  ownership_type_display: "Sở hữu",
+  description: "Máy phát điện dự phòng cho tải thiết yếu.",
+  warranty_start_date: "2018-08-30",
+  warranty_end_date: "2023-08-30",
+  warranty_provider: "Nhà cung cấp mẫu",
+  warranty_reference: "WR-GEN-002",
+  created_at: "2026-07-18T00:00:00Z",
+  updated_at: "2026-07-18T00:00:00Z",
+  created_by_user_id: null,
+  updated_by_user_id: null,
+  version: 1,
+  qr_lookup_token: "22222222-2222-4222-8222-222222222222",
+};
+
+export const hvacProfileFixture = {
+  ...assetProfileFixture,
+  ...assetsFixture[1],
+  asset_type_code: "hvac",
+  asset_category: "climate_control",
+  asset_category_display: "Điều hòa không khí",
+  manufacturer: "Daikin",
+  model: "VRV-IV",
+  serial_number: "HVAC-001-2023",
+  production_year: 2023,
+  location_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  location_breadcrumb: "Cơ sở chính / Sân thượng phía Tây",
+  criticality_code: "high",
+  operational_status: "running",
+  operational_status_display: "Đang vận hành",
+  installed_at: "2023-04-17T00:00:00Z",
+  commissioned_at: "2023-04-20T00:00:00Z",
+  warranty_start_date: "2023-04-20",
+  warranty_end_date: "2028-04-20",
+  warranty_reference: "WR-HVAC-001",
+  version: 2,
+  qr_lookup_token: "33333333-3333-4333-8333-333333333333",
+};
+
+export const assetCatalogFixture = {
+  items: [assetProfileFixture, hvacProfileFixture],
+  page: 1,
+  page_size: 10,
+  total: 2,
+  total_pages: 1,
+};
+
+export const assetOptionsFixture = {
+  asset_types: [
+    { code: "hvac", display_name: "Máy lạnh" },
+    { code: "pump", display_name: "Máy bơm" },
+    { code: "generator", display_name: "Máy phát điện dự phòng" },
+  ],
+  asset_categories: [
+    { code: "climate_control", display_name: "Điều hòa không khí" },
+    { code: "water_system", display_name: "Hệ thống nước" },
+    { code: "power_system", display_name: "Hệ thống điện" },
+    { code: "other", display_name: "Khác" },
+  ],
+  criticalities: [
+    { code: "low", display_name: "Thấp" },
+    { code: "medium", display_name: "Trung bình" },
+    { code: "high", display_name: "Cao" },
+    { code: "critical", display_name: "Rất quan trọng" },
+  ],
+  lifecycle_statuses: [
+    { code: "planned", display_name: "Đang lập kế hoạch" },
+    { code: "active", display_name: "Đang hoạt động" },
+    { code: "inactive", display_name: "Tạm ngừng" },
+    { code: "retired", display_name: "Đã ngừng sử dụng" },
+    { code: "archived", display_name: "Đã lưu trữ" },
+  ],
+  operational_statuses: [
+    { code: "running", display_name: "Đang vận hành" },
+    { code: "warning", display_name: "Cảnh báo" },
+    { code: "fault", display_name: "Có lỗi" },
+    { code: "under_maintenance", display_name: "Đang bảo trì" },
+    { code: "out_of_service", display_name: "Ngừng phục vụ" },
+  ],
+  ownership_types: [
+    { code: "owned", display_name: "Sở hữu" },
+    { code: "leased", display_name: "Thuê" },
+    { code: "managed", display_name: "Quản lý hộ" },
+  ],
+  location_types: [{ code: "area", display_name: "Khu vực" }],
+  attachment_categories: [
+    { code: "asset_photo", display_name: "Ảnh thiết bị" },
+    { code: "technical_manual", display_name: "Tài liệu kỹ thuật" },
+    { code: "warranty_document", display_name: "Tài liệu bảo hành" },
+    { code: "commissioning_record", display_name: "Biên bản nghiệm thu" },
+    { code: "inspection_document", display_name: "Biên bản kiểm tra" },
+    { code: "other", display_name: "Khác" },
+  ],
+};
+
+export const assetQrFixture = {
+  asset_id: "GENERATOR_002",
+  lookup_token: assetProfileFixture.qr_lookup_token,
+  lookup_url: `http://localhost:3000/scan/assets/${assetProfileFixture.qr_lookup_token}`,
+  svg_base64: "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==",
+  label_text: "GENERATOR_002 · Máy phát điện dự phòng 002",
+};
+
+export const assetHistoryFixture = {
+  items: [
+    {
+      id: "audit-asset-created",
+      occurred_at: "2026-07-18T00:00:00Z",
+      action: "asset.created",
+      event_type: "asset",
+      summary: "Đã đăng ký asset GENERATOR_002.",
+      actor_user_id: null,
+      actor_display_name: null,
+      resource_type: "asset",
+      resource_id: "GENERATOR_002",
+      changed_fields: ["asset_name", "location_id"],
+    },
+  ],
+  page: 1,
+  page_size: 15,
+  total: 1,
+  total_pages: 1,
+};
+
 export const ticketsFixture = [
   {
     ticket_id: "TCK-000041",
@@ -223,4 +386,73 @@ export const assetDetailsFixture = {
   recent_tickets: [ticketsFixture[0]],
   recent_maintenance_logs: [logFixture],
   recurring_issues: [recurringFixture],
+};
+
+export const copilotResponseFixture = {
+  answer: [
+    "### Tóm tắt tình trạng thiết bị",
+    "GENERATOR_002 cần được kiểm tra theo risk context hiện tại.",
+    "### Checklist hoặc bước kiểm tra được tìm thấy",
+    "- Cô lập thiết bị và xác nhận điều kiện an toàn.",
+    "- Đo điện áp ắc quy theo SOP.",
+    "### Nguồn tài liệu",
+    "Xem danh sách nguồn.",
+    "### Lưu ý an toàn",
+    "Tuân thủ quy trình an toàn.",
+    "### Giới hạn của khuyến nghị",
+    "Kỹ thuật viên phải xác minh tại hiện trường.",
+  ].join("\n"),
+  asset_context: { asset_id: "GENERATOR_002", asset_type: "Máy phát điện dự phòng" },
+  sources: [
+    {
+      doc_id: "SOP-GEN-001",
+      document_id: "SOP-GEN-001",
+      title: "SOP kiểm tra máy phát điện dự phòng",
+      doc_type: "SOP",
+      document_type: "SOP",
+      asset_type: "Máy phát điện dự phòng",
+      failure_category: "Lỗi điện",
+      version: "1.0",
+      effective_date: "2026-01-15",
+      source: "data/documents/sop_generator.md",
+      score: 0.91,
+    },
+  ],
+  retrieved_chunks: [
+    {
+      doc_id: "SOP-GEN-001",
+      document_id: "SOP-GEN-001",
+      chunk_id: "SOP-GEN-001-0",
+      title: "SOP kiểm tra máy phát điện dự phòng",
+      doc_type: "SOP",
+      document_type: "SOP",
+      asset_type: "Máy phát điện dự phòng",
+      failure_category: "Lỗi điện",
+      version: "1.0",
+      effective_date: "2026-01-15",
+      source: "data/documents/sop_generator.md",
+      score: 0.91,
+      text: "Đo điện áp ắc quy.",
+      content: "Đo điện áp ắc quy.",
+      chunk_index: 0,
+    },
+  ],
+  retrieval_status: "success" as const,
+  relevance_status: "relevant" as const,
+  safety_notice: "Ngắt nguồn và tuân thủ lockout/tagout trước khi kiểm tra.",
+  filters_applied: { asset_type: "Máy phát điện dự phòng", failure_category: "Lỗi điện" },
+};
+
+export const copilotUnavailableFixture = {
+  ...copilotResponseFixture,
+  answer: [
+    "### Tóm tắt tình trạng thiết bị",
+    "Chưa thể truy xuất tài liệu lúc này.",
+    "### Giới hạn của khuyến nghị",
+    "Không cung cấp hướng dẫn kỹ thuật khi retrieval chưa sẵn sàng.",
+  ].join("\n"),
+  sources: [],
+  retrieved_chunks: [],
+  retrieval_status: "unavailable" as const,
+  relevance_status: "not_relevant" as const,
 };

@@ -2,6 +2,7 @@ import type {
   AnomalyRecord as ApiAnomalyRecord,
   AssetDetailsResponse,
   AssetOverviewRecord,
+  AssetProfile,
   MaintenanceLogRecord,
   RecurringIssueRecord,
   RiskRecord,
@@ -45,11 +46,37 @@ export function adaptAsset(record: AssetOverviewRecord): Asset {
     riskLevel: formatRiskLabel(record.risk_level),
     maintenanceStatus: formatMaintenanceLabel(record.maintenance_status_display),
     lastMaintenance: formatDate(record.last_maintenance_date),
+    lastMaintenanceDateIso: record.last_maintenance_date,
     nextMaintenance: formatDate(record.next_maintenance_date),
+    nextMaintenanceDateIso: record.next_maintenance_date,
+    maintenanceIntervalDays: record.maintenance_interval_days,
     overdueDays: record.days_overdue ?? 0,
     unresolvedTickets: record.unresolved_ticket_count ?? 0,
     contributingFactors: record.contributing_factors ?? missingValue,
     recommendedAction: record.recommended_action ?? missingValue,
+  };
+}
+
+export function adaptAssetProfile(profile: AssetProfile): Asset {
+  return {
+    id: profile.asset_id,
+    name: profile.asset_name,
+    type: profile.asset_type,
+    location: profile.location_breadcrumb,
+    criticality: profile.criticality,
+    status: profile.status,
+    riskScore: null,
+    riskLevel: null,
+    maintenanceStatus: null,
+    lastMaintenance: formatDate(profile.last_maintenance_date),
+    lastMaintenanceDateIso: profile.last_maintenance_date,
+    nextMaintenance: formatDate(profile.next_maintenance_date),
+    nextMaintenanceDateIso: profile.next_maintenance_date,
+    maintenanceIntervalDays: profile.maintenance_interval_days,
+    overdueDays: 0,
+    unresolvedTickets: 0,
+    contributingFactors: missingValue,
+    recommendedAction: "Kiểm tra hồ sơ và latest analytics trước khi đưa ra quyết định bảo trì.",
   };
 }
 
@@ -67,7 +94,10 @@ export function adaptAssetDetails(details: AssetDetailsResponse): Asset {
     riskLevel: formatRiskLabel(details.latest_risk?.risk_level),
     maintenanceStatus: formatMaintenanceLabel(preventive?.maintenance_status_display),
     lastMaintenance: formatDate(profile.last_maintenance_date),
+    lastMaintenanceDateIso: profile.last_maintenance_date,
     nextMaintenance: formatDate(profile.next_maintenance_date),
+    nextMaintenanceDateIso: profile.next_maintenance_date,
+    maintenanceIntervalDays: profile.maintenance_interval_days,
     overdueDays: preventive?.days_overdue ?? 0,
     unresolvedTickets: details.recent_tickets.filter((ticket) => ticket.status !== "Đã xử lý").length,
     contributingFactors: details.risk_contributing_factors ?? missingValue,
@@ -86,8 +116,12 @@ export function adaptTicket(record: TicketRecord): Ticket {
     status: ticketStatusCodes[record.status],
     technician: record.technician_id,
     createdAt: formatTimestamp(record.created_at),
+    createdAtIso: record.created_at,
+    resolvedAtIso: record.resolved_at,
     updatedAt: formatTimestamp(record.resolved_at ?? record.created_at),
     waitingTime: formatElapsedTime(record.created_at, record.resolved_at),
+    managerNote: record.manager_note,
+    note: record.note,
   };
 }
 
@@ -121,6 +155,7 @@ export function adaptRecurringIssue(record: RecurringIssueRecord): RecurringIssu
 export function adaptMaintenanceLog(record: MaintenanceLogRecord): MaintenanceEvent {
   return {
     id: record.log_id,
+    ticketId: record.ticket_id,
     date: formatDate(record.maintenance_date),
     result: record.maintenance_result,
     actions: record.actions_taken,

@@ -1,21 +1,24 @@
 "use client";
 
-import { Columns3, Filter, List, LockKeyhole, Plus, Search } from "lucide-react";
+import { Columns3, Filter, List, Plus, Search, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { PermissionDeniedNotice, useAuth } from "@/components/auth-provider";
 import { PriorityBadge, TicketStatusBadge } from "@/components/status-badges";
 import { TicketCard } from "@/components/ticket-card";
-import { TicketDetailSheet } from "@/components/ticket-detail-sheet";
+import { TicketCreateSheet } from "@/components/ticket-create-sheet";
+import { TicketDetailSheet, type RefreshedTicketState } from "@/components/ticket-detail-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState, ErrorState, LoadingSkeleton, RetryButton } from "@/components/ui-states";
-import { useAssetsQuery, useTicketsQuery } from "@/hooks/use-api-queries";
-import { adaptAsset, adaptTicket } from "@/lib/adapters";
+import { useAssetsQuery, useMaintenanceLogsQuery, useTicketsQuery } from "@/hooks/use-api-queries";
+import { adaptAsset, adaptMaintenanceLog, adaptTicket } from "@/lib/adapters";
 import { getApiErrorMessage } from "@/lib/api/errors";
-import type { Ticket, TicketStatus } from "@/lib/types";
+import { permissions } from "@/lib/auth";
+import type { Asset, Ticket, TicketStatus } from "@/lib/types";
 
 const columns: { status: TicketStatus; label: string; accent: string }[] = [
   { status: "new", label: "Mới tạo", accent: "bg-blue-500" },
@@ -23,17 +26,32 @@ const columns: { status: TicketStatus; label: string; accent: string }[] = [
   { status: "resolved", label: "Đã xử lý", accent: "bg-green-600" },
 ];
 
-export function TicketWorkspace({ initialCreateAssetId }: { initialCreateAssetId?: string }) {
+export function TicketWorkspace({
+  initialCreateAssetId,
+  initialTicketId,
+}: {
+  initialCreateAssetId?: string;
+  initialTicketId?: string;
+}) {
+  const auth = useAuth();
+  const canCreate = auth.can(permissions.ticketsCreate);
   const ticketsQuery = useTicketsQuery({ limit: 1000 });
   const assetsQuery = useAssetsQuery();
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
-  const [search, setSearch] = useState(initialCreateAssetId ?? "");
+  const logsQuery = useMaintenanceLogsQuery({ limit: 1000 });
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(initialTicketId ?? null);
+  const [createAssetId, setCreateAssetId] = useState<string | null>(initialCreateAssetId ?? null);
+  const [search, setSearch] = useState(initialCreateAssetId ?? initialTicketId ?? "");
   const [priority, setPriority] = useState("all");
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
+  const [analyticsStale, setAnalyticsStale] = useState(false);
   const ticketItems = useMemo(() => (ticketsQuery.data ?? []).map(adaptTicket), [ticketsQuery.data]);
   const assets = useMemo(() => (assetsQuery.data ?? []).map(adaptAsset), [assetsQuery.data]);
+  const logItems = useMemo(() => (logsQuery.data ?? []).map(adaptMaintenanceLog), [logsQuery.data]);
   const selectedTicket = ticketItems.find((ticket) => ticket.id === selectedTicketId) ?? null;
   const relatedAsset = assets.find((asset) => asset.id === selectedTicket?.assetId);
+  const linkedLogs = logItems.filter((log) => log.ticketId === selectedTicketId);
+  const createAsset = canCreate ? assets.find((asset) => asset.id === createAssetId) ?? null : null;
+  const defaultAsset = [...assets].sort((left, right) => (right.riskScore ?? -1) - (left.riskScore ?? -1))[0];
   const filteredTickets = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase("vi");
     return ticketItems.filter((ticket) => {
@@ -42,13 +60,27 @@ export function TicketWorkspace({ initialCreateAssetId }: { initialCreateAssetId
     });
   }, [priority, search, ticketItems]);
 
-  if (ticketsQuery.isPending || assetsQuery.isPending) return <LoadingSkeleton />;
-  const failedQuery = [ticketsQuery, assetsQuery].find((query) => query.isError);
-  if (failedQuery) return <ErrorState title="Chưa tải được ticket workspace" description={getApiErrorMessage(failedQuery.error)} action={<RetryButton onClick={() => void Promise.all([ticketsQuery.refetch(), assetsQuery.refetch()])} />} />;
+  if (ticketsQuery.isPending || assetsQuery.isPending || logsQuery.isPending) return <LoadingSkeleton />;
+  const failedQuery = [ticketsQuery, assetsQuery, logsQuery].find((query) => query.isError);
+  if (failedQuery) return <ErrorState title="Chưa tải được ticket workspace" description={getApiErrorMessage(failedQuery.error)} action={<RetryButton onClick={() => void Promise.all([ticketsQuery.refetch(), assetsQuery.refetch(), logsQuery.refetch()])} />} />;
+
+  async function refreshSelectedState(): Promise<RefreshedTicketState> {
+    const [ticketResult, logResult] = await Promise.all([ticketsQuery.refetch(), logsQuery.refetch()]);
+    if (ticketResult.error || logResult.error) throw ticketResult.error ?? logResult.error;
+    const refreshedTicketRecord = ticketResult.data?.find((ticket) => ticket.ticket_id === selectedTicketId);
+    return {
+      ticket: refreshedTicketRecord ? adaptTicket(refreshedTicketRecord) : null,
+      linkedLogCount: (logResult.data ?? []).filter((log) => log.ticket_id === selectedTicketId).length,
+    };
+  }
+
+  function startCreate(asset?: Asset) {
+    if (asset) setCreateAssetId(asset.id);
+  }
 
   return (
     <>
-      {initialCreateAssetId && <div role="status" className="mb-4 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><LockKeyhole className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><div><p className="font-semibold">Chế độ đọc: chưa gửi ticket cho {initialCreateAssetId}</p><p className="mt-1 text-xs leading-5 text-blue-800">Nút tạo ticket được giữ làm điểm vào workflow; ghi dữ liệu sẽ kết nối ở frontend milestone tiếp theo.</p></div></div>}
+      {analyticsStale && <div role="status" className="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-950"><TriangleAlert className="size-4" aria-hidden="true" />Dữ liệu phân tích chưa được chạy lại. Risk Score và KPI vẫn thuộc batch gần nhất.</div>}
 
       <section aria-label="Điều khiển ticket" className="mb-4 rounded-lg border bg-white p-3 sm:p-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
@@ -58,14 +90,17 @@ export function TicketWorkspace({ initialCreateAssetId }: { initialCreateAssetId
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 xl:justify-end">
             <div className="inline-flex rounded-lg border bg-muted p-0.5" aria-label="Kiểu hiển thị"><Button type="button" size="sm" variant={viewMode === "board" ? "secondary" : "ghost"} aria-pressed={viewMode === "board"} onClick={() => setViewMode("board")}><Columns3 aria-hidden="true" />Board</Button><Button type="button" size="sm" variant={viewMode === "table" ? "secondary" : "ghost"} aria-pressed={viewMode === "table"} onClick={() => setViewMode("table")}><List aria-hidden="true" />Table</Button></div>
-            <Button type="button" disabled title="Kết nối POST /tickets ở frontend milestone tiếp theo"><Plus aria-hidden="true" />Tạo ticket (sắp kết nối)</Button>
+            {canCreate && <Button type="button" disabled={!defaultAsset} onClick={() => startCreate(createAsset ?? defaultAsset)}><Plus aria-hidden="true" />Tạo ticket</Button>}
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground"><span>{filteredTickets.length} / {ticketItems.length} ticket phù hợp</span><span>Live API · chỉ đọc</span></div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground"><span>{filteredTickets.length} / {ticketItems.length} ticket phù hợp</span><span>Live FastAPI · PostgreSQL transactions</span></div>
       </section>
 
+      {!canCreate && <div className="mb-4"><PermissionDeniedNotice message="Vai trò hiện tại có thể xem ticket nhưng không có permission tạo ticket." /></div>}
+
       {viewMode === "board" ? <TicketBoard tickets={filteredTickets} onSelect={(ticket) => setSelectedTicketId(ticket.id)} /> : <TicketTable tickets={filteredTickets} onSelect={(ticket) => setSelectedTicketId(ticket.id)} />}
-      <TicketDetailSheet ticket={selectedTicket} asset={relatedAsset} onClose={() => setSelectedTicketId(null)} />
+      <TicketDetailSheet ticket={selectedTicket} asset={relatedAsset} linkedLogs={linkedLogs} onClose={() => setSelectedTicketId(null)} onRefreshState={refreshSelectedState} onWriteConfirmed={() => setAnalyticsStale(true)} />
+      {createAsset && <TicketCreateSheet asset={createAsset} open={Boolean(createAssetId)} onOpenChange={(open) => !open && setCreateAssetId(null)} onCreated={(ticketId) => { setSelectedTicketId(ticketId); setSearch(ticketId); setAnalyticsStale(true); }} />}
     </>
   );
 }
