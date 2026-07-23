@@ -167,7 +167,24 @@ def test_role_permission_matrix_is_explicit_and_least_privilege() -> None:
     assert Permission.TICKETS_CREATE in ROLE_PERMISSIONS[Role.HELPDESK]
     assert Permission.TICKETS_RESOLVE not in ROLE_PERMISSIONS[Role.HELPDESK]
     assert ROLE_PERMISSIONS[Role.STOREKEEPER] == frozenset(
-        {Permission.ASSETS_READ, Permission.WORK_ORDERS_READ}
+        {
+            Permission.ASSETS_READ,
+            Permission.TICKETS_READ,
+            Permission.WORK_ORDERS_READ,
+            Permission.INVENTORY_READ,
+            Permission.INVENTORY_PARTS_MANAGE,
+            Permission.INVENTORY_LOCATIONS_MANAGE,
+            Permission.INVENTORY_RECEIVE,
+            Permission.INVENTORY_RESERVE,
+            Permission.INVENTORY_ISSUE,
+            Permission.INVENTORY_RETURN,
+            Permission.INVENTORY_TRANSFER,
+            Permission.INVENTORY_ADJUST,
+            Permission.WORK_ORDER_PARTS_READ,
+            Permission.INVENTORY_ATTACHMENTS_READ,
+            Permission.INVENTORY_ATTACHMENTS_CREATE,
+            Permission.INVENTORY_ATTACHMENTS_DELETE,
+        }
     )
 
 
@@ -200,7 +217,8 @@ def test_protected_reads_reject_missing_invalid_and_insufficient_tokens(
 
     storekeeper = _login_headers(client, "storekeeper.test")
     assert client.get("/assets", headers=storekeeper).status_code == 200
-    denied = client.get("/tickets", headers=storekeeper)
+    assert client.get("/tickets", headers=storekeeper).status_code == 200
+    denied = client.get("/audit-logs", headers=storekeeper)
     assert denied.status_code == 403
 
 
@@ -339,7 +357,7 @@ def test_helpdesk_and_technician_resource_rules_are_enforced(
         headers=helpdesk,
         json=_ticket_payload(technician_id="TECH_002"),
     )
-    assert assigned_attempt.status_code == 403
+    assert assigned_attempt.status_code == 201
     unassigned = client.post(
         "/tickets",
         headers=helpdesk,
@@ -368,7 +386,10 @@ def test_helpdesk_and_technician_resource_rules_are_enforced(
     )
     technician = _login_headers(client, "technician.test")
     visible = client.get("/tickets", headers=technician).json()
-    assert {ticket["ticket_id"] for ticket in visible} == {assigned["ticket_id"]}
+    assert {ticket["ticket_id"] for ticket in visible} == {
+        assigned_attempt.json()["ticket_id"],
+        assigned["ticket_id"],
+    }
     assert client.patch(
         f"/tickets/{assigned['ticket_id']}",
         headers=technician,

@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { CodePriorityBadge, WorkOrderStatusBadge } from "@/components/status-badges";
+import { WorkOrderPartsPanel } from "@/components/work-order-parts-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,7 @@ export function WorkOrderDetail({ workOrderId }: { workOrderId: string }) {
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
         <div className="space-y-5">
           <ChecklistExecution workOrder={item} />
+          <WorkOrderPartsPanel workOrderId={item.id} />
           {item.status === "in_progress" && auth.can(permissions.workOrdersComplete) && <CompletionForm workOrder={item} />}
           {canReadEvidence && <EvidencePanel workOrder={item} attachments={attachments.data ?? []} />}
         </div>

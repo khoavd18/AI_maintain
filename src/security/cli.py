@@ -15,6 +15,7 @@ DEMO_USERS = (
     ("engineer.demo", "Kỹ sư trưởng demo", Role.CHIEF_ENGINEER, None),
     ("technician.demo", "Kỹ thuật viên demo", Role.TECHNICIAN, "TECH_002"),
     ("helpdesk.demo", "Tiếp nhận demo", Role.HELPDESK, None),
+    ("storekeeper.demo", "Thủ kho demo", Role.STOREKEEPER, None),
 )
 
 

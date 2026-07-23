@@ -1,6 +1,6 @@
 # Analytics Pipeline Canonical
 
-> Ticket và maintenance log được ghi vào PostgreSQL. Chỉ database-to-analytics snapshot tiếp theo mới biến chúng thành batch inputs; write endpoints không thay đổi feature, anomaly, risk, preventive, recurring hoặc KPI output ngay tại thời điểm lưu.
+> Ticket, maintenance log và inventory được ghi vào PostgreSQL. Chỉ database-to-analytics snapshot tiếp theo mới đưa contract được hỗ trợ vào batch inputs; write endpoints không thay đổi feature, anomaly, risk, preventive, recurring hoặc KPI output ngay tại thời điểm lưu.
 
 ## Phạm Vi
 
@@ -124,6 +124,18 @@ Preventive plans và work orders là PostgreSQL transactional views, không thay
 - Existing CSV validator yêu cầu fixed interval. Vì vậy `export_snapshot` tạo compatibility projection: asset `next_maintenance_date = last_maintenance_date + maintenance_interval_days`, và log `next_maintenance_date = maintenance_date + maintenance_interval_days`. PostgreSQL vẫn giữ nguyên plan-derived operational dates.
 - Preventive plan/work-order calendar và work-order metrics là operational views từ PostgreSQL. Existing batch preventive/KPI formulas tiếp tục dùng legacy interval projection trong milestone này; không diễn giải hai view là cùng một scheduling metric.
 - Work-order status/checklist/evidence không được thêm làm feature, anomaly hoặc risk input trong milestone này.
+
+## Product Milestone 6 Inventory Boundary
+
+Inventory là transactional operational domain và **không** được thêm vào current analytics snapshot/formulas:
+
+- spare-part quantity, reservation, issue, consumption, return, low-stock state và unit cost không phải feature;
+- work-order shortage không thay anomaly score, Risk Score, preventive status, recurring issue, maintenance KPI, ticket KPI hoặc SLA;
+- receipt/reserve/issue/return/transfer/adjustment không trigger batch job;
+- `MaintenanceLog.parts_replaced` vẫn là narrative legacy field, không được join với inventory ledger để suy ra cost hoặc model signal;
+- inventory metrics từ PostgreSQL là operational report riêng, không phải `maintenance_kpis.csv`.
+
+Future analytics chỉ được thêm khi có explicit data contract, data-quality ownership và evaluation; không được âm thầm thay formula hiện tại.
 
 `GET /work-orders/metrics` là reporting transaction riêng, không thay `maintenance_kpis.csv`:
 

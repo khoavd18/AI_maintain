@@ -18,6 +18,7 @@ const defaultTimeoutMs = 10_000;
 export interface RequestOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
+  idempotencyKey?: string;
   operation?: "write" | "copilot" | "auth";
   skipAuth?: boolean;
   skipRefresh?: boolean;
@@ -185,6 +186,7 @@ async function request(
           jsonBody: hasBody && !isFormBody,
           skipAuth: options.skipAuth,
           csrf: options.csrf,
+          idempotencyKey: options.idempotencyKey,
         }),
         body: hasBody
           ? (isFormBody ? (body as FormData) : JSON.stringify(body))
@@ -371,9 +373,13 @@ function requestHeaders(options: {
   jsonBody: boolean;
   skipAuth?: boolean;
   csrf?: boolean;
+  idempotencyKey?: string;
 }) {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (options.jsonBody) headers["Content-Type"] = "application/json";
+  if (options.idempotencyKey) {
+    headers["Idempotency-Key"] = options.idempotencyKey;
+  }
   const token = options.skipAuth ? null : getAccessToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   if (options.csrf) {

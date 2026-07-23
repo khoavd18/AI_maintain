@@ -15,13 +15,24 @@ from src.database.models import (
     AssetAttachment,
     ChecklistTemplate,
     ChecklistTemplateItem,
+    InventoryAttachment,
+    InventoryMovement,
+    InventoryPosition,
     Location,
     MaintenanceLog,
+    PartReorderConfiguration,
     PreventiveMaintenancePlan,
+    SparePart,
+    StockReservation,
     Ticket,
     WorkOrder,
     WorkOrderAttachment,
     WorkOrderChecklistItem,
+    BusinessCalendar,
+    SlaPolicy,
+    TicketComment,
+    TicketEscalationEvent,
+    TicketSlaState,
 )
 from src.database.session import Base, build_engine
 from src.ingestion.load_data import NonEmptyDatabaseError, import_csv_dataset
@@ -45,6 +56,35 @@ def test_canonical_metadata_contains_transactional_and_security_tables() -> None
         "work_orders",
         "work_order_checklist_items",
         "work_order_attachments",
+        "ticket_categories",
+        "ticket_subcategories",
+        "ticket_intake_sources",
+        "support_groups",
+        "business_calendars",
+        "business_working_periods",
+        "business_calendar_holidays",
+        "sla_policies",
+        "sla_policy_targets",
+        "ticket_sla_states",
+        "ticket_sla_events",
+        "ticket_comments",
+        "ticket_comment_attachments",
+        "ticket_escalation_events",
+        "part_categories",
+        "units_of_measure",
+        "spare_parts",
+        "stock_locations",
+        "inventory_positions",
+        "part_reorder_configurations",
+        "inventory_operations",
+        "inventory_movements",
+        "work_order_part_requirements",
+        "stock_reservations",
+        "stock_reservation_events",
+        "work_order_part_issues",
+        "work_order_part_consumptions",
+        "work_order_part_returns",
+        "inventory_attachments",
     }
     assert "version" in Asset.__table__.columns
     assert "version" in Ticket.__table__.columns
@@ -59,6 +99,17 @@ def test_canonical_metadata_contains_transactional_and_security_tables() -> None
     assert "version" in WorkOrder.__table__.columns
     assert "result_status" in WorkOrderChecklistItem.__table__.columns
     assert "storage_key" in WorkOrderAttachment.__table__.columns
+    assert "timezone" in BusinessCalendar.__table__.columns
+    assert "pause_on_waiting" in SlaPolicy.__table__.columns
+    assert "occurrence_number" in TicketSlaState.__table__.columns
+    assert "visibility" in TicketComment.__table__.columns
+    assert "rule_code" in TicketEscalationEvent.__table__.columns
+    assert "version" in SparePart.__table__.columns
+    assert "reserved_quantity" in InventoryPosition.__table__.columns
+    assert "movement_type" in InventoryMovement.__table__.columns
+    assert "version" in PartReorderConfiguration.__table__.columns
+    assert "occurrence_number" in StockReservation.__table__.columns
+    assert "storage_key" in InventoryAttachment.__table__.columns
 
 
 @pytest.mark.postgres
@@ -90,6 +141,35 @@ def test_clean_migration_upgrade_and_downgrade(postgres_database_url: str) -> No
             "work_orders",
             "work_order_checklist_items",
             "work_order_attachments",
+            "ticket_categories",
+            "ticket_subcategories",
+            "ticket_intake_sources",
+            "support_groups",
+            "business_calendars",
+            "business_working_periods",
+            "business_calendar_holidays",
+            "sla_policies",
+            "sla_policy_targets",
+            "ticket_sla_states",
+            "ticket_sla_events",
+            "ticket_comments",
+            "ticket_comment_attachments",
+            "ticket_escalation_events",
+            "part_categories",
+            "units_of_measure",
+            "spare_parts",
+            "stock_locations",
+            "inventory_positions",
+            "part_reorder_configurations",
+            "inventory_operations",
+            "inventory_movements",
+            "work_order_part_requirements",
+            "stock_reservations",
+            "stock_reservation_events",
+            "work_order_part_issues",
+            "work_order_part_consumptions",
+            "work_order_part_returns",
+            "inventory_attachments",
         }.issubset(tables)
     finally:
         upgrade_database(postgres_database_url, "head")

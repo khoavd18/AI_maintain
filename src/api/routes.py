@@ -103,9 +103,7 @@ def _copilot_service() -> MaintenanceCopilot:
 
 ServiceDependency = Annotated[ProcessedDataService, Depends(_service)]
 CopilotDependency = Annotated[MaintenanceCopilot, Depends(_copilot_service)]
-AssetsReadDependency = Annotated[
-    CurrentUser, Depends(require_permission(Permission.ASSETS_READ))
-]
+AssetsReadDependency = Annotated[CurrentUser, Depends(require_permission(Permission.ASSETS_READ))]
 AssetsCreateDependency = Annotated[
     CurrentUser, Depends(require_permission(Permission.ASSETS_CREATE))
 ]
@@ -142,9 +140,7 @@ AttachmentsCreateDependency = Annotated[
 AttachmentsDeleteDependency = Annotated[
     CurrentUser, Depends(require_permission(Permission.ATTACHMENTS_DELETE))
 ]
-TicketsReadDependency = Annotated[
-    CurrentUser, Depends(require_permission(Permission.TICKETS_READ))
-]
+TicketsReadDependency = Annotated[CurrentUser, Depends(require_permission(Permission.TICKETS_READ))]
 TicketsCreateDependency = Annotated[
     CurrentUser, Depends(require_permission(Permission.TICKETS_CREATE))
 ]
@@ -160,9 +156,7 @@ LogsCreateDependency = Annotated[
 AnalyticsReadDependency = Annotated[
     CurrentUser, Depends(require_permission(Permission.ANALYTICS_READ))
 ]
-CopilotUseDependency = Annotated[
-    CurrentUser, Depends(require_permission(Permission.COPILOT_USE))
-]
+CopilotUseDependency = Annotated[CurrentUser, Depends(require_permission(Permission.COPILOT_USE))]
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])
@@ -277,8 +271,7 @@ def asset_catalog(
     search: Annotated[str | None, Query(max_length=200)] = None,
     asset_type: Literal["hvac", "pump", "generator"] | None = None,
     criticality: Literal["low", "medium", "high", "critical"] | None = None,
-    lifecycle_status: Literal["planned", "active", "inactive", "retired", "archived"]
-    | None = None,
+    lifecycle_status: Literal["planned", "active", "inactive", "retired", "archived"] | None = None,
     operational_status: Literal[
         "running", "warning", "fault", "under_maintenance", "out_of_service"
     ]
@@ -864,6 +857,7 @@ def create_ticket(
         service.create_ticket,
         **request.model_dump(),
         audit_context=audit_context(actor, http_request),
+        actor=actor,
     )
 
 
@@ -889,6 +883,7 @@ def update_ticket(
         ticket_id=ticket_id,
         updates=updates,
         audit_context=audit_context(actor, http_request),
+        actor=actor,
     )
 
 

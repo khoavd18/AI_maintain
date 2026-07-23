@@ -366,6 +366,8 @@ def test_corrective_work_order_does_not_resolve_ticket_and_permissions_are_enfor
                 asset_id="GENERATOR_002",
                 issue_description="Máy phát rung bất thường.",
                 priority="high",
+                impact="high",
+                urgency="high",
                 status="in_progress",
                 failure_category="vibration_issue",
                 created_at=datetime.now(timezone.utc) - timedelta(days=1),

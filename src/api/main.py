@@ -11,9 +11,11 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from src.api.routes import router
 from src.api.services import get_processed_data_service
 from src.config.settings import get_settings
+from src.inventory_management.routes import router as inventory_router
 from src.maintenance_management.routes import router as maintenance_planning_router
 from src.repositories.contracts import RepositoryError
 from src.security.routes import router as security_router
+from src.ticket_management.routes import router as ticket_operations_router
 
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,100}$")
 
@@ -56,6 +58,7 @@ def create_app() -> FastAPI:
             "Accept",
             "Authorization",
             "Content-Type",
+            "Idempotency-Key",
             "X-CSRF-Token",
             "X-Request-ID",
         ],
@@ -78,7 +81,9 @@ def create_app() -> FastAPI:
 
     app.include_router(security_router)
     app.include_router(router)
+    app.include_router(ticket_operations_router)
     app.include_router(maintenance_planning_router)
+    app.include_router(inventory_router)
 
     return app
 

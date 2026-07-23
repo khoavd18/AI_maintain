@@ -4,13 +4,13 @@ These rules apply to future agent work in this repository.
 
 ## Product Boundary
 
-AI Maintenance Copilot is a batch analytics and AI decision-support layer with focused asset lifecycle, ticket, preventive-plan, work-order, and maintenance-log workflows. PostgreSQL is the transactional source of truth, but the product is not a complete CMMS, autonomous maintenance controller, or production-ready enterprise platform.
+AI Maintenance Copilot is a batch analytics and AI decision-support layer with focused asset lifecycle, ticket, preventive-plan, work-order, maintenance-log, and spare-parts stock-control workflows. PostgreSQL is the transactional source of truth, but the product is not a complete CMMS, autonomous maintenance controller, procurement suite, or production-ready enterprise platform.
 
 Human facility managers and technicians remain responsible for prioritization, safety checks, field inspection, maintenance execution, and final decisions. Never describe a score or recommendation as an automatic decision.
 
 ## Canonical Architecture
 
-- Keep PostgreSQL primary for transactional assets, tickets, preventive plans, checklist templates, work orders, and maintenance logs.
+- Keep PostgreSQL primary for transactional assets, tickets, preventive plans, checklist templates, work orders, maintenance logs, spare-part master data, stock positions, reservations, and immutable inventory movements.
 - Use Alembic for every PostgreSQL schema change. Do not call `metadata.create_all()` in product startup or production-mode commands.
 - Keep CSV for synthetic generation, explicit seed/import, database-to-analytics snapshots, canonical demo reset, and batch analytics contracts.
 - At the snapshot boundary, preserve the validated legacy interval contract: project asset/log `next_maintenance_date` from `last_maintenance_date` or `maintenance_date` plus `maintenance_interval_days`. Keep real plan-derived dates in PostgreSQL plans/work orders; do not weaken legacy analytics validation.
@@ -34,6 +34,33 @@ Human facility managers and technicians remain responsible for prioritization, s
 - Never resolve a ticket merely because a work order was created, completed, or verified. Ticket resolution remains an explicit authorized human action.
 - Aggregate the legacy asset `next_maintenance_date` as the earliest due date among active plans, with the documented legacy fallback. Never present one asset date as a replacement for plan-specific schedules.
 - Reuse `AttachmentStorage` for work-order evidence and preserve MIME/signature/extension checks, size bounds, generated keys, checksums, authorized download, and soft deletion. Do not expose storage paths or file bodies in audit records.
+
+## Spare Parts And Inventory
+
+- Keep `src/inventory_management/service.py` as the only inventory business boundary and `src/repositories/postgres_inventory.py` as the PostgreSQL implementation. Routes and frontends must never manipulate inventory models or balances directly.
+- Keep parts, assets, tickets, work orders, maintenance logs, requirements, reservations, issues, consumptions, returns, and movements as distinct concepts. Historical `MaintenanceLog.parts_replaced` text is not an inventory ledger.
+- Preserve `available = on_hand - reserved`. Clients may request named actions but must never submit calculated balances, stock states, or reorder suggestions.
+- Keep `InventoryMovement`, `StockReservationEvent`, `WorkOrderPartIssue`, `WorkOrderPartConsumption`, and `WorkOrderPartReturn` append-only. Corrections use a new authorized movement; do not update or delete history.
+- Use row locks, database constraints, and one transaction for reserve, issue, return, transfer, and adjustment. Reject negative on-hand, negative available, and reservation oversubscription.
+- Keep reservation, issue, consumption, and return explicit. Work-order completion/verification must not silently issue, consume, return, release, or reserve stock.
+- Require caller-stable idempotency keys for stock-changing commands. Replaying the same command returns its committed result; reusing a key with a different payload is a conflict.
+- Keep transfer-out and transfer-in atomic. Never expose a generic balance PATCH endpoint.
+- Archived parts and inactive/archived stock locations remain visible in history but cannot be used for new receipt, reservation, issue, or transfer operations except an explicitly supported return to a valid active location.
+- Derive low-stock state and reorder suggestion on the server from effective part/location thresholds and available quantity. Do not create purchase orders, supplier actions, notifications, or inventory optimization.
+- Reuse `AttachmentStorage` for inventory evidence and preserve authorization, signature/MIME/extension validation, generated keys, checksums, soft deletion, and path secrecy.
+
+## Ticket Operations And SLA
+
+- Keep `src/ticket_management/service.py` as the canonical ticket business boundary, `src/ticket_management/sla.py` as the only business-calendar implementation, and `src/repositories/postgres_tickets.py` as the PostgreSQL implementation. Routes and frontends must not mutate ticket models directly.
+- Preserve the rich code-level lifecycle `open`, `assigned`, `in_progress`, `waiting`, `resolved`, `closed`, `cancelled`, and `reopened`. Every transition must use its named service action; do not add a generic status patch to the rich API.
+- Keep the legacy `/tickets` API as a narrow compatibility adapter with its original Vietnamese values. Do not make legacy projections authoritative for the rich lifecycle.
+- Calculate priority only from the backend `impact x urgency` matrix in `src/ticket_management/domain.py`. Frontends may preview the server result but must not maintain an independent matrix or submit arbitrary priority.
+- Derive first-response and resolution SLA states from policy snapshots, timestamps, pause intervals, and the snapshotted business calendar. Never add a writable breach flag or recompute historical tickets from an edited policy/calendar.
+- Keep working periods same-day, timezone-aware, non-overlapping, and explicitly versioned. Waiting pauses require a reason; reopen creates a new SLA occurrence without erasing prior events.
+- Keep ticket comments, SLA events, and escalation events append-only. Preserve reporter PII redaction and visibility permissions; do not place reporter contact details in audit payloads.
+- Evaluate escalation only through the explicit service used by API, CLI, and tests. Dry-run must not write; execution must remain idempotent through the `(ticket_id, rule_code, occurrence_number)` uniqueness boundary. Each rule code already identifies its clock where applicable.
+- Do not add a hidden escalation scheduler, notification worker, email/SMS sender, or automatic ticket transition. Escalation events are operational records, not delivered notifications.
+- Keep corrective work-order creation/linkage separate from ticket status. Work-order completion or verification never resolves or closes its source ticket.
 
 ## Asset Lifecycle And Files
 
@@ -60,7 +87,8 @@ Duplicate anomaly, risk, ingestion, sample-data, and dashboard wrappers were rem
 
 Do not add or propose implementation work for the following areas unless the repository owner explicitly changes the MVP scope:
 
-- spare-parts inventory or inventory optimization;
+- suppliers, purchasing, purchase requisitions, purchase orders, or inventory optimization;
+- accounting, general-ledger integration, or maintenance-cost reporting;
 - resident mobile applications;
 - technician mobile applications;
 - vendor or contract management;
@@ -70,7 +98,7 @@ Do not add or propose implementation work for the following areas unless the rep
 - hidden or distributed scheduling, job queues, or startup work-order generation;
 - exact failure-time prediction.
 
-Historical `parts_replaced` data may remain in maintenance logs, but it must not grow into an inventory subsystem.
+Historical `parts_replaced` data may remain in maintenance logs, but it must not duplicate or replace canonical work-order inventory movements.
 
 ## Identity And Audit
 

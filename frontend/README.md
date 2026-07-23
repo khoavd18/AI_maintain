@@ -2,7 +2,7 @@
 
 Frontend manager-facing cho AI Maintenance Copilot. Ứng dụng dùng FastAPI làm serving boundary, TanStack Query để quản lý server state và Zod để kiểm tra response contract tại runtime.
 
-Đây là frontend local/internal-pilot trên dữ liệu synthetic theo batch. Nó có focused asset lifecycle và maintenance decision workflow, không phải CMMS hoàn chỉnh và không được mô tả là production-ready.
+Đây là frontend local/internal-pilot trên dữ liệu synthetic theo batch. Nó có focused asset lifecycle, ticket/work-order và spare-parts stock-control workflow, không phải CMMS/procurement suite hoàn chỉnh và không được mô tả là production-ready.
 
 ## Cấu hình
 
@@ -77,7 +77,9 @@ Mở `http://localhost:3000`.
 | `/assets` | paginated PostgreSQL catalog + latest batch signals | Create, filters, archived view và contextual ticket action |
 | `/assets/[assetId]` | rich profile + existing analytics context | Edit, status/lifecycle, attachments, QR, history và ticket workflow |
 | `/scan/assets/[lookupToken]` | authenticated opaque QR lookup | Mobile summary, open tickets, create ticket/Copilot theo permission |
-| `/tickets` | tickets, related asset/log context | Live create, assign, transition, maintenance result và resolve |
+| `/tickets` | PM5 operational queues + SLA summary | Chín server-driven queues, filters, pagination và legacy deep-link redirects |
+| `/tickets/new` | options, assets và priority preview | Rich intake; impact/urgency gửi server để tính priority |
+| `/tickets/[ticketId]` | detail, SLA, timeline, comments và linked WO | Named actions, PII redaction, communication, maintenance result và corrective WO |
 | `/maintenance/plans` | preventive plans + generation reports | Filter, dry-run/generate và permission-aware lifecycle |
 | `/maintenance/plans/new` | assets, templates, technicians, plan options | Controlled recurrence form, không có raw RRULE |
 | `/maintenance/plans/[planId]` | plan, occurrences, generated work orders | Schedule update warning, pause/resume/archive và optimistic version |
@@ -85,20 +87,44 @@ Mở `http://localhost:3000`.
 | `/work-orders` | paginated PostgreSQL work orders + metrics | Full filters, responsive cards/table và manual create |
 | `/work-orders/[workOrderId]` | WO/checklist/history/evidence | Assign, execute, complete, verify/cancel/reopen theo permission |
 | `/work-orders/calendar` | bounded occurrence + WO projection | Date/asset/technician filters; không kéo-thả hoặc tạo source lịch thứ hai |
+| `/inventory` | PostgreSQL inventory metrics/queues | Active parts, reserved stock, low/out-of-stock và work orders waiting for parts |
+| `/inventory/parts` | Paginated spare-part catalogue | Filters, create và lifecycle-aware navigation |
+| `/inventory/parts/[partId]` | Part master, positions, movement history | Versioned lifecycle actions; server-derived quantities |
+| `/inventory/stock` | Position by stock location | On-hand, reserved, available, state và reorder suggestion |
+| `/inventory/low-stock` | Derived threshold queue | Low/reorder/out-of-stock visibility; không tạo PO |
+| `/inventory/movements` | Immutable movement ledger | Type/location filters, references và resulting quantities |
+| `/inventory/reservations` | Reservation records | Release/expire theo permission |
+| `/inventory/receiving` | Named opening/receipt commands | Stable idempotency key và optional evidence |
+| `/inventory/transfers` | Atomic transfer command | Backend commits transfer-out/in together |
+| `/inventory/adjustments` | Controlled adjustment | Reason/supporting note/evidence; không PATCH balance |
+| `/inventory/settings` | Category/UOM/location settings | Stock-location create/lifecycle theo permission |
 | `/anomalies` | anomalies và recurring issues | Live read-only |
 | `/copilot` | `POST /copilot/ask`, assets và tickets | Live RAG, ID-only context handoff, sources và safe fallback |
 | `/admin/users` | users + role options | Administrator create/update/activate/deactivate |
 | `/admin/audit` | paginated audit events | Administrator/Property Manager read-only filters |
+| `/admin/sla` | business calendars + SLA policies | Permission-aware create/update với optimistic version |
+| `/admin/escalations` | SLA summary + escalation evaluation | Dry-run hoặc idempotent execute theo permission |
 | `/login` | auth login/refresh | Public login surface |
 | `/forbidden` | local authorization state | Friendly denied page |
 
-Maintenance workflow giữ đúng ba endpoint FastAPI hiện có:
+Legacy maintenance workflow vẫn giữ ba endpoint FastAPI hiện có:
 
 - `POST /tickets` tạo ticket ở trạng thái canonical `Mới tạo`;
 - `PATCH /tickets/{ticket_id}` cập nhật assignment/priority/note và transition `Mới tạo -> Đang xử lý -> Đã xử lý`;
 - `POST /maintenance/logs` ghi kết quả hiện trường trước khi resolve.
 
 Form validate request trước khi gửi và validate response thành công trước khi xác nhận persistence. `ticket_id` và `asset_id` trên maintenance form được lấy từ ticket đang chọn, `follow_up_required` được suy ra từ `maintenance_result`, còn `next_maintenance_date` được tính theo `maintenance_interval_days` của asset. Risk/KPI không được sửa ở client và chỉ đổi sau lần chạy batch analytics tiếp theo.
+
+Rich PM5 ticket workflow dùng additive typed endpoints:
+
+- intake tải category/source/group/assignee từ `/ticketing/options`;
+- priority preview gọi backend; frontend không có matrix độc lập;
+- inbox dùng `/ticket-queues/{queue}` với server filters, sort và pagination;
+- detail chỉ đổi lifecycle qua named actions và luôn gửi `expected_version`;
+- SLA countdown/status lấy nguyên derived response, không tự tính authoritative deadline;
+- comments là append-only; visibility và reporter PII theo backend permission;
+- calendar/policy admin giữ version conflict rõ ràng;
+- escalation dry-run không write, execute không gửi notification hoặc tự đổi ticket.
 
 Preventive/work-order workflow dùng additive endpoints:
 
@@ -111,6 +137,16 @@ Preventive/work-order workflow dùng additive endpoints:
 - Verification là action riêng cho reviewer khác; UI không giả lập asset date, risk hoặc KPI update.
 - `409` hiển thị stale conflict và nút tải trạng thái mới; cancellation/reopen yêu cầu confirmation.
 
+Inventory workflow dùng additive typed endpoints:
+
+- React Query đọc part/location/balance/movement/reservation/work-order-parts từ FastAPI; frontend không đọc PostgreSQL/CSV;
+- Zod coerce PostgreSQL Decimal strings thành number tại response boundary và từ chối malformed payload;
+- stock-changing form giữ caller-stable `Idempotency-Key` cho business intent và chỉ rotate sau confirmed success;
+- requirement không đổi stock; reservation giảm available; issue giảm on-hand; consumption không trừ lần hai; return tăng on-hand;
+- work-order parts panel hiển thị backend-derived shortage/completion warning và không tự complete/release stock;
+- Storekeeper/Admin có receipt/issue/return/transfer/adjust, Chief Engineer quản lý requirement/reservation, assigned Technician chỉ ghi consumption;
+- unit cost bị backend redaction theo role; browser không calculate authoritative balance/state/reorder.
+
 Asset management dùng additive endpoints cho catalog/profile create/update, operational/lifecycle transitions, archive/restore, locations, attachments, QR và history. Mọi update gửi `expected_version`; `409` hiển thị stale conflict và yêu cầu reload. Asset form cảnh báo khi đóng/reload với thay đổi chưa lưu. Retired/archived asset không hiện action tạo ticket.
 
 Attachment UI chỉ chấp nhận PDF/PNG/JPG/JPEG tối đa 10 MB để feedback sớm; FastAPI vẫn kiểm tra signature/MIME/size, generated storage key, authorization và checksum. UI không inline-preview file. QR label chỉ chứa opaque lookup URL, in bằng isolated print CSS và route scan vẫn đi qua authentication.
@@ -122,11 +158,17 @@ Attachment UI chỉ chấp nhận PDF/PNG/JPG/JPEG tối đa 10 MB để feedbac
 - `src/lib/api/auth-session.ts`: in-memory access token, deduplicated refresh handler và expired-session handler.
 - `src/lib/api/schemas.ts`: Zod schemas bám theo FastAPI response contract.
 - `src/lib/api/maintenance-schemas.ts`: explicit plan/template/work-order contracts và client coherence validation.
+- `src/lib/api/ticketing-schemas.ts`: rich ticket, SLA, calendar, policy và escalation Zod contracts.
+- `src/lib/api/inventory-schemas.ts`: part/location/position/movement/work-order inventory Zod contracts.
 - `src/lib/api/query-keys.ts`: stable query keys và filter serialization.
 - `src/lib/api/endpoints.ts`: toàn bộ maintenance, asset lifecycle, attachment/QR/history và Copilot calls.
 - `src/lib/api/maintenance-endpoints.ts`: typed PM4 list/action/generation/evidence calls.
+- `src/lib/api/ticketing-endpoints.ts`: PM5 intake, queues, named actions, comments và SLA administration calls.
+- `src/lib/api/inventory-endpoints.ts`: PM6 catalogue, stock, named movements, reservations, WO usage và evidence calls.
 - `src/hooks/use-api-queries.ts`: reusable TanStack Query hooks.
 - `src/hooks/use-api-mutations.ts`: confirmed-server write mutations và `useAskCopilot`; chat response không được lưu trong Query cache.
+- `src/hooks/use-ticketing.ts`: PM5 server-state queries/mutations và scoped invalidation.
+- `src/hooks/use-inventory.ts`: PM6 queries/mutations và scoped invalidation; ambiguous writes không auto-retry.
 - `src/components/auth-provider.tsx`: session restore, login/logout, route guard và permission helpers.
 - `src/lib/auth.ts`: permission constants và safe return-path validation; không có duplicate role matrix.
 - `src/lib/copilot.ts`: suggested questions theo asset type, safe answer parser và user-facing retrieval states.
@@ -141,6 +183,7 @@ Sau write thành công, client chỉ invalidate/refetch các query liên quan:
 - maintenance log: maintenance-log lists, asset list và asset detail tương ứng;
 - plan/template mutations: planning lists/detail/occurrence và schedule projection;
 - work-order mutations: WO list/detail/calendar/metrics; completion/verification còn refresh linked asset/log data;
+- inventory mutations: inventory root, affected work-order parts và evidence; client không tự sửa cached balance;
 - risk, KPI, anomaly và health không bị invalidate vì write không tự chạy analytics.
 
 Nếu API xác nhận write nhưng refetch thất bại, form giữ trạng thái thành công và yêu cầu refresh view, không khuyến khích gửi lại. Với timeout hoặc mất kết nối giữa write, trạng thái được đánh dấu ambiguous; kiểm tra ticket/log list trước khi thử lại để tránh duplicate.
@@ -170,7 +213,7 @@ Các response `empty`, `low_relevance`, `unsupported_asset_type`, `unrelated`, `
 
 ## Transaction Và Reset Demo
 
-PostgreSQL là transactional source of truth cho asset/location/attachment metadata, ticket, preventive plan, checklist template, work order, maintenance log, users, refresh sessions và audit. Attachment bytes dùng private local storage qua abstraction. Backend có FK, atomic database transactions, generated sequences, optimistic conflict handling, RBAC và transaction-coupled audit, nhưng chưa có production scheduler, SSO/MFA, distributed throttling hoặc operations hardening.
+PostgreSQL là transactional source of truth cho asset/location/attachment metadata, ticket, preventive plan, checklist template, work order, maintenance log, inventory, users, refresh sessions và audit. Attachment bytes dùng private local storage qua abstraction. Backend có FK, row locks, atomic transactions, idempotency records, generated sequences, optimistic conflicts, RBAC và transaction-coupled audit, nhưng chưa có procurement, production scheduler, SSO/MFA, distributed throttling hoặc operations hardening.
 
 Frontend mutation tests vẫn mock HTTP; backend có dedicated PostgreSQL integration tests. Để khôi phục canonical transactional data và analytics sau một demo có write, chạy từ repository root:
 
@@ -178,7 +221,10 @@ Frontend mutation tests vẫn mock HTTP; backend có dedicated PostgreSQL integr
 python -m src.data_generation.generate_data
 python -m src.ingestion.validation
 python -m src.ingestion.load_data --replace
+python -m src.security.cli seed-demo-users
 python -m src.maintenance_management.cli seed-development
+python -m src.ticket_management.cli seed-defaults
+python -m src.inventory_management.cli seed-development
 python -m src.database.export_snapshot --replace
 python -m src.features.build_features --input-dir data/analytics_input
 python -m src.models.anomaly_detection
@@ -186,7 +232,7 @@ python -m src.risk.risk_scoring
 python -m src.features.build_features --input-dir data/analytics_input --analysis maintenance
 ```
 
-`--replace` là destructive với transactional demo data, gồm PM4 plans/templates/work orders; chỉ dùng khi chủ động reset. Seed maintenance là explicit và idempotent, không tạo user hoặc password.
+`--replace` là destructive với PM4-PM6 transactional demo data, gồm ticket/SLA extensions, plans/templates/work orders và inventory; chỉ dùng khi chủ động reset. Domain seeds là explicit/idempotent và không chạy ở API startup.
 
 ## Mock Boundary
 
@@ -201,8 +247,8 @@ $env:NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:8000"
 npm run build
 ```
 
-Frontend tests mock HTTP responses và kiểm tra login/session, guards, role-aware actions, asset lifecycle, recurrence/date validation, plan rendering/generation controls, technician WO execution, stale conflict, checklist completion guard, attachment/QR, admin/audit và existing risk-to-ticket flow. Browser smoke test vẫn cần FastAPI để xác nhận cookie, CORS credentials, file download/print và dữ liệu hiện tại.
+Frontend tests mock HTTP responses và kiểm tra login/session, guards, role-aware actions, asset lifecycle, recurrence/date validation, plan rendering/generation controls, technician WO execution, stale conflict, checklist completion guard, attachment/QR, admin/audit và risk-to-ticket flow. PM5 focused tests kiểm tra ticket/SLA/escalation; PM6 tests kiểm tra strict inventory schemas, Decimal parsing, idempotency headers, KPI/low-stock rendering, opening/transfer/adjust endpoints, reservation release/replace, assigned-technician consumption và read-only RBAC. Browser smoke test vẫn cần FastAPI để xác nhận cookie, CORS credentials, file download/print và dữ liệu hiện tại.
 
 ## Security Limitations
 
-Đây là local/internal-pilot UI, chưa có SSO, MFA, password recovery, centralized session management hoặc browser-level penetration test. Attachment storage hiện single-node local, chưa có malware scanner/S3/object backup. QR chưa có camera/browser compatibility matrix và không hỗ trợ offline. Non-local usage bắt buộc HTTPS và backend `Secure` cookie. In-memory access token giảm persistence nhưng XSS trong origin vẫn có thể sử dụng active session; tiếp tục cần CSP, dependency scanning và security review trước deployment thực tế.
+Đây là local/internal-pilot UI, chưa có SSO, MFA, password recovery, centralized session management hoặc browser-level penetration test. Attachment storage hiện single-node local, chưa có malware scanner/S3/object backup. QR chưa có camera/browser compatibility matrix và không hỗ trợ offline. Inventory chưa có barcode scan, lot/serial, procurement, automatic replenishment hoặc accounting. Non-local usage bắt buộc HTTPS và backend `Secure` cookie. In-memory access token giảm persistence nhưng XSS trong origin vẫn có thể sử dụng active session; tiếp tục cần CSP, dependency scanning và security review trước deployment thực tế.

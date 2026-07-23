@@ -1,4 +1,4 @@
-.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance generate-work-orders generation-dry-run export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend frontend-lint frontend-test frontend-build
+.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend frontend-lint frontend-test frontend-build
 
 PYTHON ?= python
 ANALYTICS_INPUT_DIR ?= data/analytics_input
@@ -63,11 +63,23 @@ replace-data:
 seed-maintenance:
 	$(PYTHON) -m src.maintenance_management.cli seed-development $(if $(GENERATE),--generate,)
 
+seed-inventory:
+	$(PYTHON) -m src.inventory_management.cli seed-development
+
 generate-work-orders:
 	$(PYTHON) -m src.maintenance_management.cli generate $(if $(AS_OF),--as-of $(AS_OF),) $(if $(PLAN_ID),--plan-id $(PLAN_ID),)
 
 generation-dry-run:
 	$(PYTHON) -m src.maintenance_management.cli generate --dry-run $(if $(AS_OF),--as-of $(AS_OF),) $(if $(PLAN_ID),--plan-id $(PLAN_ID),)
+
+seed-ticketing:
+	$(PYTHON) -m src.ticket_management.cli seed-defaults $(if $(ACTOR),--actor-username $(ACTOR),)
+
+escalation-dry-run:
+	$(PYTHON) -m src.ticket_management.cli evaluate-escalations --dry-run $(if $(AS_OF),--as-of $(AS_OF),) $(if $(ACTOR),--actor-username $(ACTOR),)
+
+evaluate-escalations:
+	$(PYTHON) -m src.ticket_management.cli evaluate-escalations $(if $(AS_OF),--as-of $(AS_OF),) $(if $(ACTOR),--actor-username $(ACTOR),)
 
 export-analytics-snapshot:
 	$(PYTHON) -m src.database.export_snapshot --replace

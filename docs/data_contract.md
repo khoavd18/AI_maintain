@@ -5,7 +5,7 @@
 - Column name, API field và technical identifier dùng tiếng Anh.
 - Business value và user-facing explanation dùng tiếng Việt.
 - Date dùng `YYYY-MM-DD`; timestamp dùng ISO 8601 có timezone.
-- PostgreSQL là transactional source of truth cho assets, locations, attachment metadata, tickets, preventive plans, checklist templates, work orders và maintenance logs; file bytes nằm ngoài database.
+- PostgreSQL là transactional source of truth cho assets, locations, attachment metadata, tickets, preventive plans, checklist templates, work orders, maintenance logs và spare-parts inventory; file bytes nằm ngoài database.
 - Generated/raw CSV là seed và batch interchange contract, không phải normal mutable runtime storage.
 - Processed CSV là versioned-by-batch analytics serving contract.
 - Qdrant chỉ lưu document chunks và metadata cho RAG retrieval.
@@ -27,6 +27,10 @@ Synthetic seed mặc định hiện có 27 assets, 42 tickets, 86 maintenance lo
 | Checklist template versions/items | PostgreSQL `checklist_templates`, `checklist_template_items` | Development seed explicit; work order giữ snapshot |
 | Work orders/checklist execution | PostgreSQL `work_orders`, `work_order_checklist_items` | Transactional product data; không thay đổi historical CSV counts |
 | Work-order evidence metadata/bytes | PostgreSQL `work_order_attachments` + private `AttachmentStorage` | Không export sang analytics CSV |
+| Part/category/UOM/location master | PostgreSQL inventory master tables | Explicit deterministic development seed; không thuộc 27/42/86 |
+| Inventory position/movement | PostgreSQL `inventory_positions`, `inventory_movements` | Không export vào analytics formulas |
+| Work-order part workflow | PostgreSQL requirements, reservations, issues, consumptions, returns | Không duplicate trong MaintenanceLog/CSV |
+| Inventory evidence | PostgreSQL `inventory_attachments` + private `AttachmentStorage` | Không export sang analytics CSV |
 | User identities | PostgreSQL `users` | Không export sang analytics CSV |
 | Refresh sessions | PostgreSQL `refresh_sessions` | Không có CSV; chỉ lưu token/CSRF hash |
 | Security/business audit | PostgreSQL `audit_logs` | Không có CSV; paginated read qua API |
@@ -137,32 +141,63 @@ Không có inline preview endpoint. Download dùng attachment disposition và au
 
 PostgreSQL table: `maintenance_tickets`. Seed/snapshot file: `maintenance_tickets.csv`.
 
-| Field | DB type | Required | API exposure | Rule |
-|---|---|---:|---:|---|
-| `ticket_id` | varchar(50) | Có | Có | Primary key; runtime ID từ PostgreSQL sequence |
-| `asset_id` | varchar(50) | Có | Có | FK đến `assets`, delete restricted |
-| `issue_description` | text | Có | Có | 5–1.000 ký tự ở request schema |
-| `priority` | varchar(20) | Có | Có, mapped | Bốn canonical priorities |
-| `status` | varchar(20) | Có | Có, mapped | `open -> in_progress -> resolved` |
-| `failure_category` | varchar(40) | Có | Có, mapped | Tám focused categories |
-| `created_at` | timestamptz | Có | Có | Server tạo, timezone-safe |
-| `resolved_at` | timestamptz/null | Có điều kiện | Có | Chỉ có khi status `resolved` |
-| `technician_id` | varchar(50) | Có | Có | Technician được gán |
-| `manager_note` | text/null | Không | Có | Ghi chú khi manager tạo ticket |
-| `note` | text/null | Không | Có | Ghi chú update gần nhất |
-| `version` | integer | Có | Không | Optimistic concurrency |
-| `updated_at` | timestamptz | Có | Không | Storage metadata |
+| Nhóm | Fields | Contract |
+|---|---|---|
+| Identity | `ticket_id`, `asset_id` | String PK từ PostgreSQL sequence; restricted asset FK; `(ticket_id, asset_id)` unique cho log linkage |
+| Intake | `issue_description`, `failure_category`, `category_id`, `subcategory_id`, `intake_source_id` | Description 5–4.000 ký tự; controlled references active và category/subcategory phải khớp |
+| Reporter | `reporter_name`, `reporter_email`, `reporter_phone` | Optional PII; API redacts thành `null` nếu actor thiếu `ticket_pii:read` |
+| Priority | `impact`, `urgency`, `priority` | Bốn impact, bốn urgency; priority chỉ do backend matrix tính |
+| Routing | `support_group_id`, `assigned_user_id`, `technician_id` | Optional active group/user FKs; legacy technician projection giữ `UNASSIGNED` khi chưa gán |
+| Lifecycle | `status`, first response/wait/resolution/closure/reopen/cancel fields | Code-level status: `open`, `assigned`, `in_progress`, `waiting`, `resolved`, `closed`, `cancelled`, `reopened`; transition chỉ qua named actions |
+| Notes | `manager_note`, `note` | Optional legacy-compatible plain text; communication history dùng `ticket_comments` |
+| Concurrency | `created_at`, `updated_at`, `version` | UTC timestamps; rich API expose `version` và mutation nhận `expected_version` |
 
 Constraints:
 
 - `(ticket_id, asset_id)` unique để maintenance log có thể dùng composite FK;
-- `resolved_at >= created_at`;
-- unresolved status phải có `resolved_at = null`;
-- resolved status phải có `resolved_at`;
-- service chỉ cho phép cùng status hoặc transition tuyến tính;
+- lifecycle timestamps không được trước `created_at`;
+- status và required/forbidden lifecycle timestamps phải nhất quán;
+- impact, urgency, calculated priority và status thuộc canonical code sets;
+- reporter email được kiểm tra shape ở request boundary nhưng không được đưa vào audit;
+- assignment, state transition, priority change và SLA override đều dùng optimistic version;
 - ticket phải có linked maintenance log trước khi resolve.
 
-Indexes: `asset_id`, `status`, `created_at`. API không expose `version`, vì vậy request/response contract của frontend không đổi; stale write được trả HTTP `409`.
+Indexes bao phủ asset, status, priority, category, support group, assigned user và timestamps. Rich API expose `version`; legacy adapter giữ response shape cũ. Stale write trả HTTP `409`.
+
+### Ticket Reference Data
+
+| Table | Purpose | Key constraints |
+|---|---|---|
+| `ticket_categories` | Stable service category | lowercase unique code, active lifecycle, optimistic version |
+| `ticket_subcategories` | Category-owned classification | unique `(category_id, code)` và composite category consistency |
+| `ticket_intake_sources` | `web`, `phone`, `email`, `analytics` | lowercase unique code |
+| `support_groups` | Assignment queue | uppercase unique code |
+
+Reference rows không được hard-code bằng UUID ở frontend. `GET /ticketing/options` trả active options và Vietnamese names.
+
+### Business Calendars Và SLA Policies
+
+| Table | Purpose | Contract |
+|---|---|---|
+| `business_calendars` | Versioned timezone/calendar aggregate | Unique code, IANA timezone, active flag, actor/timestamps/version |
+| `business_working_periods` | Same-day working windows | Weekday 0–6, `start_time < end_time`, no overlaps |
+| `business_calendar_holidays` | Closed local dates | Unique `(calendar_id, holiday_date)` |
+| `sla_policies` | Effective-dated policy | Calendar/category FKs, timezone match, pause behavior, due-soon percent, active/version |
+| `sla_policy_targets` | Per-priority targets | Exactly one positive first-response/resolution target for each priority |
+
+Policy/calendar update không rewrite ticket history. Ticket intake snapshot relevant values into `ticket_sla_states`.
+
+### Ticket SLA, Communication Và Escalation
+
+| Table | Mutability | Contract |
+|---|---|---|
+| `ticket_sla_states` | Versioned current snapshot | One row per ticket; policy/calendar snapshot, targets, due timestamps, pause remainder và occurrence |
+| `ticket_sla_events` | Append-only | Clock/policy/pause/response/resolution/reopen events; PostgreSQL trigger chặn update/delete |
+| `ticket_comments` | Append-only | Author, visibility `internal|requester`, body và UTC timestamp |
+| `ticket_comment_attachments` | Append-only link | Chỉ link secure asset/work-order attachments; không copy file path/body |
+| `ticket_escalation_events` | Append-only, idempotent | Unique ticket/rule/occurrence; rule code phân biệt clock; không đồng nghĩa notification delivery |
+
+Derived SLA states `not_started`, `active`, `paused`, `met`, `due_soon`, `breached`, `stopped` không phải writable fields. Chi tiết semantics: [Ticket Operations Và SLA](ticket_operations.md).
 
 ## Maintenance Logs
 
@@ -262,6 +297,100 @@ completed -> in_progress  (explicit authorized reopen)
 
 `work_order_attachments` lưu UUID, work-order/asset FK, category, generated storage key, filename, MIME, size, SHA-256, actor và soft-delete fields. API không trả storage key/path. Categories: `before_photo`, `after_photo`, `inspection_document`, `completion_document`, `safety_document`, `other`. MIME/signature/extension, configured size, checksum, authenticated resource scope và `nosniff` download dùng cùng security contract với asset attachment.
 
+## Spare-Part Master
+
+| Entity/field | Contract |
+|---|---|
+| `part_categories` | UUID PK, unique normalized `code`, Vietnamese name, optional English name/description, active flag, version/timestamps |
+| `units_of_measure` | UUID PK, unique `code`, Vietnamese/English names, symbol, `quantity_precision` từ 0 đến 3, active flag, version/timestamps |
+| `spare_parts.part_number` | Stable unique business identifier; không tái sử dụng cho part khác |
+| Names/reference | `name_vi` bắt buộc, `name_en`/`manufacturer_reference` optional |
+| Classification | Required category/UOM FK; compatible asset types là bounded list `hvac`, `pump`, `generator` |
+| Lifecycle | `active`, `inactive`, `archived`; archive non-destructive và giữ full history |
+| Thresholds | Non-negative `minimum_stock`, `reorder_point >= minimum`, optional `maximum_stock >= reorder_point` |
+| Cost metadata | Optional `unit_cost` đi cùng three-letter `currency_code`; chỉ là snapshot metadata, không có valuation/accounting |
+| Concurrency | `version`, `created_at`, `updated_at`; stale mutation trả `409` |
+
+Part archived/inactive vẫn đọc được và xuất hiện trong movement history, nhưng chỉ part active mới được thêm requirement, reserve hoặc issue mới.
+
+## Stock Locations Và Reorder Configuration
+
+`stock_locations` tách biệt hoàn toàn với asset installation `locations`.
+
+| Field | Contract |
+|---|---|
+| `code`, `name` | Stable unique code và Vietnamese display name |
+| `location_type` | `main_store`, `engineering_store`, `technician_van`, `maintenance_room`, `quarantine`, `other` |
+| `lifecycle_status` | `active`, `inactive`, `archived`; transition explicit, versioned, audited |
+| Archive fields | `archived_at`, `archive_reason`; không xóa movement/history |
+| `part_reorder_configurations` | Unique `(part_id, stock_location_id)`, per-location thresholds, optimistic version |
+
+Nếu không có per-location configuration, API dùng part-level thresholds. Chỉ active stock location được dùng cho receipt/reserve/issue/transfer/return destination.
+
+## Inventory Position Và Movement
+
+`inventory_positions` giữ current transactional projection, unique theo `(part_id, stock_location_id)`:
+
+```text
+on_hand_quantity >= 0
+reserved_quantity >= 0
+reserved_quantity <= on_hand_quantity
+available_quantity = on_hand_quantity - reserved_quantity
+```
+
+`available_quantity`, `stock_state` và `suggested_reorder_quantity` là response-derived fields; client không được submit.
+
+`inventory_movements` là source of truth cho physical stock history:
+
+| Field group | Contract |
+|---|---|
+| Identity | UUID PK, unique sequence-backed `movement_number` |
+| What/where | part, stock location, quantity, UOM snapshot |
+| Action | opening, receipt, issue, return, transfer-out/in, adjustment increase/decrease, damaged/scrapped |
+| Trace | business reference, actor, UTC occurrence/create timestamps, required reason |
+| Links | optional work order, source/destination location, common transfer group, optional unit-cost snapshot |
+| Result | on-hand/reserved/available immediately after commit |
+| Retry | required caller-stable `idempotency_key` through `inventory_operations` request hash |
+
+Movement không có update/delete API; PostgreSQL trigger chặn sửa/xóa. Reservation/release là allocation event, không phải physical movement.
+
+Derived stock state precedence:
+
+1. `out_of_stock` khi available bằng 0;
+2. `overstock` khi on-hand lớn hơn configured maximum;
+3. `low_stock` khi available thấp hơn minimum;
+4. `at_reorder_point` khi available không lớn hơn reorder point;
+5. `healthy` trong các trường hợp còn lại.
+
+Reorder suggestion là `max(0, target - available)`, với target là maximum nếu có, ngược lại reorder point. Đây không phải demand forecast hoặc purchase order.
+
+## Work-Order Part Contract
+
+| Entity | Minimum contract |
+|---|---|
+| `work_order_part_requirements` | Work-order/part/source-location FK, planned quantity, optional required-by date/notes, derived status, version |
+| `stock_reservations` | Requirement/work-order/part/location FK, positive quantity, occurrence number, issued/remaining quantity, expiry, status/version |
+| `stock_reservation_events` | Append-only reserved/released/expired/replaced/issued/fulfilled event, quantity, reason, actor, timestamp |
+| `work_order_part_issues` | Work order, optional requirement/reservation, part/location, quantity, reserved amount used, recipient/issuer, timestamp, reason, movement FK |
+| `work_order_part_consumptions` | Append-only explicit consumed quantity, assigned technician actor, timestamp/note; không tạo stock movement thứ hai |
+| `work_order_part_returns` | Append-only outstanding quantity returned to active location, actor/timestamp/reason, return movement FK |
+
+Business semantics:
+
+- requirement không reserve tự động;
+- reservation giảm available nhưng giữ nguyên on-hand;
+- issue giảm on-hand và giải phóng reserved quantity được sử dụng;
+- consumption xác nhận usage của issued stock, không giảm on-hand lần nữa;
+- return không vượt outstanding issue và tăng on-hand bằng append-only movement;
+- completing/verifying work order không tự tạo, consume, return, release hoặc reserve stock;
+- `MaintenanceLog.parts_replaced` là narrative compatibility field, không duplicate quantity/movement.
+
+Database uniqueness giữ một active occurrence cho requirement; replace đóng occurrence cũ và tạo occurrence mới atomically. Stock-changing commands dùng row locks và global idempotency operation record.
+
+## Inventory Attachments
+
+`inventory_attachments` liên kết một movement với category `adjustment_evidence`, `damage_evidence`, `receipt_evidence`, `transfer_evidence` hoặc `other`. Metadata gồm UUID, original filename, generated storage key, media type, size, SHA-256, actor và soft-delete timestamp. API không trả storage key/path. Technician chỉ đọc evidence của assigned work order; Storekeeper/Administrator quản lý theo permission.
+
 ## User Identity Contract
 
 `users` là local/internal-pilot identity store:
@@ -308,7 +437,7 @@ Refresh cookie và CSRF cookie là HTTP transport state, không thuộc JSON res
 | `metadata` | Optional safe bounded metadata |
 | `outcome` | `success`, `failure` hoặc `denied` theo event |
 
-Các event hiện có bao gồm login/session/user; asset/location/lifecycle/attachment; ticket/log; preventive plan create/update/schedule/pause/resume/archive/generation; checklist template create/version/archive; work-order generate/create/assign/start/hold/resume/checklist/complete/reopen/verify/cancel; evidence upload/delete; maintenance-log linkage và asset-date update. Application không cung cấp update/delete endpoint cho audit; database trigger chặn sửa/xóa. Audit projection loại password, hash, token, cookie, Authorization header, attachment storage key/path/body, raw checklist payload, secret và oversized text.
+Các event hiện có bao gồm login/session/user; asset/location/lifecycle/attachment; ticket/log; preventive plan create/update/schedule/pause/resume/archive/generation; checklist template create/version/archive; work-order generate/create/assign/start/hold/resume/checklist/complete/reopen/verify/cancel; part/location lifecycle; opening/receipt/reserve/release/replace/issue/consume/return/transfer/adjustment; inventory evidence; maintenance-log linkage và asset-date update. Application không cung cấp update/delete endpoint cho audit; database trigger chặn sửa/xóa. Audit projection loại password, hash, token, cookie, Authorization header, attachment storage key/path/body, raw checklist payload, secret và oversized text.
 
 `GET /audit-logs` trả `{items, page, page_size, total, total_pages}` và hỗ trợ filter theo action, resource type, outcome, actor. Quyền đọc audit không cho quyền thay đổi event.
 
@@ -321,7 +450,7 @@ Các event hiện có bao gồm login/session/user; asset/location/lifecycle/att
 - chuyển Vietnamese values sang internal codes;
 - gán category theo asset type, lifecycle `active`, ownership `owned`, `installed_at` từ installation date và deterministic QR token;
 - import toàn bộ ba table trong một transaction;
-- không tự tạo plan/template/work order. `--replace` xóa PM4 transactional demo rows theo FK order trước khi khôi phục canonical 27/42/86; PM4 seed chạy bằng command riêng;
+- không tự tạo plan/template/work order hoặc inventory. `--replace` xóa PM4-PM6 transactional demo rows theo FK order trước khi khôi phục canonical 27/42/86; mỗi domain seed chạy bằng command riêng;
 - đồng bộ ID sequences theo maximum imported `TCK-*` và `LOG-*`;
 - từ chối database không rỗng nếu không có `--replace`;
 - `--dry-run` không ghi dữ liệu;
@@ -396,7 +525,7 @@ Calculations chỉ dùng event có timestamp không muộn hơn feature date.
 - `is_anomaly`;
 - Vietnamese `anomaly_type` và `anomaly_reasons`.
 
-Không thay đổi thresholds hoặc model trong Product Milestone 1.
+PM6 không thay đổi thresholds hoặc model.
 
 ## Risk Result Contract
 
@@ -420,4 +549,4 @@ Transactional write không sửa ba files này. Chỉ snapshot + canonical batch
 
 ## API Compatibility
 
-Tất cả legacy business endpoint paths, request fields, response fields, Vietnamese statuses và successful status codes được giữ. Chúng yêu cầu Bearer authentication và permission phù hợp; `GET /health` vẫn public. Rich asset/catalog/location/attachment/QR/history endpoints là additive và dùng explicit schemas; storage key/local path không xuất hiện trong response. Frontend không cần biết storage backend; HTTP `401`, `403`, `409`, `410`, `422` và `503` được map thành các error state riêng.
+Tất cả legacy business endpoint paths, request fields, response fields, Vietnamese statuses và successful status codes được giữ. Chúng yêu cầu Bearer authentication và permission phù hợp; `GET /health` vẫn public. Rich asset, ticket/SLA, maintenance/work-order và inventory endpoints là additive, typed và dùng code + Vietnamese display fields. Inventory quantity dùng decimal precision theo UOM, stock-changing endpoint yêu cầu `Idempotency-Key`, còn storage key/local path không xuất hiện trong response. Frontend không cần biết repository implementation; HTTP `401`, `403`, `409`, `410`, `422` và `503` được map thành các error state riêng.

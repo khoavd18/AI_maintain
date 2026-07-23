@@ -18,6 +18,11 @@ const liveFiles = [
   "src/components/dashboard-charts.tsx",
   "src/components/copilot-workspace.tsx",
   "src/components/source-card.tsx",
+  "src/components/inventory-workspace.tsx",
+  "src/components/part-catalogue.tsx",
+  "src/components/part-detail.tsx",
+  "src/components/inventory-action-form.tsx",
+  "src/components/work-order-parts-panel.tsx",
 ];
 
 describe("mock data boundary", () => {

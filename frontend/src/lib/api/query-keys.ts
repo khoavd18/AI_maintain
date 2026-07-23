@@ -42,6 +42,17 @@ export const queryKeys = {
   risks: (filters: QueryFilters = {}) => ["assets", "risk", serializeFilters(filters)] as const,
   ticketLists: ["tickets"] as const,
   tickets: (filters: QueryFilters = {}) => ["tickets", serializeFilters(filters)] as const,
+  ticketingOptions: ["ticketing", "options"] as const,
+  ticketPriorityPreview: (impact: string, urgency: string) =>
+    ["ticketing", "priority-preview", impact, urgency] as const,
+  ticketQueues: ["tickets", "queues"] as const,
+  ticketQueue: (queue: string, filters: QueryFilters = {}) =>
+    ["tickets", "queues", queue, serializeFilters(filters)] as const,
+  ticketDetails: ["tickets", "detail"] as const,
+  ticketDetail: (ticketId: string) => ["tickets", "detail", ticketId] as const,
+  businessCalendars: ["ticketing", "business-calendars"] as const,
+  slaPolicies: ["ticketing", "sla-policies"] as const,
+  slaSummary: ["ticketing", "sla-summary"] as const,
   maintenanceLogLists: ["maintenance", "logs"] as const,
   maintenanceLogs: (filters: QueryFilters = {}) =>
     ["maintenance", "logs", serializeFilters(filters)] as const,
@@ -69,6 +80,28 @@ export const queryKeys = {
   workOrderMetrics: (asOfDate: string) =>
     ["work-orders", "metrics", asOfDate] as const,
   ticketWorkOrders: (ticketId: string) => ["ticket-work-orders", ticketId] as const,
+  inventoryRoot: ["inventory"] as const,
+  inventoryOptions: ["inventory", "options"] as const,
+  inventoryCategories: ["inventory", "categories"] as const,
+  inventoryUnits: ["inventory", "units"] as const,
+  inventoryLocations: (includeArchived: boolean) =>
+    ["inventory", "locations", includeArchived ? "all" : "active"] as const,
+  inventoryParts: (filters: QueryFilters = {}) =>
+    ["inventory", "parts", serializeFilters(filters)] as const,
+  inventoryPart: (partId: string) => ["inventory", "parts", partId] as const,
+  inventoryBalances: (filters: QueryFilters = {}) =>
+    ["inventory", "balances", serializeFilters(filters)] as const,
+  inventoryLowStock: (filters: QueryFilters = {}) =>
+    ["inventory", "low-stock", serializeFilters(filters)] as const,
+  inventoryMovements: (filters: QueryFilters = {}) =>
+    ["inventory", "movements", serializeFilters(filters)] as const,
+  inventoryReservations: (filters: QueryFilters = {}) =>
+    ["inventory", "reservations", serializeFilters(filters)] as const,
+  inventoryMetrics: ["inventory", "metrics"] as const,
+  workOrderParts: (workOrderId: string) =>
+    ["inventory", "work-orders", workOrderId, "parts"] as const,
+  inventoryEvidence: (movementId: string) =>
+    ["inventory", "movements", movementId, "attachments"] as const,
   anomalies: (filters: QueryFilters = {}) =>
     ["assets", "anomalies", serializeFilters(filters)] as const,
   preventive: (filters: QueryFilters = {}) =>

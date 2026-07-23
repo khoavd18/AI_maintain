@@ -7,13 +7,16 @@ import {
   Activity,
   Bot,
   CalendarClock,
+  Clock3,
   ClipboardList,
   LayoutDashboard,
   ListChecks,
   LogOut,
   Menu,
+  PackageOpen,
   PanelLeftClose,
   ScrollText,
+  ShieldAlert,
   TicketCheck,
   UserRound,
   Users,
@@ -51,9 +54,12 @@ const navigation: NavItem[] = [
   { label: "Phiếu sự cố", href: "/tickets", icon: TicketCheck, permission: permissions.ticketsRead },
   { label: "Kế hoạch bảo trì", href: "/maintenance/plans", icon: CalendarClock, permission: permissions.maintenancePlansRead },
   { label: "Phiếu công việc", href: "/work-orders", icon: ClipboardList, permission: permissions.workOrdersRead },
+  { label: "Kho vật tư", href: "/inventory", icon: PackageOpen, permission: permissions.inventoryRead },
   { label: "Checklist", href: "/maintenance/checklists", icon: ListChecks, permission: permissions.checklistTemplatesRead },
   { label: "Bất thường", href: "/anomalies", icon: Activity, permission: permissions.analyticsRead },
   { label: "Trợ lý bảo trì", href: "/copilot", icon: Bot, permission: permissions.copilotUse },
+  { label: "SLA & lịch", href: "/admin/sla", icon: Clock3, permission: permissions.slaPoliciesRead },
+  { label: "Escalation", href: "/admin/escalations", icon: ShieldAlert, permission: permissions.escalationsEvaluate },
   { label: "Người dùng", href: "/admin/users", icon: Users, permission: permissions.usersRead },
   { label: "Nhật ký hệ thống", href: "/admin/audit", icon: ScrollText, permission: permissions.auditLogsRead },
 ];
@@ -130,7 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="border-b px-5 py-4">
           <Brand />
         </div>
-        <div className="flex-1 px-3 py-5">
+        <div className="flex-1 overflow-y-auto px-3 py-5">
           <Navigation />
         </div>
         <div className="border-t p-4">

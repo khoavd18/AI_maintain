@@ -17,6 +17,7 @@ Sản phẩm không thay thế CMMS/S-Maintain và không tự quyết định t
 | Facility Manager | Theo dõi tình trạng bảo trì tổng thể, nhận diện thiết bị rủi ro và sắp xếp thứ tự ưu tiên |
 | Maintenance Supervisor | Xem nguyên nhân rủi ro, tình trạng quá hạn và lịch sử ticket trước khi phân công kiểm tra |
 | Technician | Xem ngữ cảnh thiết bị và tìm SOP/checklist liên quan trước khi kiểm tra hiện trường |
+| Storekeeper | Quản lý part/location master, kiểm soát receipt/reservation/issue/return/transfer/adjustment và đối chiếu movement history |
 | Data/AI Reviewer | Kiểm tra data contract, batch analytics, API contract và tính giải thích của kết quả |
 
 ## Phạm Vi Được Chấp Nhận
@@ -24,10 +25,12 @@ Sản phẩm không thay thế CMMS/S-Maintain và không tự quyết định t
 ### Dữ Liệu Nghiệp Vụ
 
 - Hồ sơ asset: identity/technical data, hierarchical location, criticality, lifecycle/operational status, warranty, maintenance dates, safe attachments và authenticated opaque QR lookup.
-- Ticket: mô tả sự cố, mức ưu tiên, trạng thái, thời điểm tạo/hoàn tất và ghi chú kỹ thuật viên.
+- Ticket: rich intake, backend impact/urgency priority, explicit lifecycle, assignment, SLA snapshot, comments và escalation history.
 - Maintenance log: ngày bảo trì, loại bảo trì, hành động đã thực hiện, kết quả và lịch kế tiếp.
 - Preventive maintenance plan: recurring intent theo interval có kiểm soát, timezone, lead/grace period, checklist và assignee mặc định.
 - Standalone work order: một công việc thực thi cụ thể, có source plan hoặc ticket, assignee, checklist snapshot, evidence, completion, verification và audit.
+- Spare-part master, UOM, stock location, effective reorder thresholds, inventory position và immutable movement history.
+- Work-order part requirement, reservation, issue, explicit consumption và unused-part return là các record riêng.
 - Operational reading theo batch: điện năng, runtime, nhiệt độ và độ rung khi phù hợp với loại thiết bị.
 - SOP/checklist tiếng Việt có metadata nguồn và loại thiết bị.
 
@@ -48,6 +51,9 @@ Synthetic demo scope được khóa ở ba loại asset: `Máy lạnh` (HVAC), `
 - Deterministic preventive work-order generation qua protected API/CLI; không chạy ngầm khi startup và retry không tạo occurrence trùng.
 - Corrective work order tạo explicit từ ticket; create/complete/verify work order không tự resolve ticket.
 - Checklist template được version hóa; work order giữ snapshot để lịch sử không đổi.
+- Operational ticket queues, first-response/resolution SLA và idempotent escalation evaluation qua API/CLI explicit; không có notification delivery.
+- Inventory overview, part catalogue, stock by location, low-stock queue, movement timeline và named stock actions.
+- `available = on_hand - reserved`; concurrent reserve/issue/return/transfer/adjustment đi qua PostgreSQL transaction và không cho tồn âm.
 
 ## Trạng Thái Hiện Tại Và Future Milestones
 
@@ -59,20 +65,23 @@ Synthetic demo scope được khóa ở ba loại asset: `Máy lạnh` (HVAC), `
 - canonical anomaly detection;
 - canonical explainable risk scoring;
 - preventive maintenance status, recurring issue và maintenance KPI processed outputs;
-- PostgreSQL-primary FastAPI cho asset, ticket, preventive plan, checklist template, work order và maintenance-log transactions;
+- PostgreSQL-primary FastAPI cho asset, ticket, preventive plan, checklist template, work order, maintenance-log và inventory transactions;
 - Alembic migrations, validated CSV seed import, optimistic conflicts và analytics snapshot export;
 - Next.js authenticated workflow, permission-aware views, user administration và audit read UI;
 - Streamlit legacy development health/status page;
 - local/internal-pilot authentication, RBAC và append-only PostgreSQL audit;
 - auditable asset lifecycle, location hierarchy, safe local attachment storage và deterministic QR lookup;
 - preventive-plan lifecycle, controlled recurrence, standalone work-order state machine, checklist execution, evidence và independent verification;
+- rich ticket intake/priority, named lifecycle actions, business-calendar SLA snapshots, append-only communication/escalation và server-driven queues;
+- spare-part/location lifecycle, immutable movement ledger, work-order reservation/issue/consumption/return và deterministic low-stock visibility;
 - Qdrant-based SOP/checklist retrieval và deterministic Copilot response.
 
-Các production concerns ngoài behavior hiện tại gồm production scheduler/worker, SSO/MFA, distributed throttling, key rotation, centralized observability/audit retention, deployment hardening và browser regression testing. Đây không phải current capabilities của internal pilot.
+Các production concerns ngoài behavior hiện tại gồm notification delivery, production scheduler/worker, SSO/MFA, distributed throttling, key rotation, centralized observability/audit retention, deployment hardening và browser regression testing. Đây không phải current capabilities của internal pilot.
 
 ## Ngoài Phạm Vi
 
-- Spare-parts inventory hoặc inventory optimization.
+- Supplier, purchasing, purchase requisition, purchase order hoặc inventory optimization.
+- Accounting, general ledger, stock valuation hoặc maintenance-cost reporting.
 - Resident mobile application.
 - Technician mobile application.
 - Vendor và contract management.
@@ -86,7 +95,7 @@ Các production concerns ngoài behavior hiện tại gồm production scheduler
 
 ## Giả Định
 
-- PostgreSQL là primary transactional source cho assets, locations, attachment metadata, tickets, preventive plans, checklist templates, work orders và maintenance logs; attachment bytes ở private storage abstraction.
+- PostgreSQL là primary transactional source cho assets, locations, attachment metadata, tickets/SLA history, preventive plans, checklist templates, work orders, maintenance logs và inventory; attachment bytes ở private storage abstraction.
 - CSV là synthetic seed, import/export và batch analytics contract; explicit CSV runtime chỉ dành cho isolated fixtures.
 - Dữ liệu được xử lý theo batch; không có yêu cầu near-real-time hoặc real-time.
 - Dữ liệu hiện tại là synthetic và chỉ phục vụ development, demo, test.
@@ -98,7 +107,10 @@ Các production concerns ngoài behavior hiện tại gồm production scheduler
 - PostgreSQL workflow có transaction, FK, sequence và optimistic conflict; analytics vẫn không tự refresh sau khi ghi ticket/log.
 - Due date là business date theo IANA timezone của plan; execution timestamps là UTC. Catch-up chỉ xét cửa sổ tối đa 366 ngày và không tạo backlog trong thời gian plan bị pause.
 - Completion tạo đúng một maintenance log; verification bởi actor khác mới cập nhật maintenance dates của asset. Ticket chỉ resolve qua action explicit.
+- Ticket priority chỉ do backend impact/urgency matrix tính. SLA state derive từ snapshotted policy/calendar, timestamps và pause intervals; không có editable breach flag.
 - Attachment bytes dùng private local single-node storage; PostgreSQL chỉ giữ metadata/checksum. QR chỉ là identifier và vẫn yêu cầu authentication.
+- Inventory balance/state/reorder suggestion do backend derive. Reservation không phải issue; issue không mặc định là consumption; work-order completion không tạo hoặc giải phóng stock movement.
+- `parts_replaced` trong MaintenanceLog chỉ là historical narrative; inventory movement là source of truth cho quantity.
 
 ## Tiêu Chí Thành Công
 
@@ -116,4 +128,7 @@ MVP được xem là coherent khi:
 10. Concurrent IDs, duplicate occurrence, invalid FK, rollback và stale write có automated integration tests trên database `_test`.
 11. UI thông báo rõ risk/KPI chỉ cập nhật trong batch tiếp theo.
 12. Authorized user có thể đăng ký/update/archive/restore asset, quản lý attachment, mở QR mobile route và xem de-duplicated history; unauthorized actions bị FastAPI từ chối.
-13. Current features và future work được phân biệt rõ; tests/lint pass và không claim accuracy, ROI hoặc production readiness khi chưa có bằng chứng.
+13. Helpdesk có thể intake/route ticket; technician xử lý ticket được gán; manager theo dõi queues/SLA, comments và escalation mà không có automatic status transition hoặc notification delivery.
+14. Storekeeper có thể receipt/reserve/issue/return/transfer/adjust; technician được gán chỉ có thể xem stock context và ghi permitted consumption cho work order của mình.
+15. Concurrent reservation không oversubscribe available stock; transfer commit hai movement hoặc rollback toàn bộ; history không bị sửa/xóa.
+16. Current features và future work được phân biệt rõ; tests/lint pass và không claim accuracy, ROI hoặc production readiness khi chưa có bằng chứng.

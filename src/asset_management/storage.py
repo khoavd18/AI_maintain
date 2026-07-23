@@ -48,7 +48,8 @@ class AttachmentStorage(Protocol):
 
 
 _KEY_PATTERN = re.compile(
-    r"^(?:assets|work-orders)/[0-9a-f]{2}/[0-9a-f]{32}\.(?:pdf|png|jpg|jpeg)$"
+    r"^(?:assets|work-orders|inventory)/[0-9a-f]{2}/"
+    r"[0-9a-f]{32}\.(?:pdf|png|jpg|jpeg)$"
 )
 _ALLOWED_EXTENSIONS = {
     ".pdf": "application/pdf",
@@ -117,7 +118,7 @@ class LocalAttachmentStorage:
         *,
         namespace: str = "assets",
     ) -> str:
-        if namespace not in {"assets", "work-orders"}:
+        if namespace not in {"assets", "work-orders", "inventory"}:
             raise AttachmentStorageError("Attachment storage namespace không hợp lệ.")
         identifier = uuid4().hex
         key = f"{namespace}/{identifier[:2]}/{identifier}{attachment.extension}"

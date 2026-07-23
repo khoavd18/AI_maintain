@@ -31,6 +31,18 @@ class Permission(StrEnum):
     TICKETS_ASSIGN = "tickets:assign"
     TICKETS_UPDATE = "tickets:update"
     TICKETS_RESOLVE = "tickets:resolve"
+    TICKETS_ACKNOWLEDGE = "tickets:acknowledge"
+    TICKETS_EXECUTE = "tickets:execute"
+    TICKETS_CLOSE = "tickets:close"
+    TICKETS_REOPEN = "tickets:reopen"
+    TICKETS_CANCEL = "tickets:cancel"
+    TICKET_COMMENTS_INTERNAL = "ticket_comments:internal"
+    TICKET_COMMENTS_REQUESTER = "ticket_comments:requester"
+    TICKET_PII_READ = "ticket_pii:read"
+    SLA_POLICIES_READ = "sla_policies:read"
+    SLA_POLICIES_MANAGE = "sla_policies:manage"
+    ESCALATIONS_EVALUATE = "escalations:evaluate"
+    ESCALATIONS_EXECUTE = "escalations:execute"
     MAINTENANCE_LOGS_READ = "maintenance_logs:read"
     MAINTENANCE_LOGS_CREATE = "maintenance_logs:create"
     MAINTENANCE_PLANS_READ = "maintenance_plans:read"
@@ -54,6 +66,21 @@ class Permission(StrEnum):
     WORK_ORDER_ATTACHMENTS_CREATE = "work_order_attachments:create"
     WORK_ORDER_ATTACHMENTS_DELETE = "work_order_attachments:delete"
     MAINTENANCE_GENERATION_RUN = "maintenance_generation:run"
+    INVENTORY_READ = "inventory:read"
+    INVENTORY_PARTS_MANAGE = "inventory_parts:manage"
+    INVENTORY_LOCATIONS_MANAGE = "inventory_locations:manage"
+    INVENTORY_RECEIVE = "inventory:receive"
+    INVENTORY_RESERVE = "inventory:reserve"
+    INVENTORY_ISSUE = "inventory:issue"
+    INVENTORY_RETURN = "inventory:return"
+    INVENTORY_TRANSFER = "inventory:transfer"
+    INVENTORY_ADJUST = "inventory:adjust"
+    INVENTORY_REQUIREMENTS_MANAGE = "inventory_requirements:manage"
+    INVENTORY_CONSUME = "inventory:consume"
+    WORK_ORDER_PARTS_READ = "work_order_parts:read"
+    INVENTORY_ATTACHMENTS_READ = "inventory_attachments:read"
+    INVENTORY_ATTACHMENTS_CREATE = "inventory_attachments:create"
+    INVENTORY_ATTACHMENTS_DELETE = "inventory_attachments:delete"
     ANALYTICS_READ = "analytics:read"
     COPILOT_USE = "copilot:use"
     USERS_READ = "users:read"
@@ -88,8 +115,7 @@ _MAINTENANCE_TEAM = {
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.ADMINISTRATOR: frozenset(Permission),
     Role.PROPERTY_MANAGER: frozenset(
-        _MAINTENANCE_TEAM
-        - {Permission.MAINTENANCE_LOGS_CREATE}
+        _MAINTENANCE_TEAM - {Permission.MAINTENANCE_LOGS_CREATE}
         | {
             Permission.ASSETS_UPDATE,
             Permission.ASSETS_CHANGE_STATUS,
@@ -114,6 +140,21 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.WORK_ORDER_ATTACHMENTS_READ,
             Permission.WORK_ORDER_ATTACHMENTS_CREATE,
             Permission.WORK_ORDER_ATTACHMENTS_DELETE,
+            Permission.TICKETS_ACKNOWLEDGE,
+            Permission.TICKETS_EXECUTE,
+            Permission.TICKETS_CLOSE,
+            Permission.TICKETS_REOPEN,
+            Permission.TICKETS_CANCEL,
+            Permission.TICKET_COMMENTS_INTERNAL,
+            Permission.TICKET_COMMENTS_REQUESTER,
+            Permission.TICKET_PII_READ,
+            Permission.SLA_POLICIES_READ,
+            Permission.SLA_POLICIES_MANAGE,
+            Permission.ESCALATIONS_EVALUATE,
+            Permission.ESCALATIONS_EXECUTE,
+            Permission.INVENTORY_READ,
+            Permission.WORK_ORDER_PARTS_READ,
+            Permission.INVENTORY_ATTACHMENTS_READ,
         }
     ),
     Role.CHIEF_ENGINEER: frozenset(
@@ -148,6 +189,17 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.WORK_ORDER_ATTACHMENTS_CREATE,
             Permission.WORK_ORDER_ATTACHMENTS_DELETE,
             Permission.MAINTENANCE_GENERATION_RUN,
+            Permission.TICKETS_ACKNOWLEDGE,
+            Permission.TICKETS_EXECUTE,
+            Permission.TICKETS_REOPEN,
+            Permission.TICKET_COMMENTS_INTERNAL,
+            Permission.SLA_POLICIES_READ,
+            Permission.ESCALATIONS_EVALUATE,
+            Permission.INVENTORY_READ,
+            Permission.INVENTORY_RESERVE,
+            Permission.INVENTORY_REQUIREMENTS_MANAGE,
+            Permission.WORK_ORDER_PARTS_READ,
+            Permission.INVENTORY_ATTACHMENTS_READ,
         }
     ),
     Role.TECHNICIAN: frozenset(
@@ -159,6 +211,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.TICKETS_READ,
             Permission.TICKETS_UPDATE,
             Permission.TICKETS_RESOLVE,
+            Permission.TICKETS_ACKNOWLEDGE,
+            Permission.TICKETS_EXECUTE,
+            Permission.TICKET_COMMENTS_INTERNAL,
             Permission.MAINTENANCE_LOGS_READ,
             Permission.MAINTENANCE_LOGS_CREATE,
             Permission.COPILOT_USE,
@@ -169,6 +224,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.WORK_ORDER_ATTACHMENTS_READ,
             Permission.WORK_ORDER_ATTACHMENTS_CREATE,
             Permission.WORK_ORDER_ATTACHMENTS_DELETE,
+            Permission.WORK_ORDER_PARTS_READ,
+            Permission.INVENTORY_CONSUME,
+            Permission.INVENTORY_ATTACHMENTS_READ,
         }
     ),
     Role.HELPDESK: frozenset(
@@ -176,12 +234,38 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.ASSETS_READ,
             Permission.TICKETS_READ,
             Permission.TICKETS_CREATE,
+            Permission.TICKETS_ASSIGN,
             Permission.TICKETS_UPDATE,
+            Permission.TICKETS_ACKNOWLEDGE,
+            Permission.TICKET_COMMENTS_INTERNAL,
+            Permission.TICKET_COMMENTS_REQUESTER,
+            Permission.TICKET_PII_READ,
+            Permission.SLA_POLICIES_READ,
+            Permission.ESCALATIONS_EVALUATE,
+            Permission.ESCALATIONS_EXECUTE,
             Permission.WORK_ORDERS_READ,
+            Permission.INVENTORY_READ,
         }
     ),
     Role.STOREKEEPER: frozenset(
-        {Permission.ASSETS_READ, Permission.WORK_ORDERS_READ}
+        {
+            Permission.ASSETS_READ,
+            Permission.TICKETS_READ,
+            Permission.WORK_ORDERS_READ,
+            Permission.INVENTORY_READ,
+            Permission.INVENTORY_PARTS_MANAGE,
+            Permission.INVENTORY_LOCATIONS_MANAGE,
+            Permission.INVENTORY_RECEIVE,
+            Permission.INVENTORY_RESERVE,
+            Permission.INVENTORY_ISSUE,
+            Permission.INVENTORY_RETURN,
+            Permission.INVENTORY_TRANSFER,
+            Permission.INVENTORY_ADJUST,
+            Permission.WORK_ORDER_PARTS_READ,
+            Permission.INVENTORY_ATTACHMENTS_READ,
+            Permission.INVENTORY_ATTACHMENTS_CREATE,
+            Permission.INVENTORY_ATTACHMENTS_DELETE,
+        }
     ),
 }
 

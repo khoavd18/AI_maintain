@@ -20,7 +20,17 @@ import type { Ticket } from "@/lib/types";
 
 const priorityCodes = { "Thấp": "low", "Trung bình": "medium", "Cao": "high", "Khẩn cấp": "critical" } as const;
 
-export function TicketWorkOrdersPanel({ ticket }: { ticket: Ticket }) {
+export interface TicketWorkOrderContext {
+  id: string;
+  assetId: string;
+  summary: string;
+  description: string;
+  priority: Ticket["priority"];
+  priorityCode?: "low" | "medium" | "high" | "critical";
+  status: string;
+}
+
+export function TicketWorkOrdersPanel({ ticket }: { ticket: TicketWorkOrderContext }) {
   const auth = useAuth();
   const linked = useTicketWorkOrdersQuery(ticket.id);
   const options = useMaintenanceOptionsQuery(auth.can(permissions.workOrdersCreate));
@@ -34,7 +44,7 @@ export function TicketWorkOrdersPanel({ ticket }: { ticket: Ticket }) {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     try {
-      await create.mutateAsync({ title: `Xử lý ${ticket.id}: ${ticket.summary}`, description: ticket.description, assigned_to_user_id: form.assigned_to_user_id === "none" ? null : form.assigned_to_user_id, priority: priorityCodes[ticket.priority], scheduled_start_at: null, scheduled_end_at: null, due_date: form.due_date, local_timezone: "Asia/Ho_Chi_Minh", grace_period_days: 0, estimated_duration_minutes: Number(form.estimated_duration_minutes), checklist_template_id: form.checklist_template_id === "none" ? null : form.checklist_template_id });
+      await create.mutateAsync({ title: `Xử lý ${ticket.id}: ${ticket.summary}`, description: ticket.description, assigned_to_user_id: form.assigned_to_user_id === "none" ? null : form.assigned_to_user_id, priority: ticket.priorityCode ?? priorityCodes[ticket.priority], scheduled_start_at: null, scheduled_end_at: null, due_date: form.due_date, local_timezone: "Asia/Ho_Chi_Minh", grace_period_days: 0, estimated_duration_minutes: Number(form.estimated_duration_minutes), checklist_template_id: form.checklist_template_id === "none" ? null : form.checklist_template_id });
       setShowForm(false);
     } catch { /* Render safe error. */ }
   }

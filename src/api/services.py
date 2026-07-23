@@ -3,7 +3,7 @@
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -29,6 +29,10 @@ from src.repositories.csv import (
 from src.repositories.postgres import PostgresMaintenanceRepository
 from src.repositories.postgres_assets import PostgresAssetRepository
 from src.security.audit import AuditContext
+
+if TYPE_CHECKING:
+    from src.security.service import CurrentUser
+    from src.ticket_management.service import TicketWorkflowService
 
 __all__ = [
     "ASSET_REQUIRED_COLUMNS",
@@ -122,6 +126,7 @@ class ProcessedDataService:
         maintenance_kpi_path: Path = MAINTENANCE_KPI_FILE,
         repository: MaintenanceRepository | None = None,
         asset_management: AssetManagementService | None = None,
+        ticket_workflow: "TicketWorkflowService | None" = None,
     ) -> None:
         self.feature_path = feature_path
         self.anomaly_path = anomaly_path
@@ -137,15 +142,14 @@ class ProcessedDataService:
             ticket_path=ticket_path,
             maintenance_log_path=maintenance_log_path,
         )
+        self.ticket_workflow = ticket_workflow
         settings = get_settings()
         if asset_management is not None:
             self.asset_management = asset_management
         else:
             session_factory = getattr(self.repository, "session_factory", None)
             asset_repository = (
-                PostgresAssetRepository(session_factory)
-                if session_factory is not None
-                else None
+                PostgresAssetRepository(session_factory) if session_factory is not None else None
             )
             self.asset_management = AssetManagementService(
                 asset_repository,
@@ -268,9 +272,7 @@ class ProcessedDataService:
                 ),
                 "anomaly_count": int(latest_anomalies["is_anomaly"].sum()),
                 "latest_date": latest_date,
-                "average_risk_score": round(
-                    float(latest_risks["final_risk_score"].mean()), 2
-                )
+                "average_risk_score": round(float(latest_risks["final_risk_score"].mean()), 2)
                 if not latest_risks.empty
                 else 0.0,
             }
@@ -387,9 +389,7 @@ class ProcessedDataService:
     ) -> list[dict[str, Any]]:
         self._ensure_analytics_current()
         asset_columns = ["asset_id", "asset_name", "asset_type", "location", "criticality"]
-        frame = self.preventive_status.merge(
-            self.assets[asset_columns], on="asset_id", how="left"
-        )
+        frame = self.preventive_status.merge(self.assets[asset_columns], on="asset_id", how="left")
         frame = _filter_equals(frame, "maintenance_status", maintenance_status)
         frame = _filter_equals(frame, "asset_type", asset_type)
         frame = _filter_equals(frame, "criticality", criticality)
@@ -479,8 +479,25 @@ class ProcessedDataService:
         technician_id: str,
         manager_note: str | None = None,
         audit_context: AuditContext | None = None,
+        actor: "CurrentUser | None" = None,
     ) -> dict[str, Any]:
         """Create one open inspection ticket in configured transactional storage."""
+
+        if self.ticket_workflow is not None:
+            if actor is None or audit_context is None:
+                raise ValueError("Ticket workflow PostgreSQL cần actor và audit context.")
+            return self.ticket_workflow.legacy_intake(
+                {
+                    "asset_id": asset_id,
+                    "issue_description": issue_description,
+                    "priority": priority,
+                    "failure_category": failure_category,
+                    "technician_id": technician_id,
+                    "manager_note": manager_note,
+                },
+                actor=actor,
+                audit_context=audit_context,
+            )
 
         self.get_asset(asset_id)
         if self.asset_management.repository is not None:
@@ -508,8 +525,19 @@ class ProcessedDataService:
         ticket_id: str,
         updates: dict[str, Any],
         audit_context: AuditContext | None = None,
+        actor: "CurrentUser | None" = None,
     ) -> dict[str, Any]:
         """Apply a small validated ticket update and enforce linear status transitions."""
+
+        if self.ticket_workflow is not None:
+            if actor is None or audit_context is None:
+                raise ValueError("Ticket workflow PostgreSQL cần actor và audit context.")
+            return self.ticket_workflow.legacy_update(
+                ticket_id,
+                updates,
+                actor=actor,
+                audit_context=audit_context,
+            )
 
         if not updates:
             raise ValueError("Cần cung cấp ít nhất một trường để cập nhật.")
@@ -551,8 +579,7 @@ class ProcessedDataService:
             if resolution_time < created_at:
                 raise ValueError("resolved_at không được sớm hơn created_at.")
             latest_log_date = max(
-                date.fromisoformat(value)
-                for value in linked_logs["maintenance_date"].astype(str)
+                date.fromisoformat(value) for value in linked_logs["maintenance_date"].astype(str)
             )
             if resolution_time.astimezone(FACILITY_TIMEZONE).date() < latest_log_date:
                 raise ValueError("resolved_at không được sớm hơn maintenance log gần nhất.")
@@ -596,9 +623,7 @@ class ProcessedDataService:
         if maintenance_date > datetime.now(FACILITY_TIMEZONE).date():
             raise ValueError("maintenance_date không được nằm trong tương lai.")
         created_date = (
-            datetime.fromisoformat(str(ticket["created_at"]))
-            .astimezone(FACILITY_TIMEZONE)
-            .date()
+            datetime.fromisoformat(str(ticket["created_at"])).astimezone(FACILITY_TIMEZONE).date()
         )
         if maintenance_date < created_date:
             raise ValueError("maintenance_date không được sớm hơn ngày tạo ticket.")
@@ -612,14 +637,10 @@ class ProcessedDataService:
             )
         current_last_date = date.fromisoformat(str(asset["last_maintenance_date"]))
         if maintenance_date < current_last_date:
-            raise ValueError(
-                "maintenance_date không được sớm hơn lần bảo trì gần nhất của asset."
-            )
+            raise ValueError("maintenance_date không được sớm hơn lần bảo trì gần nhất của asset.")
         expected_follow_up = maintenance_result != MAINTENANCE_RESULT_CODE_TO_VI["resolved"]
         if follow_up_required != expected_follow_up:
-            raise ValueError(
-                "follow_up_required không nhất quán với maintenance_result."
-            )
+            raise ValueError("follow_up_required không nhất quán với maintenance_result.")
 
         created = self.repository.create_maintenance_log(
             {
@@ -678,9 +699,7 @@ class ProcessedDataService:
         anomaly_history = anomaly_history[
             (anomaly_history["asset_id"] == asset_id) & anomaly_history["is_anomaly"]
         ].sort_values("date", ascending=False)
-        preventive = self.preventive_status[
-            self.preventive_status["asset_id"] == asset_id
-        ]
+        preventive = self.preventive_status[self.preventive_status["asset_id"] == asset_id]
         preventive_record = _records(preventive.head(1))
 
         return {
@@ -689,16 +708,12 @@ class ProcessedDataService:
             "risk_contributing_factors": latest_risk.get("contributing_factors")
             if latest_risk
             else None,
-            "recommended_action": latest_risk.get("recommended_action")
-            if latest_risk
-            else None,
+            "recommended_action": latest_risk.get("recommended_action") if latest_risk else None,
             "preventive_maintenance": preventive_record[0] if preventive_record else None,
             "risk_history": _records(risk_history),
             "recent_anomalies": _records(anomaly_history.head(limit)),
             "recent_tickets": self.list_tickets(asset_id=asset_id, limit=limit),
-            "recent_maintenance_logs": self.list_maintenance_logs(
-                asset_id=asset_id, limit=limit
-            ),
+            "recent_maintenance_logs": self.list_maintenance_logs(asset_id=asset_id, limit=limit),
             "recurring_issues": self.list_recurring_issues(asset_id=asset_id),
         }
 
@@ -776,8 +791,15 @@ def get_processed_data_service() -> ProcessedDataService:
             maintenance_log_path=MAINTENANCE_LOG_FILE,
         )
     else:
-        repository = PostgresMaintenanceRepository(
-            get_session_factory(settings.database_url)
+        session_factory = get_session_factory(settings.database_url)
+        repository = PostgresMaintenanceRepository(session_factory)
+        from src.repositories.postgres_tickets import PostgresTicketRepository
+        from src.ticket_management.service import TicketWorkflowService
+
+        ticket_workflow = TicketWorkflowService(PostgresTicketRepository(session_factory))
+        return ProcessedDataService(
+            repository=repository,
+            ticket_workflow=ticket_workflow,
         )
     return ProcessedDataService(repository=repository)
 

@@ -2,7 +2,7 @@
 
 ## Architecture Decision
 
-PostgreSQL là runtime transactional source of truth cho asset, hierarchical location, attachment metadata, ticket, preventive maintenance plan, checklist template, standalone work order, maintenance log, user identity, refresh session và audit log. FastAPI vẫn là serving và authorization boundary duy nhất. Product Milestone 4 bổ sung maintenance planning/work orders theo additive API contracts và giữ nguyên legacy asset/ticket/log, analytics và RAG behavior.
+PostgreSQL là runtime transactional source of truth cho asset, hierarchical location, attachment metadata, rich ticket/SLA history, preventive maintenance plan, checklist template, standalone work order, maintenance log, spare-part inventory, user identity, refresh session và audit log. FastAPI vẫn là serving và authorization boundary duy nhất. Product Milestone 6 bổ sung stock control theo additive API contracts; legacy asset/ticket/log, PM4/PM5, analytics và RAG behavior vẫn được giữ.
 
 Analytics vẫn **batch-first**. CSV không còn là mutable runtime source of truth; nó giữ bốn vai trò rõ ràng:
 
@@ -20,10 +20,10 @@ flowchart LR
     Seed[Canonical synthetic CSV seed<br/>27 assets, 42 tickets, 86 logs]
     Migration[Alembic migrations]
     Import[Validated idempotent import]
-    DB[(PostgreSQL<br/>assets + plans + work orders<br/>tickets + logs + identity + audit)]
+    DB[(PostgreSQL<br/>assets + tickets + plans + work orders<br/>inventory + logs + identity + audit)]
     Files[(Private local attachment bytes)]
     Repo[Repository interfaces<br/>PostgreSQL implementation]
-    Service[Business services<br/>asset + ticket + maintenance planning]
+    Service[Business services<br/>asset + ticket/SLA + maintenance + inventory]
     API[FastAPI<br/>unchanged contracts]
     Streamlit[Streamlit legacy health client]
     Next[Next.js authenticated frontend]
@@ -37,7 +37,7 @@ flowchart LR
     Service <--> API
     API -->|public health only| Streamlit
     API <--> Next
-    CLI[Explicit maintenance CLI] --> Service
+    CLI[Explicit generation, escalation<br/>và inventory seed CLI] --> Service
     Service -->|deterministic generation| WO[Plan occurrence -> work order]
     Next -->|opaque authenticated lookup| QR[Mobile web QR route]
 
@@ -69,8 +69,8 @@ flowchart LR
 1. Alembic tạo và version schema; API không gọi `metadata.create_all()`.
 2. `src/ingestion/load_data.py` validate full synthetic dataset, tạo deterministic location hierarchy/defaults rồi import assets, tickets và logs trong một transaction.
 3. `src/repositories/contracts.py` định nghĩa storage-neutral operations.
-4. `src/repositories/postgres.py`, `postgres_assets.py` và `postgres_maintenance.py` thực thi từng bounded context, dùng PostgreSQL constraints/sequence/row locks và không được gọi trực tiếp từ routes.
-5. `src/api/services.py`, `src/asset_management/service.py` và `src/maintenance_management/service.py` giữ status transition, chronology, relationship, recurrence, generation, completion và verification rules.
+4. `src/repositories/postgres.py`, `postgres_assets.py`, `postgres_tickets.py`, `postgres_maintenance.py` và `postgres_inventory.py` thực thi từng bounded context, dùng PostgreSQL constraints/sequence/row locks và không được gọi trực tiếp từ routes.
+5. `src/api/services.py`, `src/asset_management/service.py`, `src/ticket_management/service.py`, `src/maintenance_management/service.py` và `src/inventory_management/service.py` giữ lifecycle, priority/SLA, chronology, recurrence, stock-control, completion và verification rules.
 6. FastAPI routes chỉ phụ thuộc service; route không chọn storage backend.
 7. API startup kiểm tra PostgreSQL connection và migration tables. Nếu PostgreSQL không sẵn sàng, startup fail rõ ràng và không fallback sang mutable CSV.
 
@@ -127,11 +127,23 @@ sequenceDiagram
 | `attachments:read` | Có | Có | Có | Có | Không | Không |
 | `attachments:create` | Có | Có | Có | Không | Không | Không |
 | `attachments:delete` | Có | Có | Có | Không | Không | Không |
-| `tickets:read` | Có | Có | Có | Có | Có | Không |
+| `tickets:read` | Có | Có | Có | Có | Có | Có |
 | `tickets:create` | Có | Có | Có | Không | Có | Không |
-| `tickets:assign` | Có | Có | Có | Không | Không | Không |
+| `tickets:assign` | Có | Có | Có | Không | Có | Không |
 | `tickets:update` | Có | Có | Có | Có | Có | Không |
 | `tickets:resolve` | Có | Có | Có | Có | Không | Không |
+| `tickets:acknowledge` | Có | Có | Có | Có | Có | Không |
+| `tickets:execute` | Có | Có | Có | Có | Không | Không |
+| `tickets:close` | Có | Có | Không | Không | Không | Không |
+| `tickets:reopen` | Có | Có | Có | Không | Không | Không |
+| `tickets:cancel` | Có | Có | Không | Không | Không | Không |
+| `ticket_comments:internal` | Có | Có | Có | Có | Có | Không |
+| `ticket_comments:requester` | Có | Có | Không | Không | Có | Không |
+| `ticket_pii:read` | Có | Có | Không | Không | Có | Không |
+| `sla_policies:read` | Có | Có | Có | Không | Có | Không |
+| `sla_policies:manage` | Có | Có | Không | Không | Không | Không |
+| `escalations:evaluate` | Có | Có | Có | Không | Có | Không |
+| `escalations:execute` | Có | Có | Không | Không | Có | Không |
 | `maintenance_logs:read` | Có | Có | Có | Có | Không | Không |
 | `maintenance_logs:create` | Có | Không | Có | Có | Không | Không |
 | `analytics:read` | Có | Có | Có | Không | Không | Không |
@@ -141,7 +153,7 @@ sequenceDiagram
 | `users:update` | Có | Không | Không | Không | Không | Không |
 | `audit_logs:read` | Có | Có | Không | Không | Không | Không |
 
-Resource rules thu hẹp matrix: Property Manager chỉ sửa business/location/warranty/maintenance fields và quản lý lifecycle; Chief Engineer sửa technical profile nhưng không archive; Technician chỉ đổi operational status theo transition cho phép và không được đặt `out_of_service`. Technician chỉ thấy ticket/log được gán bằng `technician_id`; Helpdesk chỉ tạo ticket `UNASSIGNED` và update priority/note. Milestone này không có multi-tenant isolation.
+Resource rules thu hẹp matrix: Property Manager chỉ sửa business/location/warranty/maintenance fields và quản lý lifecycle; Chief Engineer sửa technical profile nhưng không archive; Technician chỉ đổi operational status theo transition cho phép và không được đặt `out_of_service`. Technician chỉ thấy/thao tác ticket/work-order inventory được gán bằng user hoặc `technician_id`; reporter PII và comment visibility tiếp tục được lọc theo permission. Helpdesk có thể intake, route, acknowledge, communicate và xem limited part availability nhưng không execute maintenance hoặc stock mutation. Storekeeper quản lý inventory named actions nhưng không complete/verify maintenance hoặc thay ticket lifecycle. Chi tiết: [RBAC matrix](rbac.md). Milestone này không có multi-tenant isolation.
 
 Work-order permissions bổ sung:
 
@@ -195,9 +207,19 @@ FastAPI kiểm tra permission trước khi vào service; service tiếp tục ki
 - Primary key: `ticket_id`, sinh từ PostgreSQL sequence `maintenance_ticket_id_seq`.
 - Foreign key `asset_id -> assets.asset_id` với delete restricted.
 - Composite unique key `(ticket_id, asset_id)` hỗ trợ relationship constraint từ maintenance log.
-- Indexed fields: `asset_id`, `status`, `created_at`.
-- Optimistic `version` phát hiện stale update.
-- Check constraints bảo vệ priority, status, failure category, resolution timestamp và chronology.
+- Rich intake có reporter PII, category/subcategory, intake source, impact, urgency, calculated priority, support group và assigned user; role thiếu permission nhận PII đã redact.
+- Lifecycle code-level gồm `open`, `assigned`, `in_progress`, `waiting`, `resolved`, `closed`, `cancelled`, `reopened`; chỉ named service actions được phép đổi trạng thái.
+- Indexed fields bao phủ asset, status, priority, category, support group, assignee và timestamps.
+- Optimistic `version` phát hiện stale update; check constraints bảo vệ code sets và lifecycle chronology.
+
+### Ticket SLA Và Communication
+
+- Category/subcategory, intake source và support group là reference tables có stable codes.
+- Business calendar giữ IANA timezone, same-day periods và holidays; policy giữ effective range, pause behavior và một target cho mỗi priority.
+- `ticket_sla_states` snapshot policy targets và calendar khi intake để policy update không sửa lịch sử. First-response và resolution state luôn derive từ timestamps/snapshot, không có editable breach flag.
+- `ticket_sla_events`, `ticket_comments` và `ticket_escalation_events` là append-only qua PostgreSQL triggers.
+- Escalation uniqueness theo ticket/rule/occurrence làm API/CLI retry idempotent; rule code phân biệt first-response và resolution. Event không phải notification delivery và không đổi ticket status.
+- Chi tiết lifecycle, matrix và clock semantics: [Ticket Operations Và SLA](ticket_operations.md).
 
 ### MaintenanceLog
 
@@ -228,6 +250,16 @@ FastAPI kiểm tra permission trước khi vào service; service tiếp tục ki
 - State/timestamps được bảo vệ bằng named constraints và optimistic `version`; overdue chỉ là derived response field.
 - Completion, linked maintenance log, verification actor và immutable history nằm trong PostgreSQL; evidence metadata ở `work_order_attachments`, bytes sau `AttachmentStorage`.
 
+### Spare-Part Inventory
+
+- `part_categories`, `units_of_measure`, `spare_parts` và `stock_locations` giữ master data/lifecycle bằng UUID, stable business code, optimistic `version` và UTC timestamps.
+- `inventory_positions` có unique `(part_id, stock_location_id)`, non-negative on-hand/reserved checks và `reserved <= on_hand`. Client không write balance trực tiếp.
+- `part_reorder_configurations` override thresholds theo part/location; nếu không có override, part-level thresholds được dùng.
+- `inventory_operations` giữ idempotency key + request hash cho một named command. Một replay đúng payload trả kết quả đã commit; cùng key khác payload trả conflict.
+- `inventory_movements` là ledger append-only. Opening, receipt, issue, return, transfer-in/out và adjustment đều giữ actor, UOM, reference, timestamp, reason, resulting quantities và optional work-order/cost snapshot.
+- `work_order_part_requirements`, `stock_reservations`, `work_order_part_issues`, `work_order_part_consumptions` và `work_order_part_returns` là các entity riêng. Reservation events, issues, consumptions và returns có database trigger chặn update/delete.
+- `inventory_attachments` chỉ giữ protected metadata/checksum; bytes tái sử dụng `AttachmentStorage`.
+
 ### User
 
 - UUID primary key; normalized lowercase `username` là unique, `email` normalized là optional unique.
@@ -252,7 +284,7 @@ FastAPI kiểm tra permission trước khi vào service; service tiếp tục ki
 
 PostgreSQL lưu stable English codes như `in_progress`, `electrical_issue`, `generator` và `critical`. Repository boundary dùng mappings trong `src/config/value_mappings.py` để trả lại Vietnamese display values như `Đang xử lý`, `Lỗi điện`, `Máy phát điện dự phòng` và `Rất quan trọng`.
 
-Không tạo PostgreSQL native enum trong milestone này. String code + named check constraint giúp migration dễ review. Canonical mappings duy nhất nằm trong `src/config/value_mappings.py`; API options trả code + Vietnamese label để frontend không duy trì display mapping thứ hai. Legacy API vẫn trả Vietnamese values hiện có.
+Không tạo PostgreSQL native enum trong milestone này. String code + named check constraint giúp migration dễ review. Legacy asset/ticket mappings nằm trong `src/config/value_mappings.py`; PM4-PM6 bounded contexts giữ code/label tại canonical domain module tương ứng, gồm `src/inventory_management/domain.py`. API options trả code + Vietnamese label để frontend không duy trì role/business matrix thứ hai. Legacy API vẫn trả Vietnamese values hiện có.
 
 ## Asset State Model
 
@@ -302,6 +334,35 @@ stateDiagram-v2
 - Work-order verification yêu cầu actor khác người thực hiện, lock WO/asset, ghi verifier/timestamp, đồng bộ `last_maintenance_date` và compatibility `next_maintenance_date`, rồi audit trong một transaction.
 - Completing hoặc verifying corrective WO không đổi ticket state. Ticket resolution vẫn là action explicit qua existing ticket service.
 - Work-order evidence metadata và audit cùng PostgreSQL transaction; byte store có cùng single-node atomic-file trade-off như asset attachment.
+- Reserve lock requirement và inventory position, kiểm tra optimistic version/available, tăng reserved và ghi reservation/event/audit cùng transaction.
+- Issue lock work order, position và linked reservation/requirement; giảm on-hand, giải phóng reserved tương ứng, tạo movement/issue/event/audit cùng transaction.
+- Consumption chỉ quyết toán quantity đã issue cho assigned technician; không tạo stock movement và không trừ tồn lần hai.
+- Return lock issue + destination position, từ chối quantity lớn hơn outstanding, tăng on-hand và ghi return movement cùng transaction.
+- Transfer lock hai position theo thứ tự deterministic; transfer-out và transfer-in dùng cùng `transfer_group_id` và commit/rollback cùng nhau.
+- Adjustment chỉ qua named service, yêu cầu reason + supporting note và từ chối kết quả on-hand âm hoặc thấp hơn reserved.
+
+## Inventory Stock Semantics
+
+```mermaid
+flowchart LR
+    Requirement[Planned requirement<br/>không đổi stock] --> Reserve[Reservation]
+    Position[(Inventory position)] -->|available check + row lock| Reserve
+    Reserve -->|reserved tăng| Position
+    Reserve --> Issue[Issue to work order]
+    Position -->|on-hand giảm<br/>reserved release| Issue
+    Issue --> Consume[Explicit consumption<br/>không trừ stock lần hai]
+    Issue --> Return[Unused-part return]
+    Return -->|on-hand tăng| Position
+    Position --> Low[Derived low-stock state<br/>+ reorder suggestion]
+```
+
+Canonical quantity relationship:
+
+```text
+available_quantity = on_hand_quantity - reserved_quantity
+```
+
+Reservation là allocation, không phải physical movement. Issue mới giảm on-hand. Consumption xác nhận phần issue đã được lắp/sử dụng và không tạo movement thứ hai. Return chỉ áp dụng cho outstanding issue, tạo movement tăng tồn ở active destination. Work-order completion dùng `warning_only` policy khi còn shortage hoặc unresolved issued stock; nó không tự issue, consume, return hoặc release.
 
 ## Preventive Scheduling Semantics
 
@@ -390,6 +451,7 @@ RAG workflow không thay đổi:
 - deterministic composer kết hợp retrieved guidance với structured asset/ticket context từ PostgreSQL và latest batch analytics.
 
 Qdrant không lưu asset, ticket hoặc maintenance log và không tham gia database transaction.
+Inventory data cũng không được đưa vào Qdrant.
 
 ## Runtime Modes
 
@@ -405,13 +467,17 @@ Không có automatic fallback. `STORAGE_BACKEND=postgresql` cùng database unava
 - Local authentication/RBAC/audit phù hợp internal pilot nhưng chưa có SSO, MFA, recovery, signing-key rotation, external audit sink hoặc multi-tenancy.
 - Basic login limiter chỉ nằm trong một API process; chưa có distributed throttling hoặc lockout operations workflow.
 - Chưa có production scheduler/worker cho preventive generation, snapshot hoặc analytics batch; operator gọi API/CLI explicit.
+- SLA/escalation evaluation cũng chỉ chạy bằng API/CLI explicit; chưa có notification delivery hoặc background evaluator.
 - Chưa có production backup automation, failover, observability hoặc connection-pool tuning theo tải thật.
 - CSV analytics snapshot replacement chưa phải distributed transaction với PostgreSQL.
 - Local attachment storage chỉ phù hợp một API node; chưa có S3-compatible implementation, malware scanner, object lifecycle/backup hoặc reconciler cho cleanup pending.
 - QR lookup đã authenticated nhưng chưa có camera/browser compatibility matrix, label fleet management hoặc offline scan.
 - Optimistic conflict hiện trả HTTP `409`; UI chưa có merge workflow phức tạp.
+- Ticket reporter PII chưa có field-level encryption hoặc retention/data-subject workflow.
+- Inventory chưa có lot/serial tracking, cycle counting, barcode scanning, procurement/supplier workflow, stock valuation, accounting integration hoặc automatic replenishment.
+- Low-stock state/reorder suggestion là threshold deterministic, không phải demand forecast hoặc optimization.
 - PostgreSQL local Docker defaults và development ephemeral signing secret chỉ phục vụ development/demo, không phải secret strategy cho production.
 
 ## Human-In-The-Loop Boundary
 
-Risk Score là tín hiệu prioritization, không phải calibrated failure probability. Manager quyết định ưu tiên, lịch và phân công; technician xác nhận hiện trường, an toàn và maintenance result; authorized reviewer xác minh độc lập. Hệ thống có thể generate work order deterministic khi người dùng gọi explicit API/CLI, nhưng không tự chạy scheduler, tự phê duyệt, tự resolve ticket, điều khiển thiết bị hoặc dự đoán chính xác thời điểm hỏng.
+Risk Score là tín hiệu prioritization, không phải calibrated failure probability. Manager quyết định ưu tiên, lịch và phân công; Storekeeper chịu trách nhiệm kiểm đếm và stock action; technician xác nhận hiện trường, usage và maintenance result; authorized reviewer xác minh độc lập. Hệ thống có thể generate work order deterministic khi người dùng gọi explicit API/CLI, nhưng không tự mua hàng, tự issue/consume stock, chạy scheduler, phê duyệt, resolve ticket, điều khiển thiết bị hoặc dự đoán chính xác thời điểm hỏng.

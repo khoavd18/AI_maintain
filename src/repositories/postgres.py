@@ -19,7 +19,6 @@ from src.config.value_mappings import (
     MAINTENANCE_TYPE_VI_TO_CODE,
     PRIORITY_CODE_TO_VI,
     PRIORITY_VI_TO_CODE,
-    STATUS_CODE_TO_VI,
     STATUS_VI_TO_CODE,
 )
 from src.database.models import Asset, MaintenanceLog, Ticket
@@ -40,6 +39,11 @@ from src.security.audit import (
     safe_state,
 )
 from src.security.service import append_audit_event
+from src.ticket_management.domain import (
+    LEGACY_STATUS_LABELS,
+    TicketStatus,
+    legacy_priority_dimensions,
+)
 
 REQUIRED_TABLES = {
     "assets",
@@ -56,9 +60,38 @@ REQUIRED_TABLES = {
     "work_orders",
     "work_order_checklist_items",
     "work_order_attachments",
+    "ticket_categories",
+    "ticket_subcategories",
+    "ticket_intake_sources",
+    "support_groups",
+    "business_calendars",
+    "business_working_periods",
+    "business_calendar_holidays",
+    "sla_policies",
+    "sla_policy_targets",
+    "ticket_sla_states",
+    "ticket_sla_events",
+    "ticket_comments",
+    "ticket_comment_attachments",
+    "ticket_escalation_events",
+    "part_categories",
+    "units_of_measure",
+    "spare_parts",
+    "stock_locations",
+    "inventory_positions",
+    "part_reorder_configurations",
+    "inventory_operations",
+    "inventory_movements",
+    "work_order_part_requirements",
+    "stock_reservations",
+    "stock_reservation_events",
+    "work_order_part_issues",
+    "work_order_part_consumptions",
+    "work_order_part_returns",
+    "inventory_attachments",
     "alembic_version",
 }
-CANONICAL_SCHEMA_REVISION = "20260720_0004"
+CANONICAL_SCHEMA_REVISION = "20260723_0006"
 TICKET_SEQUENCE = "maintenance_ticket_id_seq"
 LOG_SEQUENCE = "maintenance_log_id_seq"
 
@@ -206,12 +239,8 @@ class PostgresMaintenanceRepository:
             with self.session_factory() as session, session.begin():
                 session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
                 assets = session.scalars(select(Asset).order_by(Asset.asset_id)).all()
-                tickets = session.scalars(
-                    select(Ticket).order_by(Ticket.ticket_id)
-                ).all()
-                logs = session.scalars(
-                    select(MaintenanceLog).order_by(MaintenanceLog.log_id)
-                ).all()
+                tickets = session.scalars(select(Ticket).order_by(Ticket.ticket_id)).all()
+                logs = session.scalars(select(MaintenanceLog).order_by(MaintenanceLog.log_id)).all()
                 return {
                     "assets": [
                         StoredRecord(
@@ -221,9 +250,7 @@ class PostgresMaintenanceRepository:
                         for entity in assets
                     ],
                     "maintenance_tickets": [_ticket_record(entity) for entity in tickets],
-                    "maintenance_logs": [
-                        _maintenance_log_record(entity) for entity in logs
-                    ],
+                    "maintenance_logs": [_maintenance_log_record(entity) for entity in logs],
                 }
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError(
@@ -295,18 +322,14 @@ class PostgresMaintenanceRepository:
             with self.session_factory() as session:
                 return list(session.scalars(statement).all())
         except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể đọc PostgreSQL primary storage."
-            ) from exc
+            raise StorageUnavailableError("Không thể đọc PostgreSQL primary storage.") from exc
 
     def _one(self, model, identifier: str) -> Any | None:
         try:
             with self.session_factory() as session:
                 return session.get(model, identifier)
         except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể đọc PostgreSQL primary storage."
-            ) from exc
+            raise StorageUnavailableError("Không thể đọc PostgreSQL primary storage.") from exc
 
 
 def _append_ticket_update_audits(
@@ -380,16 +403,18 @@ def _next_identifier(session: Session, sequence: str, prefix: str) -> str:
 
 def _require_version(current: int, expected: int | None, identifier: str) -> None:
     if expected is not None and current != expected:
-        raise StaleRecordError(
-            f"Dữ liệu {identifier} đã thay đổi. Hãy tải lại trước khi cập nhật."
-        )
+        raise StaleRecordError(f"Dữ liệu {identifier} đã thay đổi. Hãy tải lại trước khi cập nhật.")
 
 
 def _ticket_storage_values(values: dict[str, Any]) -> dict[str, Any]:
+    priority = _to_code(str(values["priority"]), PRIORITY_VI_TO_CODE, "priority")
+    impact, urgency = legacy_priority_dimensions(priority)
     return {
         "asset_id": str(values["asset_id"]),
         "issue_description": str(values["issue_description"]),
-        "priority": _to_code(str(values["priority"]), PRIORITY_VI_TO_CODE, "priority"),
+        "priority": priority,
+        "impact": impact.value,
+        "urgency": urgency.value,
         "status": _to_code(str(values["status"]), STATUS_VI_TO_CODE, "status"),
         "failure_category": _to_code(
             str(values["failure_category"]),
@@ -410,6 +435,9 @@ def _apply_ticket_updates(entity: Ticket, updates: dict[str, Any]) -> None:
             entity.status = _to_code(str(value), STATUS_VI_TO_CODE, field)
         elif field == "priority":
             entity.priority = _to_code(str(value), PRIORITY_VI_TO_CODE, field)
+            impact, urgency = legacy_priority_dimensions(entity.priority)
+            entity.impact = impact.value
+            entity.urgency = urgency.value
         elif field == "resolved_at":
             entity.resolved_at = _as_optional_datetime(value)
         elif field in {"technician_id", "note"}:
@@ -454,7 +482,7 @@ def _ticket_record(entity: Ticket) -> StoredRecord:
             "asset_id": entity.asset_id,
             "issue_description": entity.issue_description,
             "priority": _to_display(entity.priority, PRIORITY_CODE_TO_VI, "priority"),
-            "status": _to_display(entity.status, STATUS_CODE_TO_VI, "status"),
+            "status": LEGACY_STATUS_LABELS[TicketStatus(entity.status)],
             "failure_category": _to_display(
                 entity.failure_category,
                 FAILURE_TYPE_CODE_TO_VI,
@@ -509,9 +537,7 @@ def _to_display(value: str, mapping: dict[str, str], field: str) -> str:
     try:
         return mapping[value]
     except KeyError as exc:
-        raise IntegrityViolationError(
-            f"PostgreSQL chứa mã {field} không được hỗ trợ."
-        ) from exc
+        raise IntegrityViolationError(f"PostgreSQL chứa mã {field} không được hỗ trợ.") from exc
 
 
 def _as_date(value: object) -> date:

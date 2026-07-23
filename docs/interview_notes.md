@@ -6,11 +6,11 @@ Bảo trì có business workflow rõ: dữ liệu vận hành, ticket, lịch pr
 
 ## Project Giải Quyết Vấn Đề Gì?
 
-Project giúp Facility Manager ưu tiên assets cần chú ý và giúp technician tìm SOP/checklist liên quan. Input gồm asset master, hourly readings, tickets, maintenance logs và documents. Output gồm daily features, anomaly results, explainable risk scores, preventive/recurring/KPI reports, dashboard và source-grounded Copilot response.
+Project giúp Facility Manager ưu tiên assets cần chú ý, điều phối ticket/work order, kiểm soát vật tư liên quan và giúp technician tìm SOP/checklist. Input gồm asset master, hourly readings, tickets, plans/work orders, maintenance logs, inventory transactions và documents. Output gồm operational queues, stock views, daily features, anomaly results, explainable risk scores, maintenance reports và source-grounded Copilot response.
 
 ## Vì Sao Đây Không Phải Full CMMS?
 
-CMMS là enterprise system rộng cho planning/work orders, approvals, inventory, purchasing, vendor, labor/cost và compliance. Project chỉ giữ focused asset/plan/work-order/ticket/log workflow trong PostgreSQL để đóng vòng decision support; nó không có inventory, purchasing, complex approvals, vendor management, notifications hoặc production scheduler và không thay con người quyết định.
+CMMS là enterprise system rộng cho planning/work orders, approvals, inventory, purchasing, vendor, labor/cost và compliance. Project chỉ giữ focused asset/plan/work-order/ticket/log và spare-parts stock-control workflow để đóng vòng decision support. Nó không có procurement/suppliers, accounting/valuation, complex approvals, notifications hoặc production scheduler và không thay con người quyết định.
 
 ## Asset Lifecycle Được Thiết Kế Như Thế Nào?
 
@@ -26,6 +26,38 @@ Location là adjacency hierarchy có breadcrumb, cycle prevention và archive-in
 - **MaintenanceLog** là durable outcome/history sau khi công việc được thực hiện.
 
 Nếu gộp bốn khái niệm, schedule change có thể sửa history, ticket dễ bị đóng ngầm và khó chứng minh exactly-one maintenance result. Thiết kế hiện tại giữ FK rõ, checklist snapshot, state machine và audit riêng.
+
+## Vì Sao Tách Requirement, Reservation, Issue, Consumption Và Return?
+
+- **Requirement** là planned need và không đổi stock.
+- **Reservation** là allocation; tăng reserved, giảm available nhưng giữ on-hand.
+- **Issue** là physical handoff và giảm on-hand.
+- **Consumption** xác nhận quantity thực dùng; không trừ stock lần hai.
+- **Return** hoàn phần outstanding chưa dùng và tăng on-hand bằng movement mới.
+
+Tách các khái niệm ngăn work-order completion ngầm coi mọi vật tư đã xuất là đã dùng, giữ reconciliation rõ và cho phép return đúng quantity.
+
+## Inventory Bảo Vệ Stock Accuracy Thế Nào?
+
+Canonical relationship là `available = on_hand - reserved`. Reserve/issue/return/transfer/adjustment lock inventory positions trong PostgreSQL, dùng check constraints và reject negative stock/oversubscription. Transfer lock hai vị trí theo thứ tự deterministic và commit transfer-out/in cùng nhau. Mỗi stock-changing command có caller-stable idempotency key + request hash; retry đúng payload không duplicate, payload khác conflict.
+
+Movement, reservation event, issue, consumption và return là append-only ở application và database trigger. Correction dùng compensating movement có actor/reason thay vì sửa history.
+
+## Low-Stock Có Phải Forecast Không?
+
+Không. State và reorder suggestion derive deterministic từ available quantity và effective minimum/reorder/maximum thresholds. Đây là operational visibility, không phải demand forecast, optimization, automatic replenishment hoặc purchase order.
+
+## Ticket Priority Được Xác Định Thế Nào?
+
+Frontend không chọn priority text tùy ý. Người intake chọn `impact` và `urgency`; backend áp dụng một matrix 4x4 canonical để derive `low/medium/high/critical`, trả Vietnamese label và ghi audit. API priority preview dùng cùng function, nên UI không tạo rule thứ hai. Thay đổi priority cũng phải gửi impact, urgency, reason và optimistic version.
+
+## SLA Có Phải Một Breach Flag Trong Database Không?
+
+Không. First-response và resolution clocks được derive từ source timestamps, target/calendar snapshot, pause intervals và thời điểm đánh giá. Mỗi ticket snapshot policy target cùng timezone, working periods và holidays tại intake, vì vậy policy edit không viết lại lịch sử. Waiting có thể pause theo policy; resume dùng business minutes còn lại; reopen tạo SLA occurrence mới. Event history append-only.
+
+## Escalation Hoạt Động Thế Nào?
+
+API, CLI và tests gọi cùng một deterministic service để tìm due-soon, response/resolution breach, critical priority và repeated reopen. Dry-run không write; execute dùng unique ticket/rule/occurrence để retry/concurrent call không tạo duplicate; rule code đã phân biệt clock. Milestone hiện chỉ ghi operational event, chưa có scheduler hoặc email/SMS delivery.
 
 ## Recurrence Và Generation Có An Toàn Không?
 
@@ -101,7 +133,7 @@ Frontend Zod-validate successful response, render answer/source như untrusted t
 
 ## Vì Sao Dùng PostgreSQL Và Qdrant?
 
-PostgreSQL là primary transactional store cho assets, tickets và maintenance logs. Nó cung cấp FK, check constraints, transactions, concurrent-safe ID sequences và optimistic conflicts. CSV vẫn là deterministic seed và batch analytics contract. Qdrant là vector store chỉ cho SOP/checklist retrieval; nó không lưu transactional records và failure của Qdrant không làm manager workflow ngừng hoạt động.
+PostgreSQL là primary transactional store cho assets, rich ticket/SLA history, work orders, maintenance logs và inventory positions/movements. Nó cung cấp FK, check constraints, row locks, transactions, concurrent-safe sequences, append-only triggers, idempotency records và optimistic conflicts. CSV vẫn là deterministic seed và batch analytics contract. Qdrant là vector store chỉ cho SOP/checklist retrieval; nó không lưu transactional records và failure của Qdrant không làm manager workflow ngừng hoạt động.
 
 Asset/location/attachment metadata cũng cần PostgreSQL vì lifecycle, hierarchy, unique serial, actor/version và archive history là transactional invariants. Attachment bytes tách ra object-storage boundary vì file body không phù hợp relational row; Qdrant vẫn chỉ xử lý document chunks, không thay asset repository.
 
@@ -117,11 +149,11 @@ Audit ghi actor, action, resource, request ID, outcome và safe before/after pro
 
 ## Cần Gì Trước Production Deployment?
 
-Cần integration với CMMS/BMS thực, data quality ownership, labeled evaluation, risk calibration, RAG evaluation, scheduler, SSO/MFA hoặc enterprise IAM integration, distributed throttling, key rotation, centralized audit retention/observability, secrets management, backup/recovery, deployment automation, security review và field safety validation. Cũng cần thống nhất SLA và quyền quyết định với đội vận hành.
+Cần integration với CMMS/BMS thực, data quality/stock ownership, cycle-count/reconciliation policy, labeled evaluation, risk/RAG calibration, scheduler, SSO/MFA hoặc enterprise IAM, distributed throttling, key rotation, centralized audit retention/observability, secrets management, backup/recovery, deployment automation, security review và field safety validation. Procurement/accounting chỉ nên được thêm bằng bounded integration riêng nếu business scope yêu cầu.
 
 ## Tôi Đã Trực Tiếp Thiết Kế Và Implement Gì?
 
-Tôi thiết kế data contract và deterministic generator; xây feature, anomaly, risk và maintenance analytics; triển khai Alembic schema, PostgreSQL repositories/transactions, local auth/RBAC, rotating refresh sessions và transaction-coupled immutable audit; bổ sung controlled recurrence, idempotent preventive generation, standalone work-order state machine, checklist snapshots/evidence và independent verification; giữ legacy API/Next.js contracts ổn định; kết nối context tới Qdrant retrieval và viết concurrency/rollback/security tests.
+Tôi thiết kế data contract và deterministic generator; xây feature, anomaly, risk và maintenance analytics; triển khai Alembic schema, PostgreSQL repositories/transactions, local auth/RBAC, rotating refresh sessions và transaction-coupled immutable audit; bổ sung rich ticket/SLA/queues, controlled recurrence, standalone work orders và independent verification; xây spare-part/location master, immutable stock ledger, concurrent-safe reservations, issue/consumption/return, atomic transfer, low-stock views và work-order inventory UI; giữ legacy API/analytics contracts ổn định; kết nối Qdrant retrieval và viết concurrency/rollback/security tests.
 
 ## Limitations Cần Nói Thẳng
 
@@ -130,9 +162,11 @@ Tôi thiết kế data contract và deterministic generator; xây feature, anoma
 - Thresholds/weights chưa được hiệu chuẩn trên facility thực.
 - Local auth/audit chưa có SSO, MFA, recovery, distributed throttling, key rotation, external tamper-evident archive hoặc security review.
 - Preventive generation đang là explicit API/CLI, chưa có production scheduler/worker, holiday calendar, notifications hoặc missed-run operations.
+- SLA/escalation evaluation cũng explicit; chưa có notification delivery, field-level encrypted reporter PII hoặc policy approval workflow.
 - Recurrence mới hỗ trợ bounded day/week/month/year; work-order reopen chưa có full maintenance-record amendment/countersign workflow.
 - Transactional API chưa có backup automation hoặc centralized observability.
 - Attachment storage là local single-node, chưa có malware scanning, S3-compatible backend hoặc file/DB reconciliation worker.
+- Inventory chưa có supplier/procurement, lot/serial/expiry, cycle count, barcode scan, automatic replenishment, stock valuation hoặc accounting.
 - QR chưa có offline mode, camera/browser compatibility matrix hoặc fleet label operations.
 - Copilot composer deterministic và extractive, không phải automatic diagnosis.
 - Portfolio MVP không phải production-ready enterprise deployment.

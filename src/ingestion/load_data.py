@@ -33,16 +33,37 @@ from src.database.models import (
     AssetAttachment,
     ChecklistTemplate,
     ChecklistTemplateItem,
+    InventoryAttachment,
+    InventoryMovement,
+    InventoryOperation,
+    InventoryPosition,
     Location,
     MaintenanceLog,
+    PartCategory,
+    PartReorderConfiguration,
     PreventiveMaintenancePlan,
+    SparePart,
+    StockLocation,
+    StockReservation,
+    StockReservationEvent,
     Ticket,
+    UnitOfMeasure,
     WorkOrder,
     WorkOrderAttachment,
     WorkOrderChecklistItem,
+    WorkOrderPartConsumption,
+    WorkOrderPartIssue,
+    WorkOrderPartRequirement,
+    WorkOrderPartReturn,
+    TicketComment,
+    TicketCommentAttachment,
+    TicketEscalationEvent,
+    TicketSlaEvent,
+    TicketSlaState,
 )
 from src.database.session import build_engine
 from src.ingestion.validation import validate_csv_dataset
+from src.ticket_management.domain import legacy_priority_dimensions
 
 EXPECTED_TABLES = {
     "assets",
@@ -56,6 +77,21 @@ EXPECTED_TABLES = {
     "work_orders",
     "work_order_checklist_items",
     "work_order_attachments",
+    "part_categories",
+    "units_of_measure",
+    "spare_parts",
+    "stock_locations",
+    "inventory_positions",
+    "part_reorder_configurations",
+    "inventory_operations",
+    "inventory_movements",
+    "work_order_part_requirements",
+    "stock_reservations",
+    "stock_reservation_events",
+    "work_order_part_issues",
+    "work_order_part_consumptions",
+    "work_order_part_returns",
+    "inventory_attachments",
 }
 ID_PATTERN = re.compile(r"^[A-Z]+-(\d+)$")
 
@@ -123,10 +159,29 @@ def import_csv_dataset(
                     session,
                     sorted(frames["assets"]["location"].astype(str).unique()),
                 )
-                records["assets"] = _asset_records(
-                    frames["assets"], persisted_location_ids
-                )
+                records["assets"] = _asset_records(frames["assets"], persisted_location_ids)
                 if replace:
+                    session.execute(text("SET LOCAL app.demo_reset = 'on'"))
+                    session.execute(delete(InventoryAttachment))
+                    session.execute(delete(WorkOrderPartReturn))
+                    session.execute(delete(WorkOrderPartConsumption))
+                    session.execute(delete(WorkOrderPartIssue))
+                    session.execute(delete(StockReservationEvent))
+                    session.execute(delete(StockReservation))
+                    session.execute(delete(WorkOrderPartRequirement))
+                    session.execute(delete(InventoryMovement))
+                    session.execute(delete(PartReorderConfiguration))
+                    session.execute(delete(InventoryPosition))
+                    session.execute(delete(InventoryOperation))
+                    session.execute(delete(SparePart))
+                    session.execute(delete(StockLocation))
+                    session.execute(delete(PartCategory))
+                    session.execute(delete(UnitOfMeasure))
+                    session.execute(delete(TicketCommentAttachment))
+                    session.execute(delete(TicketSlaEvent))
+                    session.execute(delete(TicketEscalationEvent))
+                    session.execute(delete(TicketComment))
+                    session.execute(delete(TicketSlaState))
                     session.execute(delete(WorkOrderAttachment))
                     session.execute(delete(AssetAttachment))
                     session.execute(delete(MaintenanceLog))
@@ -137,6 +192,13 @@ def import_csv_dataset(
                     session.execute(delete(ChecklistTemplate))
                     session.execute(delete(Ticket))
                     session.execute(delete(Asset))
+                    for sequence in (
+                        "inventory_movement_number_seq",
+                        "stock_reservation_number_seq",
+                        "part_issue_number_seq",
+                        "part_return_number_seq",
+                    ):
+                        session.execute(text(f"ALTER SEQUENCE {sequence} RESTART WITH 1"))
                 session.execute(Asset.__table__.insert(), records["assets"])
                 session.execute(
                     Ticket.__table__.insert(),
@@ -189,9 +251,7 @@ def load_csv_dataset(
 def _database_counts(session: Session) -> dict[str, int]:
     return {
         "assets": int(session.scalar(select(func.count()).select_from(Asset)) or 0),
-        "maintenance_tickets": int(
-            session.scalar(select(func.count()).select_from(Ticket)) or 0
-        ),
+        "maintenance_tickets": int(session.scalar(select(func.count()).select_from(Ticket)) or 0),
         "maintenance_logs": int(
             session.scalar(select(func.count()).select_from(MaintenanceLog)) or 0
         ),
@@ -204,9 +264,7 @@ def _asset_records(
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for row in frame.to_dict(orient="records"):
-        asset_type = _map_value(
-            str(row["asset_type"]), ASSET_TYPE_VI_TO_CODE, "asset_type"
-        )
+        asset_type = _map_value(str(row["asset_type"]), ASSET_TYPE_VI_TO_CODE, "asset_type")
         legacy_status = _map_value(str(row["status"]), STATUS_VI_TO_CODE, "status")
         installation_date = pd.Timestamp(row["installation_date"]).date()
         records.append(
@@ -231,13 +289,9 @@ def _asset_records(
                     tzinfo=timezone.utc,
                 ),
                 "ownership_type": "owned",
-                "last_maintenance_date": pd.Timestamp(
-                    row["last_maintenance_date"]
-                ).date(),
+                "last_maintenance_date": pd.Timestamp(row["last_maintenance_date"]).date(),
                 "maintenance_interval_days": int(row["maintenance_interval_days"]),
-                "next_maintenance_date": pd.Timestamp(
-                    row["next_maintenance_date"]
-                ).date(),
+                "next_maintenance_date": pd.Timestamp(row["next_maintenance_date"]).date(),
                 "qr_token": asset_qr_token(str(row["asset_id"])),
             }
         )
@@ -247,14 +301,16 @@ def _asset_records(
 def _ticket_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for row in frame.to_dict(orient="records"):
+        priority = _map_value(str(row["priority"]), PRIORITY_VI_TO_CODE, "priority")
+        impact, urgency = legacy_priority_dimensions(priority)
         records.append(
             {
                 "ticket_id": str(row["ticket_id"]),
                 "asset_id": str(row["asset_id"]),
                 "issue_description": str(row["issue_description"]),
-                "priority": _map_value(
-                    str(row["priority"]), PRIORITY_VI_TO_CODE, "priority"
-                ),
+                "priority": priority,
+                "impact": impact.value,
+                "urgency": urgency.value,
                 "status": _map_value(str(row["status"]), STATUS_VI_TO_CODE, "status"),
                 "failure_category": _map_value(
                     str(row["failure_category"]),
@@ -296,9 +352,7 @@ def _maintenance_log_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
                     "maintenance_result",
                 ),
                 "follow_up_required": _as_bool(row["follow_up_required"]),
-                "next_maintenance_date": pd.Timestamp(
-                    row["next_maintenance_date"]
-                ).date(),
+                "next_maintenance_date": pd.Timestamp(row["next_maintenance_date"]).date(),
             }
         )
     return records

@@ -1,6 +1,6 @@
 # Kịch Bản Demo Product 15–18 Phút
 
-Kịch bản dùng PostgreSQL làm transactional source of truth và CSV làm synthetic seed + batch analytics contract. Đây là internal pilot demo, không phải production deployment hoặc complete CMMS.
+Kịch bản dùng PostgreSQL làm transactional source of truth cho asset, ticket/SLA, work order và inventory; CSV làm synthetic seed + batch analytics contract. Đây là internal pilot demo, không phải production deployment, procurement suite hoặc complete CMMS.
 
 ## Chuẩn Bị Trước Demo
 
@@ -81,7 +81,7 @@ Tạo năm role demo bằng một password do người chạy nhập, chỉ tron
 python -m src.security.cli seed-demo-users
 ```
 
-Expected usernames: `admin.demo`, `manager.demo`, `engineer.demo`, `technician.demo`, `helpdesk.demo`. Không có default password và application startup không tự tạo user.
+Expected usernames: `admin.demo`, `manager.demo`, `engineer.demo`, `technician.demo`, `helpdesk.demo`, `storekeeper.demo`. Không có default password và application startup không tự tạo user.
 
 ### 4.2. Seed preventive maintenance explicit
 
@@ -93,6 +93,25 @@ python -m src.maintenance_management.cli generate --dry-run --as-of 2026-07-20
 ```
 
 Chọn `--as-of` phù hợp ngày demo. Dry-run không write. Có thể bỏ seed và tạo template/plan trực tiếp trên UI để kể đầy đủ workflow.
+
+### 4.3. Seed ticket/SLA reference data
+
+Lệnh idempotent tạo category, source, support group, default Vietnamese business calendar và SLA policy. Actor phải tồn tại và có quyền quản lý SLA:
+
+```powershell
+python -m src.ticket_management.cli seed-defaults --actor-username admin.demo
+```
+
+### 4.4. Seed inventory explicit
+
+Sau khi có demo users và work orders:
+
+```powershell
+python -m src.inventory_management.cli seed-development
+python -m src.inventory_management.cli seed-development
+```
+
+Lần đầu tạo 6 categories, 3 UOM, 5 stock locations, 8 spare parts, opening balances và selected requirements/reservations. Lần hai phải báo zero cho master/requirement/reservation mới và không tăng movement count. Seed đi qua named services, không PATCH balance.
 
 ### 5. Tạo analytics snapshot và chạy batch
 
@@ -130,6 +149,43 @@ npm run dev
 Mở `http://localhost:3000`.
 
 Streamlit không dùng cho protected demo workflow. Nó chỉ còn là legacy development status page gọi public `/health`.
+
+## Ticket Intake, SLA Và Escalation Workflow
+
+### A. Helpdesk intake
+
+1. Đăng nhập `helpdesk.demo`, mở `/tickets`, chọn queue **Chưa phân công**.
+2. Mở `/tickets/new`, chọn `GENERATOR_002`, category/source, impact `high` và urgency `immediate`.
+3. Chỉ priority preview `critical` đến từ FastAPI; browser không có matrix riêng.
+4. Điền reporter contact cho demo, route đến Engineering và assign `technician.demo`.
+5. Submit rồi mở detail; chỉ SLA first-response/resolution, policy snapshot và Vietnamese labels.
+
+### B. Technician execution và communication
+
+1. Đăng nhập `technician.demo`, mở queue **Phân công cho tôi**.
+2. Mở ticket vừa tạo; reporter PII phải được redact.
+3. Chọn **Ghi nhận phản hồi**, sau đó **Bắt đầu**.
+4. Thêm internal comment; thử **Đặt chờ** với reason, kiểm tra resolution SLA chuyển `paused`, rồi **Tiếp tục**.
+5. Mở Copilot với asset/ticket context và xem checklist có source.
+6. Tạo hoặc mở corrective work order, thực hiện checklist/evidence và ghi maintenance result.
+7. Quay lại ticket và resolve explicit sau khi linked maintenance log tồn tại.
+
+### C. Manager oversight
+
+1. Đăng nhập `manager.demo`, mở queues **Khẩn cấp**, **Sắp đến hạn** và **Vi phạm SLA**.
+2. Mở ticket, xác nhận reporter PII hiển thị theo permission, timeline chứa intake/response/pause/resume/comment.
+3. Đóng ticket đã resolved hoặc reopen với reason để chỉ SLA occurrence mới.
+4. Mở `/admin/sla`: chỉ business calendar, policy targets và cảnh báo snapshot.
+5. Mở `/admin/escalations`: chạy **Dry run**, sau đó execute nếu có candidate. Chạy lại để chứng minh không tạo duplicate.
+
+CLI tương đương:
+
+```powershell
+python -m src.ticket_management.cli evaluate-escalations --dry-run --actor-username manager.demo
+python -m src.ticket_management.cli evaluate-escalations --actor-username manager.demo
+```
+
+**Nói:** SLA state derive từ timestamps và policy/calendar snapshot. Escalation chỉ ghi operational event, không gửi email/SMS, không tự đổi ticket và không chạy background worker.
 
 ## Preventive Plan Và Work Order Workflow
 
@@ -184,6 +240,40 @@ python -m src.maintenance_management.cli generate --as-of 2026-07-20
 ```
 
 Lần hai phải báo skipped/zero generated cho occurrence đã có. Automated PostgreSQL test còn chạy concurrent calls để chứng minh unique `(plan_id, due_date)` và sequence work-order number.
+
+## Inventory Và Work-Order Parts Workflow
+
+### A. Storekeeper kiểm tra stock
+
+1. Đăng nhập `storekeeper.demo`.
+2. Mở **Kho vật tư**: xem active parts, low/out-of-stock và work orders waiting for parts.
+3. Mở **Tồn theo kho**: chỉ ra ba cột on-hand, reserved và available.
+4. Mở **Biến động kho**: mỗi event có movement number, reference, actor và resulting balance.
+5. Mở **Nhập kho**, ghi một receipt với business reference mới; upload evidence tùy chọn.
+
+**Nói:** Client gửi named command + stable `Idempotency-Key`; backend lock position và append movement. Không có generic balance edit.
+
+### B. Requirement, reservation và issue
+
+1. Chief Engineer mở generated work order, tab **Vật tư cho công việc**.
+2. Xem planned requirement hoặc thêm requirement; quantity stock chưa đổi.
+3. Reserve một phần/toàn phần; on-hand giữ nguyên, available giảm.
+4. Storekeeper mở cùng work order, issue reserved stock cho technician.
+5. Quan sát on-hand giảm và issue/movement xuất hiện; ticket/work-order status không tự đổi.
+
+### C. Technician consumption và return
+
+1. Đăng nhập technician được gán và mở work order.
+2. Trong tab **Xuất dùng**, ghi quantity thực dùng. Consumption không trừ stock lần hai.
+3. Đăng nhập Storekeeper, return phần outstanding chưa dùng.
+4. Nếu còn shortage/unresolved issued stock, completion chỉ hiện warning. Không có hidden issue/consume/release.
+
+### D. Negative checks
+
+- Technician khác không đọc/consume inventory của work order.
+- Helpdesk không adjustment hoặc receipt.
+- Transfer quá available và return quá outstanding bị từ chối, không partial write.
+- Reuse idempotency key với payload khác trả conflict.
 
 ## 0:00–0:45 — Bài Toán Và Architecture
 
@@ -255,7 +345,7 @@ Lần hai phải báo skipped/zero generated cho occurrence đã có. Automated 
 
 ### Role checks trong workflow
 
-1. Đăng nhập `helpdesk.demo`: tạo ticket `UNASSIGNED`; maintenance-result và resolve controls không xuất hiện, direct API attempt trả `403`.
+1. Đăng nhập `helpdesk.demo`: intake và route ticket, nhưng maintenance execution/result và resolve controls không xuất hiện; direct API attempt trả `403`.
 2. Đăng nhập `manager.demo`: assign ticket cho `TECH_002` và chuyển đúng status transition.
 3. Đăng nhập `technician.demo`: chỉ thấy ticket được giao và tạo maintenance log; không có control assign/priority, direct API attempt bị từ chối.
 4. Đăng nhập `admin.demo`: mở `/admin/users` và `/admin/audit`.
@@ -280,7 +370,13 @@ Checklist kiểm tra ắc quy và khởi động máy phát là gì?
 
 **Nói:** Qdrant retrieve chunk liên quan; deterministic composer không tự chẩn đoán. Technician phải xác minh hiện trường và ưu tiên manual/quy trình an toàn.
 
-## 9:00–10:00 — Batch Refresh Có Chủ Đích
+## 9:00–10:30 — Inventory Từ Requirement Đến Usage
+
+**Thao tác:** Mở work order có requirement; chỉ ra reserve, issue, consumption và return là bốn record/action khác nhau. Mở movement timeline và low-stock view.
+
+**Nói:** Reservation giảm available nhưng không giảm on-hand. Issue tạo physical movement; consumption chỉ xác nhận usage; return hoàn outstanding stock. Completion không tự tạo inventory action.
+
+## 10:30–11:30 — Batch Refresh Có Chủ Đích
 
 Không cần chạy trong demo ngắn; giải thích flow:
 
@@ -344,6 +440,8 @@ OpenAPI vẫn có toàn bộ existing endpoints tại `http://localhost:8000/doc
 - Local auth dùng memory access token, rotating HttpOnly refresh session, CSRF binding và immediate revocation checks.
 - PostgreSQL audit append-only ghi cùng transaction với successful ticket/log mutation.
 - Plan, work order, ticket và MaintenanceLog được tách; checklist version được snapshot và generation retry không tạo duplicate.
+- Part, requirement, reservation, issue, consumption, return và movement được tách; server là nguồn quantity authoritative.
+- Inventory dùng row locks, idempotency, immutable history và atomic transfer; không có procurement hoặc accounting.
 - Completion và independent verification là hai action khác nhau; ticket resolution và analytics refresh vẫn explicit.
 - RAG chỉ cung cấp source-grounded guidance; không thay thế technician.
 - Remaining gaps gồm production scheduler/worker, notifications, SSO/MFA, distributed rate limiting, signing-key rotation, backup automation, observability và deployment hardening.
@@ -354,4 +452,4 @@ OpenAPI vẫn có toàn bộ existing endpoints tại `http://localhost:8000/doc
 docker compose stop
 ```
 
-Không xóa PostgreSQL volume nếu muốn giữ plans/work orders/tickets/logs. Canonical reset dùng explicit import `--replace`, không phải routine volume deletion.
+Không xóa PostgreSQL volume nếu muốn giữ plans/work orders/tickets/logs/inventory. Canonical reset dùng explicit import `--replace`, sau đó chạy lại explicit PM4-PM6 seeds; không dùng routine volume deletion.

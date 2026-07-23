@@ -178,6 +178,7 @@ export function AuthTestProvider({
 
 export function defaultRouteFor(user: UserResponse) {
   if (user.permissions.includes(permissions.analyticsRead)) return "/";
+  if (user.permissions.includes(permissions.inventoryRead)) return "/inventory";
   if (user.permissions.includes(permissions.workOrdersRead)) return "/work-orders";
   if (user.permissions.includes(permissions.ticketsRead)) return "/tickets";
   if (user.permissions.includes(permissions.assetsRead)) return "/assets";
@@ -187,6 +188,8 @@ export function defaultRouteFor(user: UserResponse) {
 
 function permissionForPath(pathname: string | null): Permission | null {
   if (!pathname || pathname === "/login" || pathname === "/forbidden") return null;
+  if (pathname.startsWith("/admin/sla")) return permissions.slaPoliciesRead;
+  if (pathname.startsWith("/admin/escalations")) return permissions.escalationsEvaluate;
   if (pathname.startsWith("/admin/users")) return permissions.usersRead;
   if (pathname.startsWith("/admin/audit")) return permissions.auditLogsRead;
   if (pathname.startsWith("/scan/assets")) return permissions.assetsRead;
@@ -195,6 +198,7 @@ function permissionForPath(pathname: string | null): Permission | null {
   if (pathname.startsWith("/maintenance/plans")) return permissions.maintenancePlansRead;
   if (pathname.startsWith("/maintenance/checklists")) return permissions.checklistTemplatesRead;
   if (pathname.startsWith("/work-orders")) return permissions.workOrdersRead;
+  if (pathname.startsWith("/inventory")) return permissions.inventoryRead;
   if (pathname.startsWith("/anomalies") || pathname === "/") {
     return permissions.analyticsRead;
   }

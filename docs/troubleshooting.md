@@ -141,7 +141,7 @@ Chạy lại snapshot và batch theo phần trên. Latest dates của features, 
 
 ## Stale Update Trả 409
 
-PostgreSQL dùng optimistic version cho assets và tickets. Hai write đồng thời có thể làm request sau nhận `409`.
+PostgreSQL dùng optimistic version cho assets, rich tickets, plans, work orders, business calendars, SLA policies, spare parts, stock locations, requirements và reservations. Hai write đồng thời có thể làm request sau nhận `409`.
 
 - reload ticket hoặc asset detail;
 - kiểm tra trạng thái mới nhất;
@@ -199,13 +199,50 @@ QR payload chỉ nên có `/scan/assets/{opaque UUID}`. Nếu thấy credential,
 
 ## Ticket Không Resolve Được
 
-Canonical sequence là:
+Rich PM5 sequence tối thiểu là:
 
 ```text
-Mới tạo -> Đang xử lý -> tạo maintenance log -> Đã xử lý
+open/assigned -> in_progress -> tạo maintenance log -> resolved -> closed
 ```
 
-Ticket phải có linked log trước khi resolve. `resolved_at` phải có timezone, không trước `created_at`, không trước maintenance date và không nằm trong tương lai.
+Ticket phải có linked log trước khi resolve. Dùng named endpoint `/tickets/{id}/resolve`, không gửi status tùy ý. `resolved_at` phải có timezone, không trước `created_at`, không trước maintenance date và không nằm trong tương lai.
+
+Legacy `/tickets` vẫn hiển thị `Mới tạo -> Đang xử lý -> Đã xử lý`; đây là compatibility projection, không phải toàn bộ PM5 lifecycle.
+
+## SLA Deadline Hoặc Status Không Như Mong Đợi
+
+Kiểm tra:
+
+- ticket giữ snapshot policy/calendar tại intake; sửa policy sau đó không đổi ticket cũ;
+- timestamp API là UTC nhưng working periods/holidays tính trong IANA timezone của snapshot;
+- ticket tạo ngoài giờ bắt đầu cộng tại working period tiếp theo;
+- `waiting` chỉ pause khi policy có `pause_on_waiting=true`;
+- resume tính deadline mới từ business minutes còn lại;
+- reopen tăng `occurrence_number` và khởi động resolution clock mới.
+
+Không sửa deadline, `breached` hoặc `due_soon` trực tiếp trong database/client. Nếu calendar/policy update trả `409`, tải version mới nhất rồi review trước khi gửi lại.
+
+## Escalation Dry-Run Có Candidate Nhưng Không Có Notification
+
+Đây là behavior đúng. PM5 chỉ ghi append-only escalation event:
+
+```powershell
+python -m src.ticket_management.cli evaluate-escalations --dry-run
+python -m src.ticket_management.cli evaluate-escalations
+```
+
+Dry-run không write. Execute chạy lại không tạo duplicate cùng ticket/rule/occurrence; rule code đã phân biệt first-response và resolution. Milestone này không có email/SMS, notification worker hoặc startup scheduler.
+
+Nếu execute trả `403`, actor thiếu `escalations:execute`. Nếu không có candidate, kiểm tra `as_of`, ticket active status, priority, reopen count và derived SLA state.
+
+## Reporter PII Hoặc Comment Bị Ẩn
+
+- Reporter contact chỉ hiện với `ticket_pii:read`.
+- Technician/Chief Engineer không có PII read theo default matrix.
+- Storekeeper chỉ thấy requester-visible comments; internal notes bị lọc.
+- Requester-visible comment cần `ticket_comments:requester`.
+
+Không nới response schema hoặc đưa contact vào audit để sửa UI. Kiểm tra `/auth/me`, [RBAC matrix](rbac.md) và ticket ownership.
 
 ## Maintenance Log Bị Từ Chối
 
@@ -363,6 +400,64 @@ Completion tạo đúng một MaintenanceLog. Gửi lại request cũ không đ�
 
 Chỉ nhận PDF/PNG/JPG/JPEG có extension, claimed MIME và signature khớp, dưới configured size. Filename traversal, executable hoặc body rỗng trả `422`. Download yêu cầu permission/resource scope và kiểm tra SHA-256; mismatch trả `503`. Evidence của verified WO không thêm/xóa được. Bytes nằm trong private attachment root, không serve trực tiếp.
 
+## Inventory Trống Sau Canonical Import
+
+Canonical `27/42/86` import cố ý không tạo inventory. Sau khi seed demo users và PM4 work orders, chạy:
+
+```powershell
+python -m src.inventory_management.cli seed-development
+```
+
+Expected current seed: 6 categories, 3 UOM, 5 stock locations, 8 parts và 8 opening positions; eligible work orders nhận selected requirements/reservations. Lệnh yêu cầu PostgreSQL mode, development/test environment, `storekeeper.demo` và `engineer.demo`. Chạy lại không tạo duplicate movement.
+
+## Available Không Bằng On-Hand
+
+Đây thường là reservation active:
+
+```text
+available = on_hand - reserved
+```
+
+Mở `/inventory/reservations` hoặc work-order parts panel để xem allocation. Không sửa `inventory_positions` trực tiếp. Release, expire hoặc replace reservation bằng named action và current `expected_version`.
+
+## Receipt/Transfer/Issue Trả 409
+
+Kiểm tra:
+
+- `Idempotency-Key` đã được dùng với payload khác;
+- part/location vừa inactive hoặc archived;
+- requirement/reservation version stale;
+- work order không ở execution state được phép;
+- transfer source/destination giống nhau;
+- available không đủ sau một transaction concurrent.
+
+Nếu request timeout và chưa rõ đã commit hay chưa, **giữ nguyên key + payload** khi retry. Không tạo key mới cho cùng business intent trước khi kiểm tra movement list.
+
+## Negative Stock Hoặc Oversubscription Bị Từ Chối
+
+Behavior này có chủ đích. Backend lock position và từ chối:
+
+- reserve lớn hơn available;
+- issue lớn hơn available cộng valid reserved allocation;
+- transfer/adjustment làm on-hand âm hoặc thấp hơn reserved;
+- return lớn hơn outstanding issue;
+- consumption lớn hơn outstanding issued quantity.
+
+Request rollback toàn bộ, transfer không để một nửa movement. Reload balance/reservation trước khi quyết định quantity mới.
+
+## Issue, Consumption Và Return Không Khớp
+
+- Issue là physical stock movement và giảm on-hand.
+- Consumption xác nhận quantity đã dùng; không trừ stock lần hai.
+- Return tăng on-hand cho phần outstanding chưa consume/return.
+- Work-order completion không tự quyết toán issued stock.
+
+Nếu completion hiện warning, review shortage và outstanding issue trong work-order parts panel. Warning không phải automatic block trong current policy.
+
+## Inventory Evidence Bị Từ Chối
+
+Inventory evidence hỗ trợ PDF/PNG/JPG/JPEG theo allow-list backend, bounded size, signature/MIME/extension và checksum. Technician chỉ đọc evidence gắn với assigned work order; unlinked adjustment/receipt evidence cần Storekeeper/authorized reader. API không expose local path.
+
 ## Qdrant Không Chạy
 
 Qdrant chỉ ảnh hưởng Copilot retrieval; analytics và transactional workflow không phụ thuộc Qdrant.
@@ -417,9 +512,11 @@ python -m src.database.init_db --reset
 python -m src.ingestion.load_data
 python -m src.security.cli seed-demo-users
 python -m src.maintenance_management.cli seed-development
+python -m src.ticket_management.cli seed-defaults
+python -m src.inventory_management.cli seed-development
 ```
 
-`--reset` và `--replace` là destructive với transactional demo data, gồm plans/templates/work orders/evidence metadata. Backup database và private attachment root trước nếu cần giữ workflow đã nhập. Không dùng Docker volume deletion như routine reset.
+`--reset` và `--replace` là destructive với transactional demo data, gồm ticket/SLA extensions, plans/templates/work orders, inventory và evidence metadata. Backup database và private attachment root trước nếu cần giữ workflow đã nhập. Không dùng Docker volume deletion như routine reset.
 
 ## Warnings Đã Review
 

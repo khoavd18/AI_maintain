@@ -96,8 +96,6 @@ RECURRING_COLUMNS = [
     "unresolved_count",
     "recurrence_flag",
 ]
-
-
 def main() -> None:
     """Render only public status for the legacy Streamlit development client."""
 
@@ -1034,7 +1032,6 @@ def _risk_color(risk_level: str) -> str:
         "Trung bình": "yellow",
         "Thấp": "green",
     }.get(risk_level, "gray")
-
 
 def _maintenance_status_color(maintenance_status: str) -> str:
     return {

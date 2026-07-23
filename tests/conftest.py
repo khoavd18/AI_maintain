@@ -59,13 +59,54 @@ def _truncate_transactional_tables(engine) -> None:
         "work_orders",
         "work_order_checklist_items",
         "work_order_attachments",
+        "ticket_categories",
+        "ticket_subcategories",
+        "ticket_intake_sources",
+        "support_groups",
+        "business_calendars",
+        "business_working_periods",
+        "business_calendar_holidays",
+        "sla_policies",
+        "sla_policy_targets",
+        "ticket_sla_states",
+        "ticket_sla_events",
+        "ticket_comments",
+        "ticket_comment_attachments",
+        "ticket_escalation_events",
+        "part_categories",
+        "units_of_measure",
+        "spare_parts",
+        "stock_locations",
+        "inventory_positions",
+        "part_reorder_configurations",
+        "inventory_operations",
+        "inventory_movements",
+        "work_order_part_requirements",
+        "stock_reservations",
+        "stock_reservation_events",
+        "work_order_part_issues",
+        "work_order_part_consumptions",
+        "work_order_part_returns",
+        "inventory_attachments",
     }
     if not required.issubset(tables):
         return
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE TABLE audit_logs, refresh_sessions, work_order_attachments, "
+                "TRUNCATE TABLE audit_logs, refresh_sessions, ticket_comment_attachments, "
+                "inventory_attachments, work_order_part_returns, "
+                "work_order_part_consumptions, work_order_part_issues, "
+                "stock_reservation_events, stock_reservations, "
+                "work_order_part_requirements, inventory_movements, "
+                "part_reorder_configurations, inventory_positions, "
+                "inventory_operations, spare_parts, stock_locations, "
+                "part_categories, units_of_measure, "
+                "ticket_sla_events, ticket_escalation_events, ticket_comments, "
+                "ticket_sla_states, sla_policy_targets, sla_policies, "
+                "business_calendar_holidays, business_working_periods, "
+                "business_calendars, ticket_subcategories, ticket_categories, "
+                "ticket_intake_sources, support_groups, work_order_attachments, "
                 "work_order_checklist_items, maintenance_logs, work_orders, "
                 "preventive_maintenance_plans, checklist_template_items, "
                 "checklist_templates, asset_attachments, maintenance_tickets, "
@@ -76,3 +117,7 @@ def _truncate_transactional_tables(engine) -> None:
         connection.execute(text("ALTER SEQUENCE maintenance_ticket_id_seq RESTART WITH 1"))
         connection.execute(text("ALTER SEQUENCE maintenance_log_id_seq RESTART WITH 1"))
         connection.execute(text("ALTER SEQUENCE work_order_number_seq RESTART WITH 1"))
+        connection.execute(text("ALTER SEQUENCE inventory_movement_number_seq RESTART WITH 1"))
+        connection.execute(text("ALTER SEQUENCE stock_reservation_number_seq RESTART WITH 1"))
+        connection.execute(text("ALTER SEQUENCE part_issue_number_seq RESTART WITH 1"))
+        connection.execute(text("ALTER SEQUENCE part_return_number_seq RESTART WITH 1"))
