@@ -1,7 +1,7 @@
 """Tests for canonical migrations, PostgreSQL seed import, and analytics export."""
 
 import csv
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -18,10 +18,16 @@ from src.database.models import (
     InventoryAttachment,
     InventoryMovement,
     InventoryPosition,
+    JobExecution,
     Location,
     MaintenanceLog,
+    Notification,
+    NotificationAlertState,
+    OutboxDeliveryAttempt,
+    OutboxEvent,
     PartReorderConfiguration,
     PreventiveMaintenancePlan,
+    ScheduledJob,
     SparePart,
     StockReservation,
     Ticket,
@@ -33,6 +39,7 @@ from src.database.models import (
     TicketComment,
     TicketEscalationEvent,
     TicketSlaState,
+    WorkerHeartbeat,
 )
 from src.database.session import Base, build_engine
 from src.ingestion.load_data import NonEmptyDatabaseError, import_csv_dataset
@@ -85,6 +92,13 @@ def test_canonical_metadata_contains_transactional_and_security_tables() -> None
         "work_order_part_consumptions",
         "work_order_part_returns",
         "inventory_attachments",
+        "scheduled_jobs",
+        "job_executions",
+        "outbox_events",
+        "outbox_delivery_attempts",
+        "notifications",
+        "notification_alert_states",
+        "worker_heartbeats",
     }
     assert "version" in Asset.__table__.columns
     assert "version" in Ticket.__table__.columns
@@ -110,6 +124,13 @@ def test_canonical_metadata_contains_transactional_and_security_tables() -> None
     assert "version" in PartReorderConfiguration.__table__.columns
     assert "occurrence_number" in StockReservation.__table__.columns
     assert "storage_key" in InventoryAttachment.__table__.columns
+    assert "interval_seconds" in ScheduledJob.__table__.columns
+    assert "lease_expires_at" in JobExecution.__table__.columns
+    assert "payload_hash" in OutboxEvent.__table__.columns
+    assert "attempt_number" in OutboxDeliveryAttempt.__table__.columns
+    assert "recipient_user_id" in Notification.__table__.columns
+    assert "cycle_number" in NotificationAlertState.__table__.columns
+    assert "last_seen_at" in WorkerHeartbeat.__table__.columns
 
 
 @pytest.mark.postgres
@@ -170,6 +191,13 @@ def test_clean_migration_upgrade_and_downgrade(postgres_database_url: str) -> No
             "work_order_part_consumptions",
             "work_order_part_returns",
             "inventory_attachments",
+            "scheduled_jobs",
+            "job_executions",
+            "outbox_events",
+            "outbox_delivery_attempts",
+            "notifications",
+            "notification_alert_states",
+            "worker_heartbeats",
         }.issubset(tables)
     finally:
         upgrade_database(postgres_database_url, "head")
@@ -234,12 +262,36 @@ def test_seed_import_is_dry_runnable_idempotent_and_counted(
     )
     assert created.values["ticket_id"] == "TCK-000043"
 
+    now = datetime.now(timezone.utc)
+    with Session(engine) as session, session.begin():
+        job = session.get(ScheduledJob, "sla_escalation")
+        assert job is not None
+        job.enabled = True
+        job.last_successful_run_at = now
+        session.add(
+            WorkerHeartbeat(
+                worker_identity="reset-test-worker",
+                started_at=now,
+                last_seen_at=now,
+                status="ready",
+                current_execution_id=None,
+                metadata_payload={"test": True},
+            )
+        )
+
     replaced = import_csv_dataset(
         database_url=clean_postgres_database,
         replace=True,
     )
     assert replaced.replaced is True
     assert replaced.counts == dry_run.counts
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(WorkerHeartbeat)) == 0
+        job = session.get(ScheduledJob, "sla_escalation")
+        assert job is not None
+        assert job.enabled is False
+        assert job.run_as_user_id is None
+        assert job.last_successful_run_at is None
     engine.dispose()
 
 

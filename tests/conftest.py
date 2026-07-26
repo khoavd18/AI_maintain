@@ -88,13 +88,22 @@ def _truncate_transactional_tables(engine) -> None:
         "work_order_part_consumptions",
         "work_order_part_returns",
         "inventory_attachments",
+        "scheduled_jobs",
+        "job_executions",
+        "outbox_events",
+        "outbox_delivery_attempts",
+        "notifications",
+        "notification_alert_states",
+        "worker_heartbeats",
     }
     if not required.issubset(tables):
         return
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE TABLE audit_logs, refresh_sessions, ticket_comment_attachments, "
+                "TRUNCATE TABLE worker_heartbeats, notifications, "
+                "outbox_delivery_attempts, outbox_events, job_executions, "
+                "audit_logs, refresh_sessions, ticket_comment_attachments, "
                 "inventory_attachments, work_order_part_returns, "
                 "work_order_part_consumptions, work_order_part_issues, "
                 "stock_reservation_events, stock_reservations, "
@@ -121,3 +130,24 @@ def _truncate_transactional_tables(engine) -> None:
         connection.execute(text("ALTER SEQUENCE stock_reservation_number_seq RESTART WITH 1"))
         connection.execute(text("ALTER SEQUENCE part_issue_number_seq RESTART WITH 1"))
         connection.execute(text("ALTER SEQUENCE part_return_number_seq RESTART WITH 1"))
+        connection.execute(
+            text(
+                "INSERT INTO scheduled_jobs ("
+                "job_key, job_type, enabled, interval_seconds, timezone, "
+                "configuration_payload, next_run_at, concurrency_policy, "
+                "max_attempts, retry_backoff_seconds, lease_seconds"
+                ") VALUES "
+                "('preventive_generation', 'preventive_generation', false, 3600, "
+                "'Asia/Ho_Chi_Minh', '{}'::jsonb, now(), 'forbid_overlap', 3, 30, 300), "
+                "('sla_escalation', 'sla_escalation', false, 300, "
+                "'Asia/Ho_Chi_Minh', '{}'::jsonb, now(), 'forbid_overlap', 3, 30, 180), "
+                "('analytics_refresh', 'analytics_refresh', false, 86400, "
+                "'Asia/Ho_Chi_Minh', '{}'::jsonb, now(), 'forbid_overlap', 2, 120, 3600), "
+                "('inventory_reorder_detection', 'inventory_reorder_detection', false, "
+                "900, 'Asia/Ho_Chi_Minh', '{}'::jsonb, now(), 'forbid_overlap', 3, 30, 180) "
+                "ON CONFLICT (job_key) DO UPDATE SET enabled = false, "
+                "run_as_user_id = NULL, last_successful_run_at = NULL, "
+                "next_run_at = now(), configuration_payload = '{}'::jsonb, "
+                "updated_at = now(), version = 1"
+            )
+        )

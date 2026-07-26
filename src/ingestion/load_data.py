@@ -12,7 +12,7 @@ from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import pandas as pd
-from sqlalchemy import delete, func, inspect, select, text
+from sqlalchemy import delete, func, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -37,11 +37,17 @@ from src.database.models import (
     InventoryMovement,
     InventoryOperation,
     InventoryPosition,
+    JobExecution,
     Location,
     MaintenanceLog,
+    Notification,
+    NotificationAlertState,
+    OutboxDeliveryAttempt,
+    OutboxEvent,
     PartCategory,
     PartReorderConfiguration,
     PreventiveMaintenancePlan,
+    ScheduledJob,
     SparePart,
     StockLocation,
     StockReservation,
@@ -55,6 +61,7 @@ from src.database.models import (
     WorkOrderPartIssue,
     WorkOrderPartRequirement,
     WorkOrderPartReturn,
+    WorkerHeartbeat,
     TicketComment,
     TicketCommentAttachment,
     TicketEscalationEvent,
@@ -92,6 +99,13 @@ EXPECTED_TABLES = {
     "work_order_part_consumptions",
     "work_order_part_returns",
     "inventory_attachments",
+    "scheduled_jobs",
+    "job_executions",
+    "outbox_events",
+    "outbox_delivery_attempts",
+    "notifications",
+    "notification_alert_states",
+    "worker_heartbeats",
 }
 ID_PATTERN = re.compile(r"^[A-Z]+-(\d+)$")
 
@@ -162,6 +176,23 @@ def import_csv_dataset(
                 records["assets"] = _asset_records(frames["assets"], persisted_location_ids)
                 if replace:
                     session.execute(text("SET LOCAL app.demo_reset = 'on'"))
+                    session.execute(delete(WorkerHeartbeat))
+                    session.execute(delete(Notification))
+                    session.execute(delete(OutboxDeliveryAttempt))
+                    session.execute(delete(OutboxEvent))
+                    session.execute(delete(JobExecution))
+                    session.execute(delete(NotificationAlertState))
+                    now = datetime.now(timezone.utc)
+                    session.execute(
+                        update(ScheduledJob).values(
+                            enabled=False,
+                            run_as_user_id=None,
+                            next_run_at=now,
+                            last_successful_run_at=None,
+                            updated_at=now,
+                            version=ScheduledJob.version + 1,
+                        )
+                    )
                     session.execute(delete(InventoryAttachment))
                     session.execute(delete(WorkOrderPartReturn))
                     session.execute(delete(WorkOrderPartConsumption))

@@ -91,7 +91,7 @@ REQUIRED_TABLES = {
     "inventory_attachments",
     "alembic_version",
 }
-CANONICAL_SCHEMA_REVISION = "20260723_0006"
+CANONICAL_SCHEMA_REVISION = "20260726_0007"
 TICKET_SEQUENCE = "maintenance_ticket_id_seq"
 LOG_SEQUENCE = "maintenance_log_id_seq"
 
