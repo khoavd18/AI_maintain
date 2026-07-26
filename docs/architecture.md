@@ -216,7 +216,9 @@ FastAPI kiểm tra permission trước khi vào service; service tiếp tục ki
 - Mục tiêu là local/internal pilot với user nội bộ, không phải internet-facing identity platform. Hệ thống bảo vệ trước credential guessing cơ bản, stolen database token plaintext, CSRF trên cookie actions, stale/revoked session và client-side privilege hiding bị bypass.
 - Mọi môi trường ngoài local phải dùng HTTPS, `Secure=true`, signing secret ngẫu nhiên ít nhất 32 ký tự và secret injection ngoài Git.
 - Login limiter hiện in-process theo identifier, không chia sẻ giữa nhiều API instances và không thay thế gateway/WAF throttling.
-- HS256 chưa có key rotation/JWKS; chưa có SSO, MFA, recovery flow, email verification hoặc centralized session administration.
+- HS256 hỗ trợ đúng một previous key trong bounded rotation grace period, nhưng
+  chưa chạy real pilot rotation và chưa có managed key store/JWKS, SSO, MFA,
+  recovery flow, email verification hoặc centralized session administration.
 - Audit table append-only qua application và PostgreSQL trigger, nhưng database administrator vẫn là trust boundary; chưa có external tamper-evident sink hoặc retention policy.
 - Không lưu IP address vì chưa cần cho single-building demo và để giảm dữ liệu cá nhân. User agent được giữ có giới hạn để hỗ trợ điều tra session.
 
@@ -507,14 +509,23 @@ Không có automatic fallback. `STORAGE_BACKEND=postgresql` cùng database unava
 
 ## Remaining Gaps
 
-- Local authentication/RBAC/audit phù hợp internal pilot nhưng chưa có SSO, MFA, recovery, signing-key rotation, external audit sink hoặc multi-tenancy.
+- Local authentication/RBAC/audit phù hợp internal pilot và hỗ trợ một previous
+  signing key trong cửa sổ rotation, nhưng chưa có SSO, MFA, account recovery,
+  external audit sink hoặc multi-tenancy.
 - Basic login limiter chỉ nằm trong một API process; chưa có distributed throttling hoặc lockout operations workflow.
-- Worker hiện là PostgreSQL polling process cho internal pilot; chưa có high availability, autoscaling, load test, queue partitioning hoặc distributed operations rehearsal.
+- Worker hiện là PostgreSQL polling process cho internal pilot; PM8 chỉ chạy
+  bounded local load/recovery drill, chưa có high availability, autoscaling,
+  extended soak/capacity-to-failure, queue partitioning hoặc distributed
+  operations rehearsal.
 - Notification chỉ có in-app inbox; chưa có external delivery, user preference, digest hoặc delivery acknowledgement.
 - Health/metrics là safe operational JSON và structured logs cục bộ; chưa có centralized metrics/log aggregation, alert routing hoặc on-call integration.
-- Chưa có production backup automation, point-in-time recovery rehearsal, failover hoặc connection-pool tuning theo tải thật.
+- PM8 có isolated backup/restore drill nhưng chưa có production backup
+  automation, point-in-time recovery rehearsal, failover hoặc connection-pool
+  tuning theo tải representative của pilot host.
 - CSV analytics snapshot replacement chưa phải distributed transaction với PostgreSQL.
-- Local attachment storage chỉ phù hợp một API node; chưa có S3-compatible implementation, malware scanner, object lifecycle/backup hoặc reconciler cho cleanup pending.
+- Local attachment storage chỉ phù hợp một API node; PM8 chỉ thêm read-only
+  integrity assessment, chưa có S3-compatible implementation, malware scanner,
+  coordinated lifecycle/backup hoặc cleanup reconciler.
 - QR lookup đã authenticated nhưng chưa có camera/browser compatibility matrix, label fleet management hoặc offline scan.
 - Optimistic conflict hiện trả HTTP `409`; UI chưa có merge workflow phức tạp.
 - Ticket reporter PII chưa có field-level encryption hoặc retention/data-subject workflow.
@@ -525,3 +536,20 @@ Không có automatic fallback. `STORAGE_BACKEND=postgresql` cùng database unava
 ## Human-In-The-Loop Boundary
 
 Risk Score là tín hiệu prioritization, không phải calibrated failure probability. Manager quyết định ưu tiên, lịch và phân công; Storekeeper chịu trách nhiệm kiểm đếm và stock action; technician xác nhận hiện trường, usage và maintenance result; authorized reviewer xác minh độc lập. PM7 worker chỉ gọi bốn existing deterministic operations và tạo in-app records; nó không tự mua hàng, tự issue/consume stock, tự phê duyệt/resolve ticket, điều khiển thiết bị hoặc dự đoán chính xác thời điểm hỏng.
+
+## PM8 Reliability Validation Boundary
+
+PM8 không đổi system map hoặc thêm background architecture. Revision
+`20260726_0008` chỉ thêm append-only outbox redrive intent, append-only
+backup/restore evidence, redrive cycle number và closed operational alert types.
+Alert evaluation chạy qua protected explicit API/CLI, không phải scheduler/job
+thứ năm; notification vẫn dùng existing outbox/RBAC/owner isolation.
+
+Pool capacity giữ giá trị SQLAlchemy trước PM8 nhưng trở thành explicit config.
+Statement/lock/idle-transaction bounds làm failure hữu hạn; chúng không chứng
+minh capacity. API telemetry là bounded process-local aggregates, durable
+operational state vẫn ở PostgreSQL.
+
+Backup CLI dùng supported PostgreSQL tools và restore vào database `_restore`
+riêng. Attachment bytes vẫn cần backup/integrity step riêng. Xem
+[reliability validation](reliability_validation.md).

@@ -84,7 +84,8 @@ PM7 không thay đổi attachment hoặc RAG boundary:
 
 ## Secrets
 
-- `.env` bị gitignore; `.env.example` chỉ có non-secret local Docker defaults.
+- `.env` bị gitignore; `.env.example` chỉ có non-secret replacement
+  placeholders và bounded local defaults.
 - `TOKEN_SIGNING_SECRET` để rỗng trong example và phải được inject cho pilot.
 - Không commit database dump, runtime log, attachment byte hoặc generated token.
 - Health/metrics không trả `DATABASE_URL`.
@@ -92,11 +93,35 @@ PM7 không thay đổi attachment hoặc RAG boundary:
 ## Residual Risks
 
 - Local authentication chưa có SSO, MFA, account recovery hoặc external IdP.
-- Signing-key rotation và managed secret store chưa được triển khai.
+- Một-previous-key verification đã triển khai, nhưng real pilot rotation chưa
+  chạy và chưa có managed secret store/JWKS.
 - Attachment storage là single-node và chưa có malware scanner/object store.
-- Worker chưa có HA/load test; stale heartbeat cần operator quan sát.
+- Worker chưa có HA; bounded local baseline/stress đã chạy nhưng soak,
+  mutation-bearing load, capacity-to-failure và pilot-host validation chưa chạy.
 - Metrics/logs chưa có centralized collector hoặc alert routing.
 - Không có field-level encryption/retention workflow cho reporter PII.
 - Không có external notification delivery hoặc recipient acknowledgement.
 - Database/host administrator vẫn có quyền cao và cần organizational controls,
   backup, access review và log retention bên ngoài repository.
+
+## PM8 Secret Và Reliability Hardening
+
+- Pilot/production fail startup nếu database URL thiếu host/database/user/password,
+  còn dùng `maintenance:maintenance` hoặc giữ literal `replace_with_*`
+  placeholders.
+- Token mới luôn ký bằng current key. Một `TOKEN_SIGNING_PREVIOUS_SECRET` khác
+  current chỉ verify trong bounded rotation grace period.
+- Refresh/CSRF vẫn random per session và chỉ lưu hash; không thêm shared secret.
+- Backup tool nhận password qua environment, không đặt trong generated
+  command/manifest.
+- Metrics/alerts chỉ có aggregate count, age, threshold và closed code; không có
+  credential, payload, stack trace hoặc attachment path.
+- Structured JSON log dùng ASCII-safe Unicode escapes để redirected Windows
+  output không rơi vào logging traceback có local path.
+- Outbox redrive cần Administrator, stable key, row lock, append-only intent và
+  same-transaction audit; API không deliver inline.
+- Attachment integrity report chỉ có counts; PM8 không expose path hoặc thêm
+  malware scanner.
+
+Xem [secret rotation](secret_rotation.md). Đây vẫn là environment-provided secret
+model, không phải managed secrets platform.

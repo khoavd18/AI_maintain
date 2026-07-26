@@ -85,6 +85,8 @@ boundary. Chi tiết request/response tại [API contract](api_contract.md).
 
 ## Giới Hạn
 
-PM7 chưa có notification preference, digest, acknowledgement, retention policy,
-external delivery, delivery receipt hoặc distributed push. Operator phải dựa
-vào job/outbox metrics và runbook để theo dõi backlog.
+Chưa có notification preference, digest, acknowledgement, retention policy,
+external delivery, delivery receipt hoặc distributed push. PM8 thêm closed
+operational raised/recovered notification cho Administrator sau explicit
+evaluation; background catalog không đổi. Operator vẫn phải dựa vào health,
+metrics, runbook và incident contact path khi worker hoặc PostgreSQL unavailable.

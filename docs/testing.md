@@ -15,7 +15,7 @@
 ```powershell
 docker compose up -d postgres
 python -m src.database.create_test_database
-$env:TEST_DATABASE_URL = "postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot_test"
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<test_user>:<test_password>@localhost:5432/<database_name>_test"
 ```
 
 `.env` có thể giữ `TEST_DATABASE_URL`; `tests/conftest.py` từ chối tên database
@@ -142,3 +142,43 @@ Sau verification:
 
 Chỉ ghi kết quả `passed` trong release note khi command thực sự đã chạy ở current
 revision.
+
+## PM8 Focused Tests
+
+```powershell
+python -m pytest `
+  tests/test_reliability_validation.py `
+  tests/test_postgres_reliability.py `
+  tests/test_database_load.py `
+  tests/test_storage_configuration.py `
+  tests/test_background_operations.py `
+  tests/test_postgres_background_operations.py
+```
+
+PostgreSQL suite chạy tuần tự trên database `_test`; không dùng SQLite cho
+pool/lock/lease/outbox behavior.
+
+```powershell
+$env:PM8_TEST_PASSWORD = "<isolated-test-user-password>"
+python -m src.reliability.load_harness `
+  --profile baseline --username admin.test `
+  --output-dir "$env:TEMP\pm8-reliability"
+```
+
+Soak/mutation/destructive drill cần lần lượt
+`PM8_ALLOW_EXTENDED_TESTS=true`, `PM8_ALLOW_MUTATIONS=true` và
+`PM8_ALLOW_DESTRUCTIVE_TESTS=true`.
+
+Migration PM8:
+
+```powershell
+python -m alembic downgrade base
+python -m alembic upgrade head
+python -m alembic downgrade 20260726_0007
+python -m alembic upgrade 20260726_0008
+python -m alembic current
+python -m alembic check
+```
+
+Raw report/dump/log/restore DB phải cleanup. Xem [backup](backup_restore.md),
+[recovery](failure_recovery.md) và [checklist](internal_pilot_checklist.md).

@@ -154,3 +154,18 @@ Outbox response cố ý không có payload/hash/idempotency key. Metrics gồm:
 
 API không trả raw worker exception hoặc stack trace. OpenAPI chỉ bật trong
 development/test theo existing settings.
+
+## PM8 Reliability Actions
+
+PM8 thêm additive Administrator endpoints:
+
+```text
+POST /operations/outbox/{event_id}/retry
+POST /operations/alerts/evaluate
+```
+
+Outbox retry yêu cầu `Idempotency-Key`, chỉ nhận dead-letter event và persist
+bounded redrive intent/audit; worker hiện có mới deliver. Alert evaluation dùng
+closed thresholds và tạo raised/recovered outbox event, không thêm scheduler/job.
+`GET /operations/metrics` thêm safe pool/API/lease/alert/backup aggregates; fields
+PM7 giữ nguyên.

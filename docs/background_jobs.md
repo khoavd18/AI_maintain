@@ -82,8 +82,9 @@ path, credential và raw payload không được lưu hoặc trả qua operator 
 Outbox dùng policy riêng: tối đa 5 attempts, base backoff 30 giây. Mỗi attempt
 thành công/thất bại tạo một append-only `outbox_delivery_attempts` row. Trigger
 PostgreSQL chặn update/delete lịch sử. Operator không retry outbox bằng cách sửa
-row; phải khắc phục nguyên nhân rồi để worker claim lại eligible event. Event
-hết attempts giữ `dead_lettered` để điều tra.
+row. PM8 thêm explicit Administrator redrive với caller-stable idempotency key,
+row lock, append-only request/audit và một bounded attempt cycle mới. Event hết
+attempts vẫn giữ `dead_lettered`; không có automatic infinite replay.
 
 Retry job qua API/CLI tạo execution mới liên kết bằng safe metadata; execution
 dead-letter cũ không bị viết lại.
@@ -182,3 +183,6 @@ Operator commands và recovery procedure nằm tại
 - Không có production backup automation, centralized alerting hoặc on-call
   integration.
 - Worker không thay thế quyết định của manager, technician hoặc Storekeeper.
+
+PM8 không thêm job thứ năm. Operational alert evaluation và outbox redrive là
+protected action explicit; worker vẫn chỉ thực thi closed four-job catalog.

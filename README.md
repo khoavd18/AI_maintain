@@ -2,7 +2,7 @@
 
 Nền tảng decision-support cho bảo trì thiết bị, kết hợp auditable asset lifecycle, ticket/SLA, preventive planning, standalone work orders, spare-parts stock control, Vietnamese batch analytics, explainable risk scoring và RAG retrieval trên SOP/checklist.
 
-> Trạng thái: nền tảng internal-pilot với PostgreSQL transactions, durable background worker và in-app operations. Repository chưa production-ready và không thay thế CMMS/S-Maintain.
+> Trạng thái: nền tảng internal-pilot với PostgreSQL transactions, durable background worker, in-app operations và PM8 reliability validation tooling. Repository chưa production-ready và không thay thế CMMS/S-Maintain.
 
 ## Bài Toán
 
@@ -252,7 +252,11 @@ Sau lần generate mặc định đã verify, outputs gồm 27 preventive rows, 
 
 Normal product mode yêu cầu đăng nhập. `POST /auth/login` trả access token ngắn hạn để Next.js giữ **trong memory**; refresh token ngẫu nhiên chỉ nằm trong `HttpOnly` cookie và được lưu ở PostgreSQL dưới dạng SHA-256 hash. Refresh rotation thu hồi session cũ, logout thu hồi active session, còn đổi mật khẩu hoặc vô hiệu hóa tài khoản thu hồi toàn bộ refresh sessions. Frontend không lưu token trong `localStorage`.
 
-FastAPI kiểm tra permission ở server cho mọi route ngoại trừ `GET /health`. UI chỉ ẩn action không phù hợp để cải thiện trải nghiệm; đây không phải authorization boundary. Role và permission canonical nằm tại `src/security/permissions.py`, còn frontend nhận permission từ API thay vì duy trì một role matrix riêng.
+FastAPI kiểm tra permission ở server cho mọi route ngoại trừ bốn health route
+`GET /health`, `/health/live`, `/health/ready` và `/health/worker`. UI chỉ ẩn
+action không phù hợp để cải thiện trải nghiệm; đây không phải authorization
+boundary. Role và permission canonical nằm tại `src/security/permissions.py`,
+còn frontend nhận permission từ API thay vì duy trì một role matrix riêng.
 
 | Role | Quyền chính trong milestone này |
 |---|---|
@@ -573,6 +577,7 @@ Các biến hữu ích:
 | `CORS_ALLOWED_ORIGINS` | hai local Next.js origins | Explicit browser origins với credentials |
 | `TRUSTED_HOSTS` | local host names | Host header allow-list |
 | `TOKEN_SIGNING_SECRET` | rỗng ở local | Ephemeral ở dev/test; bắt buộc secret >=32 ký tự ở pilot/production |
+| `TOKEN_SIGNING_PREVIOUS_SECRET` | rỗng | Chỉ dùng tạm để verify access token trong signing-key rotation |
 | `ACCESS_TOKEN_LIFETIME_MINUTES` | `15` | JWT access lifetime |
 | `REFRESH_SESSION_LIFETIME_DAYS` | `7` | Revocable refresh-session lifetime |
 | `AUTH_COOKIE_SECURE` | `false` ở local | Bắt buộc `true` ngoài dev/test và cần HTTPS |
@@ -581,6 +586,11 @@ Các biến hữu ích:
 | `STORAGE_BACKEND` | `postgresql` | Normal runtime; `csv` chỉ explicit fixture mode |
 | `DATABASE_URL` | local PostgreSQL URL | Transactional source of truth |
 | `DATABASE_CONNECT_TIMEOUT_SECONDS` | `5` | Startup connection timeout |
+| `DATABASE_POOL_SIZE` / `DATABASE_MAX_OVERFLOW` | `5` / `10` | Explicit single-process pool capacity; không phải production sizing |
+| `DATABASE_POOL_TIMEOUT_SECONDS` | `30` | Bounded pool checkout wait |
+| `DATABASE_STATEMENT_TIMEOUT_SECONDS` | `30` | PostgreSQL statement safety bound |
+| `DATABASE_LOCK_TIMEOUT_SECONDS` | `5` | PostgreSQL lock wait safety bound |
+| `DATABASE_IDLE_TRANSACTION_TIMEOUT_SECONDS` | `60` | Idle transaction safety bound |
 | `TEST_DATABASE_URL` | local database kết thúc `_test` | Isolated integration tests |
 | `ATTACHMENT_STORAGE_BACKEND` | `local` | Storage abstraction; chỉ local implementation trong milestone này |
 | `ATTACHMENT_STORAGE_ROOT` | `data/attachments` | Private local file root, không được serve trực tiếp |
@@ -592,6 +602,10 @@ Các biến hữu ích:
 | `WORKER_HEARTBEAT_STALE_SECONDS` | `60` | Ngưỡng worker readiness |
 | `WORKER_OUTBOX_LEASE_SECONDS` | `120` | Lease cho claimed outbox event |
 | `WORKER_BATCH_SIZE` | `20` | Bounded schedule/outbox batch |
+| `OPERATIONAL_OUTBOX_AGE_ALERT_SECONDS` | `300` | Backlog age threshold |
+| `OPERATIONAL_REPEATED_JOB_FAILURE_THRESHOLD` | `3` | Consecutive failure threshold |
+| `OPERATIONAL_ANALYTICS_STALE_SECONDS` | `172800` | Enabled analytics staleness threshold |
+| `OPERATIONAL_BACKUP_OVERDUE_SECONDS` | `604800` | Restore-validated backup age threshold |
 | `ANALYTICS_SOURCE_DIR` | `data/raw` | Sensor/document source cho snapshot job |
 | `ANALYTICS_PROCESSED_DIR` | `data/processed` | Atomically published batch outputs |
 | `QDRANT_URL` | `http://localhost:6333` | RAG indexing/retrieval |
@@ -599,7 +613,9 @@ Các biến hữu ích:
 | `QDRANT_COLLECTION` | `maintenance_knowledge` | Qdrant collection |
 | `EMBEDDING_MODEL_NAME` | `intfloat/multilingual-e5-small` | Local embeddings |
 
-Các PostgreSQL credentials trong `.env.example` chỉ là local Docker defaults, không phải production secrets. `TOKEN_SIGNING_SECRET` cố ý để rỗng; không được dùng ephemeral dev secret cho pilot. File `.env` được gitignore.
+Các PostgreSQL values trong `.env.example` là replacement placeholders, không
+phải local hay production credentials. `TOKEN_SIGNING_SECRET` cố ý để rỗng;
+không được dùng ephemeral dev secret cho pilot. File `.env` được gitignore.
 
 Linux/macOS:
 
@@ -736,7 +752,19 @@ Stop worker/API/frontend bằng `Ctrl+C`, sau đó:
 docker compose stop
 ```
 
-Equivalent Make targets: `services-up`, `postgres-up`, `migrate-db`, `generate-data`, `validate-data`, `load-data`, `replace-data`, `seed-maintenance`, `seed-inventory`, `generation-dry-run`, `generate-work-orders`, `seed-ticketing`, `escalation-dry-run`, `evaluate-escalations`, `export-analytics-snapshot`, `build-features`, `detect-anomalies`, `score-risk`, `build-preventive`, `build-recurring`, `build-kpis`, `index-documents`, `bootstrap-admin`, `seed-demo-users`, `run-api`, `run-dashboard`, `run-frontend`, `run-worker`, `worker-once`, `run-job`, `set-job-enabled`, `retry-job`, `job-status`, `worker-docker-up`, `worker-docker-down`, `create-test-db`, `test`, `test-postgres`, `lint`, `frontend-lint`, `frontend-test` và `frontend-build`.
+Equivalent Make targets: `services-up`, `postgres-up`, `migrate-db`,
+`generate-data`, `validate-data`, `load-data`, `replace-data`,
+`seed-maintenance`, `seed-inventory`, `generation-dry-run`,
+`generate-work-orders`, `seed-ticketing`, `escalation-dry-run`,
+`evaluate-escalations`, `export-analytics-snapshot`, `build-features`,
+`detect-anomalies`, `score-risk`, `build-preventive`, `build-recurring`,
+`build-kpis`, `index-documents`, `bootstrap-admin`, `seed-demo-users`,
+`run-api`, `run-dashboard`, `run-frontend`, `run-worker`, `worker-once`,
+`run-job`, `set-job-enabled`, `retry-job`, `retry-outbox`,
+`evaluate-operational-alerts`, `job-status`, `reliability-load`,
+`backup-restore-drill`, `attachment-integrity`, `worker-docker-up`,
+`worker-docker-down`, `create-test-db`, `test`, `test-postgres`, `lint`,
+`frontend-lint`, `frontend-test` và `frontend-build`.
 
 Demo 10–12 phút: [docs/demo_script.md](docs/demo_script.md).
 
@@ -764,13 +792,18 @@ Explicit canonical reset sau khi đã backup dữ liệu cần giữ:
 python -m src.ingestion.load_data --replace
 ```
 
-`--replace` xóa PM4-PM7 development runtime data theo dependency order, gồm plans/templates/work orders, ticket/SLA extensions, inventory, outbox/execution/notification/heartbeat history và evidence metadata; fixed PM7 job catalog được trả về disabled trước khi khôi phục canonical `27/42/86`. Private attachment backup/cleanup vẫn là trách nhiệm operator. Chạy lại các explicit seed commands sau reset nếu cần product demo data.
+`--replace` xóa PM4–PM8 development runtime data theo dependency order, gồm
+plans/templates/work orders, ticket/SLA extensions, inventory,
+outbox/redrive/execution/notification/heartbeat history và reliability evidence;
+fixed PM7 job catalog được trả về disabled trước khi khôi phục canonical
+`27/42/86`. Private attachment backup/cleanup vẫn là trách nhiệm operator. Chạy
+lại các explicit seed commands sau reset nếu cần product demo data.
 
 Dedicated test database:
 
 ```powershell
 python -m src.database.create_test_database
-$env:TEST_DATABASE_URL = "postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot_test"
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<test_user>:<test_password>@localhost:5432/<database_name>_test"
 python -m pytest -m postgres
 ```
 
@@ -801,12 +834,28 @@ Lần verify Product Milestone 6 ngày 2026-07-23: isolated PostgreSQL downgrade
 
 Lần verify Product Milestone 7 ngày 2026-07-26: isolated PostgreSQL clean base-to-head và PM7 downgrade/re-upgrade đạt revision `20260726_0007`; `alembic check` không có model drift. PM7 focused đạt `6` pure tests và `8` PostgreSQL integration tests; targeted PM4-PM6/auth regressions đạt `73 passed`; full backend đạt `238 passed`. Frontend PM7 đạt `6 passed`, full frontend đạt `112 passed` trên 17 files; Ruff, ESLint, Next.js production build 32 pages, Markdown link check, secret/unsafe-path scan và `git diff --check` đều đạt. Docker worker trở thành healthy, one-iteration worker kết thúc với heartbeat `stopping`, manual SLA trigger replay dùng cùng execution, outbox tạo ba role-based notifications, owner actions hoạt động và `/notifications` cùng `/admin/jobs` trả `200`. Analytics publish ở temporary path và canonical outputs không đổi. PostgreSQL restart giữ revision, 27 assets, 44 tickets, 87 logs và bốn fixed jobs; verification execution/outbox/notification/heartbeat records được cleanup về 0. Đây là local internal-pilot operational verification, không phải production, security, availability, SLA-performance hoặc business-impact certification.
 
+Checkpoint Product Milestone 8 ngày 2026-07-26: isolated PostgreSQL clean
+base-to-head, populated PM8 downgrade/re-upgrade và `alembic check` đạt revision
+`20260726_0008`; full backend đạt `257 passed`, full frontend đạt `112 passed`
+trên 17 files; Ruff, ESLint và Next.js production build 32 pages đạt. Bounded
+baseline 4 req/s và stress 12 req/s không có unexpected failure hoặc outbox
+backlog; stress chỉ là điểm cao nhất đã test, không phải capacity limit.
+API/worker reconnect, protected redrive, alert raise/recovery, isolated
+backup/restore và restored health smoke đạt trên disposable `_test` stack.
+Kết luận vẫn là `NO-GO / NOT YET VERIFIED` do owner/contact/acceptance, real
+pilot secrets, soak/capacity, representative attachment restore và intended
+pilot-host rehearsal còn mở. PM9 chưa bắt đầu. Xem
+[PM8 release note](docs/releases/product_milestone_8.md).
+
 ## Limitations
 
 - Synthetic data chưa được kiểm chứng bằng maintenance history thực tế.
 - Analytics thresholds và risk weights là transparent demo heuristics, chưa được hiệu chuẩn trên dữ liệu thực tế.
 - Synthetic chronology chỉ mô phỏng quy trình đơn giản và chưa được đối chiếu với quy tắc lịch bảo trì thực tế của một cơ sở cụ thể.
-- API phục vụ PostgreSQL transactions cùng processed CSV analytics; PM7 worker chỉ là internal-pilot PostgreSQL polling process, chưa có HA, capacity/load test hoặc production cache invalidation strategy.
+- API phục vụ PostgreSQL transactions cùng processed CSV analytics; PM7 worker
+  chỉ là internal-pilot PostgreSQL polling process. PM8 đã chạy bounded local
+  baseline/stress, nhưng chưa có HA, soak, capacity-to-failure, pilot-host
+  rehearsal hoặc production cache invalidation strategy.
 - Closed scheduler chỉ hỗ trợ bốn existing operations; chưa có distributed queue partitioning, autoscaling hoặc production missed-run/on-call operations.
 - Notification chỉ nằm trong in-app inbox; chưa có email/SMS/push, user preferences, acknowledgement hoặc external delivery monitoring.
 - Health/metrics và structured logs chưa có centralized collection, alert routing hoặc production observability platform.
@@ -819,7 +868,9 @@ Lần verify Product Milestone 7 ngày 2026-07-26: isolated PostgreSQL clean bas
 - Sáu SOP/checklist là synthetic/illustrative và không thay thế tài liệu nhà sản xuất.
 - Deterministic composer là extractive decision support, không phải diagnosis hoặc generative reasoning.
 - Next.js là authenticated internal-pilot workflow, chưa có production caching, accessibility audit hoặc browser-level regression suite; Streamlit chỉ còn legacy status client.
-- PostgreSQL workflow có transactions, foreign keys, sequences, optimistic conflict detection và append-only audit events nhưng chưa có load test hoặc production operations hardening.
+- PostgreSQL workflow có transactions, foreign keys, sequences, optimistic
+  conflict detection, append-only audit và bounded local load/recovery
+  hardening; chưa có production operations validation.
 - Attachment bytes dùng atomic local storage cho single-node pilot; chưa có S3-compatible implementation, malware scanning, object versioning hoặc distributed transaction giữa file store và PostgreSQL.
 - QR là lookup identifier có xác thực, không phải access-control credential; chưa có fleet label operations, camera-scanner test matrix hoặc offline workflow.
 - Ticket/log mới không làm risk hoặc KPI đổi ngay; cần chạy lại canonical batch pipeline.
@@ -828,7 +879,10 @@ Lần verify Product Milestone 7 ngày 2026-07-26: isolated PostgreSQL clean bas
 - Low-stock suggestions chỉ là deterministic threshold view; không phải demand forecast, inventory optimization hay automatic replenishment.
 - Local inventory evidence có cùng single-node storage limitation như asset/work-order attachment; chưa có malware scanning hoặc object-store reconciliation.
 - Reporter PII có RBAC redaction nhưng chưa có field-level encryption, retention policy hoặc data-subject workflow.
-- Local auth chưa có SSO, MFA, account recovery, distributed login throttling, key rotation, centralized observability hoặc external security review.
+- Local auth hỗ trợ một previous signing key trong bounded rotation grace period,
+  nhưng chưa chạy real pilot rotation và chưa có SSO, MFA, account recovery,
+  distributed login throttling, managed secret/JWKS, centralized observability
+  hoặc external security review.
 - Refresh cookie cần HTTPS và `Secure=true` ngoài local; `.env.example` chỉ là development configuration.
 
 ## Earlier MVP Cleanup
@@ -848,6 +902,7 @@ src/ticket_management/ Ticket lifecycle, priority, SLA, queues, communication v�
 src/maintenance_management/ Preventive recurrence, work-order state machine, routes và CLI
 src/inventory_management/ Spare-part master, stock-control service, routes và seed CLI
 src/operations/       Closed jobs/events, worker, notification/operator API và CLI
+src/reliability/      Bounded load, backup/restore và attachment assessment tooling
 src/features/         Canonical daily feature pipeline
 src/models/           Canonical anomaly pipeline
 src/risk/             Canonical risk pipeline
@@ -879,6 +934,13 @@ docs/                 Scope, architecture, process, contracts và demo docs
 - [Operations runbook](docs/operations_runbook.md)
 - [Security boundary](docs/security.md)
 - [Testing guide](docs/testing.md)
+- [PM8 reliability validation](docs/reliability_validation.md)
+- [PM8 load test plan](docs/load_test_plan.md)
+- [Backup and restore drill](docs/backup_restore.md)
+- [Failure recovery drills](docs/failure_recovery.md)
+- [Secret rotation](docs/secret_rotation.md)
+- [Internal-pilot go/no-go checklist](docs/internal_pilot_checklist.md)
+- [Product Milestone 8 release](docs/releases/product_milestone_8.md)
 - [Demo script](docs/demo_script.md)
 - [Interview notes](docs/interview_notes.md)
 - [Troubleshooting](docs/troubleshooting.md)

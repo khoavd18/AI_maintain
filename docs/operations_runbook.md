@@ -114,8 +114,8 @@ giữ 366-day catch-up bound và paused-backlog policy.
 - API cố ý không trả payload.
 - Xác minh event type có trong closed catalog và active recipient data hợp lệ.
 - Không update/delete outbox hoặc append-only attempt history.
-- PM7 chưa có generic operator redrive endpoint cho outbox dead letter; cần điều
-  tra database/service và thực hiện correction có kiểm soát trong milestone sau.
+- Sau khi sửa nguyên nhân, Administrator dùng PM8 audited redrive với stable
+  idempotency key; API/CLI chỉ ghi intent, existing worker mới deliver.
 
 ## Analytics Failure
 
@@ -134,42 +134,47 @@ Không copy partial staging files vào output.
 
 ## Backup Và Restore
 
-Trước migration, enable job hoặc demo reset:
+Trước migration, enable job hoặc demo reset, tạo và restore-validate backup vào
+database riêng. Output bắt buộc ngoài repository:
 
 ```powershell
-docker compose exec postgres pg_dump `
-  -U maintenance -d maintenance_copilot -Fc `
-  -f /tmp/maintenance_copilot.dump
-docker cp maintenance_postgres:/tmp/maintenance_copilot.dump `
-  .\maintenance_copilot.dump
+$backupDir = Join-Path $env:TEMP "maintenance-pm8-backup"
+$env:PM8_ALLOW_DESTRUCTIVE_TESTS = "true"
+python -m src.reliability.backup_restore `
+  --restore-database maintenance_pilot_restore `
+  --output-dir $backupDir `
+  --docker-container maintenance_postgres
 ```
 
 Backup file phải nằm ngoài repository và được bảo vệ theo chính sách công ty.
 Local attachment bytes dưới `ATTACHMENT_STORAGE_ROOT` cần backup riêng; PostgreSQL
 dump chỉ chứa metadata.
 
-Restore phải dùng database riêng trước:
-
-```powershell
-docker cp .\maintenance_copilot.dump `
-  maintenance_postgres:/tmp/maintenance_copilot.dump
-docker compose exec postgres createdb -U maintenance maintenance_restore
-docker compose exec postgres pg_restore `
-  -U maintenance -d maintenance_restore --clean --if-exists `
-  /tmp/maintenance_copilot.dump
-```
-
-Sau restore, chạy `alembic current`, row-count checks, attachment checksum checks
-và worker `--once` trước khi chuyển traffic. Xóa bản tạm trong container sau khi
-đã xác nhận backup/restore.
+Module tự checksum, restore vào database `_restore`, đối chiếu revision/count/
+integrity, chạy restored FastAPI health smoke và drop restore database trong
+`finally`. Attachment bytes vẫn cần backup/restore/checksum riêng. Xóa archive
+và manifest tạm sau khi evidence đã được ghi vào approved release/incident
+record.
 
 ## Migration Và Rollback
 
 ```powershell
-python -m alembic upgrade 20260726_0007
+python -m alembic upgrade 20260726_0008
 python -m alembic current
 python -m alembic check
 ```
+
+Quiesce API và worker trước khi downgrade riêng PM8 về PM7:
+
+```powershell
+python -m alembic downgrade 20260726_0007
+```
+
+Downgrade này xóa PM8 redrive/backup-validation evidence và alert types, nhưng
+giữ PM1–PM7 business/operations tables. PM8-only redrive-cycle attempts bị xóa;
+unfinished non-alert redrive trở lại `dead_lettered` với PM7-compatible attempt
+history. Backup trước khi downgrade, rồi revalidate revision, API/worker
+readiness, dead-letter và PM1–PM7 invariants trước khi mở traffic.
 
 Downgrade PM7:
 
@@ -203,3 +208,52 @@ canonical `27/42/86`. Nó không backup attachment bytes.
 Health/metrics hiện là JSON API và structured local logs. Không có Prometheus,
 central log sink, email/SMS alert, automatic failover hoặc on-call integration.
 Dead-letter và stale heartbeat cần Administrator chủ động kiểm tra.
+
+## PM8 Incident Index
+
+PM8 giữ nguyên worker/job catalog và bổ sung procedure tại
+[failure recovery](failure_recovery.md), [backup/restore](backup_restore.md) và
+[secret rotation](secret_rotation.md).
+
+| Tình huống | Phát hiện | Hành động đầu tiên | Recovery gate |
+|---|---|---|---|
+| API unavailable | liveness timeout/fail | Kiểm tra process, safe log và PostgreSQL; restart API | Login, protected read, readiness pass; worker không duplicate |
+| Worker unavailable | heartbeat missing/stale | Kiểm tra database, lease và process; start đúng một worker | heartbeat ready, lease recovered, backlog drain |
+| PostgreSQL unavailable | readiness 503/degraded, worker safe error | Dừng test mutation, kiểm tra container/disk/credential | reconnect, revision/count/pending work giữ nguyên |
+| Stuck job | running quá lease | Không sửa SQL; kiểm tra worker/lease | retry/dead-letter đúng policy, không duplicate business effect |
+| Outbox backlog | pending/oldest age vượt threshold | Dừng fixture, kiểm tra worker/recipient/catalog | pending và age giảm trong measured window |
+| Dead letter | dead-letter count > 0 | Sửa nguyên nhân, dùng audited redrive | processed; notification không duplicate |
+| Analytics failure | failed execution/stale age | Giữ last-valid; kiểm tra source/temp permission | isolated full publish, no partial promotion |
+| Failed backup | dump/checksum/restore fail | Không dùng archive; kiểm tra disk/tool/permission | backup mới restore-validate hoàn toàn |
+| Restore validation fail | revision/count/integrity mismatch | Không chuyển traffic; drop restore DB | rerun bằng archive/database mới |
+| Secret rotation | auth/readiness fail | Giữ old key trong previous slot hoặc rollback env | login/access/refresh/logout pass |
+| Notification backlog | outbox/inbox tăng bất thường | Kiểm tra attempt, recipient và retry storm | drain, dedup và owner isolation pass |
+| Disk warning | host/container disk monitor | Dừng extended artifact generation | database/attachment write và backup smoke pass |
+| Attachment issue | integrity count khác 0 | Không xóa; đối chiếu metadata/backup/checksum | missing/mismatch bằng 0, download pass |
+
+Operational alert evaluation là action explicit, không phải job thứ năm:
+
+```powershell
+python -m src.operations.cli evaluate-alerts --actor-username admin.demo
+```
+
+Alert deduplicate theo type/entity/cycle và tạo raised/recovered notification qua
+outbox. Khi PostgreSQL hoặc worker down, in-app alert không thể đến ngay; health
+probe và incident contact path vẫn là detection boundary.
+
+## PM8 Outbox Redrive
+
+Sau khi event `dead_lettered` và nguyên nhân đã được sửa:
+
+```powershell
+python -m src.operations.cli retry-outbox <EVENT_UUID> `
+  --idempotency-key "redrive-<EVENT_UUID>-01" `
+  --actor-username admin.demo
+```
+
+Action khóa event, ghi append-only request + audit, mở một bounded attempt cycle
+mới và không deliver trong API/CLI process. Replay cùng key trả cùng intent; key
+khác khi event không còn dead-letter bị reject. Delivery attempt cũ không bị sửa.
+
+Không mở pilot nếu [checklist](internal_pilot_checklist.md) còn gate bắt buộc chưa
+có current-revision evidence. PM7 historical result không thay PM8 evidence.
