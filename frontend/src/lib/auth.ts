@@ -73,6 +73,9 @@ export const permissions = {
   usersCreate: "users:create",
   usersUpdate: "users:update",
   auditLogsRead: "audit_logs:read",
+  notificationsRead: "notifications:read",
+  jobOperationsRead: "job_operations:read",
+  jobOperationsManage: "job_operations:manage",
 } as const;
 
 export type Permission = (typeof permissions)[keyof typeof permissions];

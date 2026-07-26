@@ -112,4 +112,16 @@ export const queryKeys = {
   roleOptions: ["users", "roles"] as const,
   auditLogs: (filters: QueryFilters = {}) =>
     ["audit-logs", serializeFilters(filters)] as const,
+  notificationRoot: ["notifications"] as const,
+  notifications: (filters: QueryFilters = {}) =>
+    ["notifications", "list", serializeFilters(filters)] as const,
+  notificationUnreadCount: ["notifications", "unread-count"] as const,
+  operationsRoot: ["operations"] as const,
+  operationsJobs: ["operations", "jobs"] as const,
+  operationsExecutions: (filters: QueryFilters = {}) =>
+    ["operations", "executions", serializeFilters(filters)] as const,
+  operationsOutbox: (filters: QueryFilters = {}) =>
+    ["operations", "outbox", serializeFilters(filters)] as const,
+  operationsMetrics: ["operations", "metrics"] as const,
+  workerHealth: ["operations", "worker-health"] as const,
 };

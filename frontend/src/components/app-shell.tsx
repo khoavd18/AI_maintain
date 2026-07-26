@@ -16,6 +16,7 @@ import {
   PackageOpen,
   PanelLeftClose,
   ScrollText,
+  ServerCog,
   ShieldAlert,
   TicketCheck,
   UserRound,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/components/auth-provider";
+import { NotificationCenter } from "@/components/notification-center";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCopilotStatus, type RagStatus } from "@/components/copilot-status-provider";
@@ -62,6 +64,7 @@ const navigation: NavItem[] = [
   { label: "Escalation", href: "/admin/escalations", icon: ShieldAlert, permission: permissions.escalationsEvaluate },
   { label: "Người dùng", href: "/admin/users", icon: Users, permission: permissions.usersRead },
   { label: "Nhật ký hệ thống", href: "/admin/audit", icon: ScrollText, permission: permissions.auditLogsRead },
+  { label: "Background jobs", href: "/admin/jobs", icon: ServerCog, permission: permissions.jobOperationsRead },
 ];
 
 function isActivePath(pathname: string | null, href: string) {
@@ -140,7 +143,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Navigation />
         </div>
         <div className="border-t p-4">
-          <p className="text-xs font-medium text-foreground">MVP dữ liệu batch</p>
+          <p className="text-xs font-medium text-foreground">Internal pilot, analytics batch</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             Hỗ trợ ưu tiên, không thay thế quyết định kỹ thuật.
           </p>
@@ -186,6 +189,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <NotificationCenter />
             <ApiStatusBadge health={health} />
             <AnalyticsStatusBadge health={health} />
             <RagStatusBadge status={ragStatus} />

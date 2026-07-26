@@ -133,7 +133,7 @@ export function MaintenancePlanWorkspace() {
           </div>
         </>
       )}
-      <p className="text-xs text-muted-foreground">Ngày đến hạn là business date theo timezone của từng plan. Không có scheduler ẩn; generation chỉ chạy qua API hoặc CLI được ủy quyền.</p>
+      <p className="text-xs text-muted-foreground">Ngày đến hạn là business date theo timezone của từng plan. Generation chỉ chạy qua API/CLI được ủy quyền hoặc closed PM7 worker gọi cùng service.</p>
     </div>
   );
 }
