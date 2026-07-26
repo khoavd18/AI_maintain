@@ -19,6 +19,7 @@ from src.api.services import ProcessedDataService
 from src.database.models import (
     Asset,
     MaintenanceLog,
+    OutboxEvent,
     TicketComment,
     TicketEscalationEvent,
 )
@@ -109,6 +110,18 @@ def test_intake_priority_snapshot_pii_and_resource_ownership(
     assert created["sla"]["policy_code"] == "DEFAULT_FACILITY"
     assert created["sla"]["first_response"]["status"] == "due_soon"
     assert created["reporter_email"] == "requester@example.com"
+    session_factory = ticket_context["session_factory"]
+    with session_factory() as session:
+        events = session.scalars(
+            select(OutboxEvent).where(
+                OutboxEvent.aggregate_id == created["ticket_id"]
+            )
+        ).all()
+        assert {event.event_type for event in events} == {
+            "ticket.critical_created",
+            "ticket.assigned",
+        }
+        assert all("reporter_email" not in event.payload for event in events)
 
     technician_view = service.get_ticket(created["ticket_id"], actor=technician)
     assert technician_view["reporter_redacted"] is True
@@ -162,6 +175,16 @@ def test_named_lifecycle_pause_resume_reopen_and_sla_events(
     )
     assert resumed["status"] == "in_progress"
     assert resumed["sla"]["resolution_due_at"] > held["sla"]["resolution_due_at"]
+    session_factory = ticket_context["session_factory"]
+    with session_factory() as session:
+        assert {
+            event.event_type
+            for event in session.scalars(
+                select(OutboxEvent).where(
+                    OutboxEvent.aggregate_id == ticket["ticket_id"]
+                )
+            )
+        }.issuperset({"ticket.held", "ticket.resumed"})
 
     _insert_maintenance_log(ticket_context, ticket["ticket_id"], resumed_at.date())
     resolved = service.resolve(

@@ -184,8 +184,13 @@ def test_role_permission_matrix_is_explicit_and_least_privilege() -> None:
             Permission.INVENTORY_ATTACHMENTS_READ,
             Permission.INVENTORY_ATTACHMENTS_CREATE,
             Permission.INVENTORY_ATTACHMENTS_DELETE,
+            Permission.NOTIFICATIONS_READ,
         }
     )
+    assert Permission.NOTIFICATIONS_READ in ROLE_PERMISSIONS[Role.TECHNICIAN]
+    assert Permission.NOTIFICATIONS_READ in ROLE_PERMISSIONS[Role.HELPDESK]
+    assert Permission.JOB_OPERATIONS_READ not in ROLE_PERMISSIONS[Role.PROPERTY_MANAGER]
+    assert Permission.JOB_OPERATIONS_MANAGE not in ROLE_PERMISSIONS[Role.CHIEF_ENGINEER]
 
 
 def test_expired_access_token_is_rejected() -> None:
