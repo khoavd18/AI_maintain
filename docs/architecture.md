@@ -164,7 +164,7 @@ Work-order permissions bổ sung:
 | Chief Engineer | Read/create/update/pause/archive/version | Toàn bộ execution/verification + evidence | Có |
 | Technician | Read template | Chỉ assigned WO: read/start/hold/resume/checklist/complete/evidence | Không; không tự verify |
 | Helpdesk | Không | Limited read status | Không |
-| Storekeeper | Không | Read identity/status | Không có stock operation |
+| Storekeeper | Không | Read identity/status | Không |
 
 FastAPI kiểm tra permission trước khi vào service; service tiếp tục kiểm tra technician ownership, asset eligibility và self-verification. Frontend chỉ ẩn/hiện control để hỗ trợ usability, không phải security boundary.
 

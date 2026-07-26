@@ -809,6 +809,8 @@ docs/                 Scope, architecture, process, contracts và demo docs
 - [Analytics pipeline](docs/analytics.md)
 - [Ticket operations and SLA](docs/ticket_operations.md)
 - [Inventory business process](docs/inventory_business_process.md)
+- [Product Milestone 5 release notes](docs/releases/product_milestone_5.md)
+- [Product Milestone 6 release notes](docs/releases/product_milestone_6.md)
 - [Work-order business process](docs/work_order_business_process.md)
 - [RBAC matrix](docs/rbac.md)
 - [FastAPI contract](docs/api.md)
