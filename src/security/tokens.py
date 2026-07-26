@@ -55,30 +55,50 @@ def create_access_token(
     return jwt.encode(payload, signing_secret, algorithm=ALGORITHM), expires_at
 
 
-def decode_access_token(token: str, signing_secret: str) -> AccessClaims:
-    try:
-        payload = jwt.decode(
-            token,
-            signing_secret,
-            algorithms=[ALGORITHM],
-            audience=AUDIENCE,
-            issuer=ISSUER,
-            options={
-                "require": ["sub", "sid", "role", "ver", "jti", "type", "iat", "exp"]
-            },
-        )
-        if payload["type"] != "access":
-            raise InvalidAccessTokenError("Unexpected token type")
-        return AccessClaims(
-            user_id=UUID(str(payload["sub"])),
-            session_id=UUID(str(payload["sid"])),
-            role=str(payload["role"]),
-            user_version=int(payload["ver"]),
-            token_id=str(payload["jti"]),
-            expires_at=datetime.fromtimestamp(float(payload["exp"]), timezone.utc),
-        )
-    except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
-        raise InvalidAccessTokenError("Invalid access token") from exc
+def decode_access_token(
+    token: str,
+    signing_secret: str,
+    previous_signing_secret: str = "",
+) -> AccessClaims:
+    """Verify with the current key, then one explicitly configured rotation key."""
+
+    last_error: Exception | None = None
+    for candidate in (signing_secret, previous_signing_secret):
+        if not candidate:
+            continue
+        try:
+            payload = jwt.decode(
+                token,
+                candidate,
+                algorithms=[ALGORITHM],
+                audience=AUDIENCE,
+                issuer=ISSUER,
+                options={
+                    "require": [
+                        "sub",
+                        "sid",
+                        "role",
+                        "ver",
+                        "jti",
+                        "type",
+                        "iat",
+                        "exp",
+                    ]
+                },
+            )
+            if payload["type"] != "access":
+                raise InvalidAccessTokenError("Unexpected token type")
+            return AccessClaims(
+                user_id=UUID(str(payload["sub"])),
+                session_id=UUID(str(payload["sid"])),
+                role=str(payload["role"]),
+                user_version=int(payload["ver"]),
+                token_id=str(payload["jti"]),
+                expires_at=datetime.fromtimestamp(float(payload["exp"]), timezone.utc),
+            )
+        except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
+            last_error = exc
+    raise InvalidAccessTokenError("Invalid access token") from last_error
 
 
 def create_refresh_token(session_id: UUID) -> str:

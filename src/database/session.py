@@ -37,9 +37,20 @@ def build_engine(
         connect_args["connect_timeout"] = (
             connect_timeout_seconds or settings.database_connect_timeout_seconds
         )
+        connect_args["options"] = " ".join(
+            (
+                f"-c statement_timeout={settings.database_statement_timeout_seconds * 1000}",
+                f"-c lock_timeout={settings.database_lock_timeout_seconds * 1000}",
+                "-c idle_in_transaction_session_timeout="
+                f"{settings.database_idle_transaction_timeout_seconds * 1000}",
+            )
+        )
     return create_engine(
         resolved_url,
         pool_pre_ping=True,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
+        pool_timeout=settings.database_pool_timeout_seconds,
         connect_args=connect_args,
     )
 

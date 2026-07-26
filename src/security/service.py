@@ -172,7 +172,11 @@ class AuthService:
 
     def authenticate_access(self, access_token: str) -> CurrentUser:
         try:
-            claims = decode_access_token(access_token, self.settings.token_signing_secret)
+            claims = decode_access_token(
+                access_token,
+                self.settings.token_signing_secret,
+                self.settings.token_signing_previous_secret,
+            )
         except InvalidAccessTokenError as exc:
             raise AuthenticationError("Phiên đăng nhập không hợp lệ hoặc đã hết hạn.") from exc
 

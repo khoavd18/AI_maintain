@@ -43,7 +43,9 @@ class JsonLogFormatter(logging.Formatter):
             value = getattr(record, field, None)
             if value is not None:
                 payload[field] = _safe_scalar(value)
-        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        # ASCII transport avoids Windows redirected-stream encoding failures while
+        # preserving Vietnamese text through standard JSON Unicode escapes.
+        return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
 def configure_structured_logging(level: str = "INFO") -> None:

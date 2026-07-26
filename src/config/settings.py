@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 import secrets
 from typing import Literal
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,6 +20,14 @@ class Settings(BaseSettings):
         "postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot"
     )
     database_connect_timeout_seconds: int = Field(default=5, ge=1, le=60)
+    database_pool_size: int = Field(default=5, ge=1, le=50)
+    database_max_overflow: int = Field(default=10, ge=0, le=100)
+    database_pool_timeout_seconds: int = Field(default=30, ge=1, le=120)
+    database_statement_timeout_seconds: int = Field(default=30, ge=1, le=600)
+    database_lock_timeout_seconds: int = Field(default=5, ge=1, le=60)
+    database_idle_transaction_timeout_seconds: int = Field(
+        default=60, ge=10, le=900
+    )
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "maintenance_knowledge"
     embedding_model_name: str = "intfloat/multilingual-e5-small"
@@ -28,6 +36,7 @@ class Settings(BaseSettings):
     )
     trusted_hosts: str = "localhost,127.0.0.1,testserver"
     token_signing_secret: str = ""
+    token_signing_previous_secret: str = ""
     access_token_lifetime_minutes: int = Field(default=15, ge=1, le=60)
     refresh_session_lifetime_days: int = Field(default=7, ge=1, le=30)
     refresh_cookie_name: str = "maintenance_refresh"
@@ -50,6 +59,18 @@ class Settings(BaseSettings):
     worker_heartbeat_stale_seconds: int = Field(default=60, ge=10, le=900)
     worker_outbox_lease_seconds: int = Field(default=120, ge=30, le=3600)
     worker_batch_size: int = Field(default=20, ge=1, le=200)
+    operational_outbox_age_alert_seconds: int = Field(
+        default=300, ge=60, le=86400
+    )
+    operational_repeated_job_failure_threshold: int = Field(
+        default=3, ge=2, le=10
+    )
+    operational_analytics_stale_seconds: int = Field(
+        default=172800, ge=3600, le=2592000
+    )
+    operational_backup_overdue_seconds: int = Field(
+        default=604800, ge=3600, le=7776000
+    )
     analytics_source_dir: Path = Path("data/raw")
     analytics_processed_dir: Path = Path("data/processed")
 
@@ -76,9 +97,50 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "AUTH_COOKIE_SECURE must be true outside development/test."
                 )
+            database_url = urlsplit(self.database_url)
+            if (
+                not database_url.hostname
+                or not database_url.username
+                or not database_url.password
+                or not database_url.path.strip("/")
+            ):
+                raise ValueError(
+                    "DATABASE_URL must include host, database, username, and password "
+                    "outside development/test."
+                )
+            if (
+                database_url.username == "maintenance"
+                and database_url.password == "maintenance"
+            ):
+                raise ValueError(
+                    "DATABASE_URL must not use the development database credentials "
+                    "outside development/test."
+                )
+            database_components = (
+                unquote(database_url.username or ""),
+                unquote(database_url.password or ""),
+                unquote(database_url.path.strip("/")),
+            )
+            if any(
+                component.lower().startswith("replace_with_")
+                for component in database_components
+            ):
+                raise ValueError(
+                    "DATABASE_URL must replace every example placeholder outside "
+                    "development/test."
+                )
         elif not self.token_signing_secret:
             # Local tokens intentionally stop working after a process restart.
             self.token_signing_secret = secrets.token_urlsafe(48)
+        if self.token_signing_previous_secret:
+            if len(self.token_signing_previous_secret) < 32:
+                raise ValueError(
+                    "TOKEN_SIGNING_PREVIOUS_SECRET must contain at least 32 characters."
+                )
+            if self.token_signing_previous_secret == self.token_signing_secret:
+                raise ValueError(
+                    "TOKEN_SIGNING_PREVIOUS_SECRET must differ from TOKEN_SIGNING_SECRET."
+                )
         if self.auth_cookie_samesite == "none" and not self.auth_cookie_secure:
             raise ValueError("SameSite=None requires AUTH_COOKIE_SECURE=true.")
         if self.worker_heartbeat_stale_seconds <= self.worker_heartbeat_interval_seconds:
