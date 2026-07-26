@@ -89,9 +89,18 @@ REQUIRED_TABLES = {
     "work_order_part_consumptions",
     "work_order_part_returns",
     "inventory_attachments",
+    "scheduled_jobs",
+    "job_executions",
+    "outbox_events",
+    "outbox_delivery_attempts",
+    "outbox_redrive_requests",
+    "notifications",
+    "notification_alert_states",
+    "worker_heartbeats",
+    "reliability_validation_records",
     "alembic_version",
 }
-CANONICAL_SCHEMA_REVISION = "20260726_0007"
+CANONICAL_SCHEMA_REVISION = "20260726_0008"
 TICKET_SEQUENCE = "maintenance_ticket_id_seq"
 LOG_SEQUENCE = "maintenance_log_id_seq"
 

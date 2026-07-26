@@ -8,6 +8,7 @@ from uuid import UUID
 
 from src.config.settings import get_settings
 from src.database.session import get_session_factory
+from src.operations.metrics import api_request_metrics
 from src.repositories.postgres_operations import PostgresOperationsRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission
@@ -26,9 +27,17 @@ class OperationsService:
         repository: PostgresOperationsRepository,
         *,
         worker_stale_seconds: int,
+        outbox_age_alert_seconds: int = 300,
+        repeated_job_failure_threshold: int = 3,
+        analytics_stale_seconds: int = 172800,
+        backup_overdue_seconds: int = 604800,
     ) -> None:
         self.repository = repository
         self.worker_stale_seconds = worker_stale_seconds
+        self.outbox_age_alert_seconds = outbox_age_alert_seconds
+        self.repeated_job_failure_threshold = repeated_job_failure_threshold
+        self.analytics_stale_seconds = analytics_stale_seconds
+        self.backup_overdue_seconds = backup_overdue_seconds
 
     def list_notifications(
         self,
@@ -164,9 +173,46 @@ class OperationsService:
             page_size=page_size,
         )
 
+    def redrive_outbox_event(
+        self,
+        event_id: UUID,
+        *,
+        idempotency_key: str,
+        actor: CurrentUser,
+        audit_context: AuditContext,
+    ) -> dict[str, Any]:
+        self._require(actor, Permission.JOB_OPERATIONS_MANAGE)
+        event, created = self.repository.redrive_outbox_event(
+            event_id,
+            idempotency_key=idempotency_key,
+            actor=actor,
+            audit_context=audit_context,
+        )
+        return {"event": event, "created": created}
+
+    def evaluate_operational_alerts(
+        self, *, actor: CurrentUser
+    ) -> dict[str, int]:
+        self._require(actor, Permission.JOB_OPERATIONS_MANAGE)
+        return self.repository.evaluate_operational_alerts(
+            outbox_age_threshold_seconds=self.outbox_age_alert_seconds,
+            repeated_job_failure_threshold=self.repeated_job_failure_threshold,
+            analytics_stale_seconds=self.analytics_stale_seconds,
+            backup_overdue_seconds=self.backup_overdue_seconds,
+            worker_stale_seconds=self.worker_stale_seconds,
+        )
+
     def metrics(self, *, actor: CurrentUser) -> dict[str, Any]:
         self._require(actor, Permission.JOB_OPERATIONS_READ)
-        return self.repository.operational_metrics()
+        result = self.repository.operational_metrics()
+        pool = self.repository.session_factory.kw["bind"].pool
+        result["database_pool"] = {
+            "size": pool.size(),
+            "checked_out": pool.checkedout(),
+            "overflow": max(0, pool.overflow()),
+        }
+        result["api_requests"] = api_request_metrics.snapshot()
+        return result
 
     def worker_health(self) -> dict[str, Any]:
         return self.repository.worker_health(
@@ -201,4 +247,10 @@ def build_operations_service() -> OperationsService:
             get_session_factory(settings.database_url)
         ),
         worker_stale_seconds=settings.worker_heartbeat_stale_seconds,
+        outbox_age_alert_seconds=settings.operational_outbox_age_alert_seconds,
+        repeated_job_failure_threshold=(
+            settings.operational_repeated_job_failure_threshold
+        ),
+        analytics_stale_seconds=settings.operational_analytics_stale_seconds,
+        backup_overdue_seconds=settings.operational_backup_overdue_seconds,
     )

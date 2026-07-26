@@ -16,6 +16,7 @@ from src.config.settings import get_settings
 from src.inventory_management.routes import router as inventory_router
 from src.maintenance_management.routes import router as maintenance_planning_router
 from src.operations.logging import configure_structured_logging, log_event
+from src.operations.metrics import api_request_metrics
 from src.operations.routes import router as operations_router
 from src.operations.service import build_operations_service
 from src.repositories.contracts import RepositoryError
@@ -88,6 +89,8 @@ def create_app() -> FastAPI:
         try:
             response = await call_next(request)
         except Exception:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            api_request_metrics.record(duration_ms=duration_ms, status_code=500)
             log_event(
                 logger,
                 logging.ERROR,
@@ -97,10 +100,14 @@ def create_app() -> FastAPI:
                 http_method=request.method,
                 http_path=request.url.path,
                 http_status=500,
-                duration_ms=int((time.monotonic() - started) * 1000),
+                duration_ms=duration_ms,
             )
             raise
         response.headers["X-Request-ID"] = request.state.request_id
+        duration_ms = int((time.monotonic() - started) * 1000)
+        api_request_metrics.record(
+            duration_ms=duration_ms, status_code=response.status_code
+        )
         log_event(
             logger,
             logging.INFO,
@@ -110,7 +117,7 @@ def create_app() -> FastAPI:
             http_method=request.method,
             http_path=request.url.path,
             http_status=response.status_code,
-            duration_ms=int((time.monotonic() - started) * 1000),
+            duration_ms=duration_ms,
         )
         return response
 

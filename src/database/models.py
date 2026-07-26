@@ -2788,6 +2788,7 @@ class OutboxEvent(Base):
             name="ck_outbox_events_status",
         ),
         CheckConstraint("attempt_count >= 0", name="ck_outbox_events_attempts"),
+        CheckConstraint("redrive_count >= 0", name="ck_outbox_events_redrives"),
         CheckConstraint(
             "jsonb_typeof(payload) = 'object' AND octet_length(payload::text) <= 16384",
             name="ck_outbox_events_payload",
@@ -2821,6 +2822,9 @@ class OutboxEvent(Base):
         String(30), nullable=False, default="pending", server_default="'pending'"
     )
     attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    redrive_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
     lease_owner: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -2858,17 +2862,23 @@ class OutboxDeliveryAttempt(Base):
             "attempt_number > 0", name="ck_outbox_delivery_attempts_number"
         ),
         CheckConstraint(
+            "redrive_number >= 0",
+            name="ck_outbox_delivery_attempts_redrives",
+        ),
+        CheckConstraint(
             "safe_error_summary IS NULL OR char_length(safe_error_summary) <= 1000",
             name="ck_outbox_delivery_attempts_error_length",
         ),
         UniqueConstraint(
             "outbox_event_id",
+            "redrive_number",
             "attempt_number",
-            name="uq_outbox_delivery_attempt_event_number",
+            name="uq_outbox_delivery_attempt_cycle_number",
         ),
         Index(
             "ix_outbox_delivery_attempts_event",
             "outbox_event_id",
+            "redrive_number",
             "attempt_number",
         ),
     )
@@ -2880,6 +2890,9 @@ class OutboxDeliveryAttempt(Base):
         nullable=False,
     )
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    redrive_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     worker_identity: Mapped[str] = mapped_column(String(100), nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -2966,7 +2979,10 @@ class NotificationAlertState(Base):
     __tablename__ = "notification_alert_states"
     __table_args__ = (
         CheckConstraint(
-            "alert_type = 'inventory_low_stock'",
+            "alert_type IN ('inventory_low_stock', 'worker_heartbeat_stale', "
+            "'outbox_backlog_old', 'dead_letter_present', "
+            "'scheduled_job_repeated_failure', 'analytics_refresh_stale', "
+            "'backup_validation_overdue')",
             name="ck_notification_alert_states_type",
         ),
         CheckConstraint("cycle_number >= 0", name="ck_notification_alert_states_cycle"),
@@ -3037,6 +3053,96 @@ class WorkerHeartbeat(Base):
     )
     metadata_payload: Mapped[dict[str, object] | None] = mapped_column(
         "metadata", JSONB, nullable=True
+    )
+
+
+class OutboxRedriveRequest(Base):
+    """Append-only operator intent for one bounded dead-letter redrive cycle."""
+
+    __tablename__ = "outbox_redrive_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "prior_attempt_count > 0",
+            name="ck_outbox_redrive_requests_prior_attempts",
+        ),
+        CheckConstraint(
+            "redrive_number > 0",
+            name="ck_outbox_redrive_requests_redrive_number",
+        ),
+        UniqueConstraint(
+            "idempotency_key", name="uq_outbox_redrive_requests_idempotency"
+        ),
+        UniqueConstraint(
+            "outbox_event_id",
+            "redrive_number",
+            name="uq_outbox_redrive_requests_event_cycle",
+        ),
+        Index(
+            "ix_outbox_redrive_requests_event",
+            "outbox_event_id",
+            "requested_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    outbox_event_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("outbox_events.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    prior_attempt_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    redrive_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now, server_default=func.now()
+    )
+
+
+class ReliabilityValidationRecord(Base):
+    """Append-only evidence marker produced by a completed PM8 validation drill."""
+
+    __tablename__ = "reliability_validation_records"
+    __table_args__ = (
+        CheckConstraint(
+            "validation_type IN ('backup_restore')",
+            name="ck_reliability_validation_records_type",
+        ),
+        CheckConstraint(
+            "status IN ('passed', 'failed')",
+            name="ck_reliability_validation_records_status",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(summary) = 'object' AND octet_length(summary::text) <= 4096",
+            name="ck_reliability_validation_records_summary",
+        ),
+        CheckConstraint(
+            "backup_checksum IS NULL OR "
+            "backup_checksum ~ '^[0-9a-f]{64}$'",
+            name="ck_reliability_validation_records_checksum",
+        ),
+        Index(
+            "ix_reliability_validation_records_latest",
+            "validation_type",
+            "status",
+            "performed_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    validation_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    performed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utc_now, server_default=func.now()
+    )
+    source_revision: Mapped[str] = mapped_column(String(80), nullable=False)
+    backup_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    summary: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    recorded_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
 
 

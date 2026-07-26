@@ -25,7 +25,9 @@ from src.operations.schemas import (
     NotificationResponse,
     NotificationVersionRequest,
     OperationalMetricsResponse,
+    OperationalAlertEvaluationResponse,
     OutboxEventPage,
+    OutboxRedriveResponse,
     ReadAllResponse,
     ReadinessResponse,
     ScheduledJobResponse,
@@ -326,6 +328,39 @@ def list_outbox(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post(
+    "/operations/outbox/{event_id}/retry",
+    response_model=OutboxRedriveResponse,
+    tags=["job-operations"],
+)
+def redrive_outbox_event(
+    event_id: UUID,
+    idempotency_key: IdempotencyKey,
+    service: ServiceDependency,
+    request: Request,
+    actor: JobOperationsManage,
+) -> dict[str, object]:
+    return _handle(
+        service.redrive_outbox_event,
+        event_id=event_id,
+        idempotency_key=idempotency_key,
+        actor=actor,
+        audit_context=audit_context(actor, request),
+    )
+
+
+@router.post(
+    "/operations/alerts/evaluate",
+    response_model=OperationalAlertEvaluationResponse,
+    tags=["job-operations"],
+)
+def evaluate_operational_alerts(
+    service: ServiceDependency,
+    actor: JobOperationsManage,
+) -> dict[str, int]:
+    return _handle(service.evaluate_operational_alerts, actor=actor)
 
 
 @router.get(

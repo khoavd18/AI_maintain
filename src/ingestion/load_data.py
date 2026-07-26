@@ -44,9 +44,11 @@ from src.database.models import (
     NotificationAlertState,
     OutboxDeliveryAttempt,
     OutboxEvent,
+    OutboxRedriveRequest,
     PartCategory,
     PartReorderConfiguration,
     PreventiveMaintenancePlan,
+    ReliabilityValidationRecord,
     ScheduledJob,
     SparePart,
     StockLocation,
@@ -103,9 +105,11 @@ EXPECTED_TABLES = {
     "job_executions",
     "outbox_events",
     "outbox_delivery_attempts",
+    "outbox_redrive_requests",
     "notifications",
     "notification_alert_states",
     "worker_heartbeats",
+    "reliability_validation_records",
 }
 ID_PATTERN = re.compile(r"^[A-Z]+-(\d+)$")
 
@@ -178,10 +182,12 @@ def import_csv_dataset(
                     session.execute(text("SET LOCAL app.demo_reset = 'on'"))
                     session.execute(delete(WorkerHeartbeat))
                     session.execute(delete(Notification))
+                    session.execute(delete(OutboxRedriveRequest))
                     session.execute(delete(OutboxDeliveryAttempt))
                     session.execute(delete(OutboxEvent))
                     session.execute(delete(JobExecution))
                     session.execute(delete(NotificationAlertState))
+                    session.execute(delete(ReliabilityValidationRecord))
                     now = datetime.now(timezone.utc)
                     session.execute(
                         update(ScheduledJob).values(

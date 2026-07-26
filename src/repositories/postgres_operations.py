@@ -18,6 +18,8 @@ from src.database.models import (
     NotificationAlertState,
     OutboxDeliveryAttempt,
     OutboxEvent,
+    OutboxRedriveRequest,
+    ReliabilityValidationRecord,
     ScheduledJob,
     User,
     WorkerHeartbeat,
@@ -712,6 +714,382 @@ class PostgresOperationsRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể đọc transactional outbox.") from exc
 
+    def redrive_outbox_event(
+        self,
+        event_id: UUID,
+        *,
+        idempotency_key: str,
+        actor: CurrentUser,
+        audit_context: AuditContext,
+        now: datetime | None = None,
+    ) -> tuple[dict[str, Any], bool]:
+        """Create one audited, caller-idempotent retry cycle for a dead letter."""
+
+        current = _aware_utc(now or _utc_now())
+        normalized_key = _manual_key(f"outbox-redrive-{event_id}", idempotency_key)
+        try:
+            with self.session_factory() as session, session.begin():
+                existing = session.scalar(
+                    select(OutboxRedriveRequest).where(
+                        OutboxRedriveRequest.idempotency_key == normalized_key
+                    )
+                )
+                if existing is not None:
+                    if (
+                        existing.outbox_event_id != event_id
+                        or existing.requested_by_user_id != actor.id
+                    ):
+                        raise DuplicateIdentifierError(
+                            "Idempotency-Key đã được dùng cho yêu cầu retry khác."
+                        )
+                    event = session.get(OutboxEvent, event_id)
+                    if event is None:  # pragma: no cover - protected by FK
+                        raise RecordNotFoundError(
+                            f"Không tìm thấy outbox event: {event_id}"
+                        )
+                    return _outbox_values(event), False
+
+                event = session.get(OutboxEvent, event_id, with_for_update=True)
+                if event is None:
+                    raise RecordNotFoundError(
+                        f"Không tìm thấy outbox event: {event_id}"
+                    )
+                existing = session.scalar(
+                    select(OutboxRedriveRequest).where(
+                        OutboxRedriveRequest.idempotency_key == normalized_key
+                    )
+                )
+                if existing is not None:
+                    if (
+                        existing.outbox_event_id != event_id
+                        or existing.requested_by_user_id != actor.id
+                    ):
+                        raise DuplicateIdentifierError(
+                            "Idempotency-Key đã được dùng cho yêu cầu retry khác."
+                        )
+                    return _outbox_values(event), False
+                if event.status != OutboxStatus.DEAD_LETTERED.value:
+                    raise IntegrityViolationError(
+                        "Chỉ outbox event dead-lettered mới có thể retry thủ công."
+                    )
+                prior_attempts = event.attempt_count
+                next_redrive = event.redrive_count + 1
+                session.add(
+                    OutboxRedriveRequest(
+                        id=uuid4(),
+                        outbox_event_id=event.id,
+                        requested_by_user_id=actor.id,
+                        idempotency_key=normalized_key,
+                        prior_attempt_count=prior_attempts,
+                        redrive_number=next_redrive,
+                        request_id=audit_context.request_id,
+                        requested_at=current,
+                    )
+                )
+                event.redrive_count = next_redrive
+                event.attempt_count = 0
+                event.status = OutboxStatus.RETRY_SCHEDULED.value
+                event.available_after = current
+                event.lease_owner = None
+                event.lease_expires_at = None
+                event.processed_at = None
+                event.last_safe_error_code = None
+                event.last_safe_error_summary = None
+                event.updated_at = current
+                session.flush()
+                result = _outbox_values(event)
+                _audit(
+                    session,
+                    audit_context,
+                    action="outbox.dead_letter_retry_requested",
+                    resource_type="outbox_event",
+                    resource_id=str(event.id),
+                    after=result,
+                    metadata={
+                        "redrive_number": next_redrive,
+                        "prior_attempt_count": prior_attempts,
+                    },
+                )
+                return result, True
+        except (
+            DuplicateIdentifierError,
+            IntegrityViolationError,
+            RecordNotFoundError,
+        ):
+            raise
+        except IntegrityError as exc:
+            raise DuplicateIdentifierError(
+                "Yêu cầu retry outbox trùng hoặc đang được xử lý."
+            ) from exc
+        except (OperationalError, SQLAlchemyError) as exc:
+            raise StorageUnavailableError(
+                "Không thể tạo yêu cầu retry outbox."
+            ) from exc
+
+    def evaluate_operational_alerts(
+        self,
+        *,
+        outbox_age_threshold_seconds: int,
+        repeated_job_failure_threshold: int,
+        analytics_stale_seconds: int,
+        backup_overdue_seconds: int,
+        worker_stale_seconds: int,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        """Update deduplicated alert cycles from safe aggregate conditions."""
+
+        current = _aware_utc(now or _utc_now())
+        conditions = self._operational_conditions(
+            current=current,
+            outbox_age_threshold_seconds=outbox_age_threshold_seconds,
+            repeated_job_failure_threshold=repeated_job_failure_threshold,
+            analytics_stale_seconds=analytics_stale_seconds,
+            backup_overdue_seconds=backup_overdue_seconds,
+            worker_stale_seconds=worker_stale_seconds,
+        )
+        raised = 0
+        recovered = 0
+        try:
+            with self.session_factory() as session, session.begin():
+                for condition in conditions:
+                    session.execute(
+                        insert(NotificationAlertState)
+                        .values(
+                            id=uuid4(),
+                            alert_type=condition["alert_type"],
+                            entity_key=condition["entity_key"],
+                            is_active=False,
+                            cycle_number=0,
+                            updated_at=current,
+                            version=1,
+                        )
+                        .on_conflict_do_nothing(
+                            index_elements=["alert_type", "entity_key"]
+                        )
+                    )
+                    state = session.scalar(
+                        select(NotificationAlertState)
+                        .where(
+                            NotificationAlertState.alert_type
+                            == condition["alert_type"],
+                            NotificationAlertState.entity_key
+                            == condition["entity_key"],
+                        )
+                        .with_for_update()
+                    )
+                    if state is None:  # pragma: no cover - protected by insert/select
+                        raise RuntimeError("Operational alert state was not persisted.")
+                    breached = bool(condition["breached"])
+                    observed = int(condition["observed_value"])
+                    threshold = int(condition["threshold_value"])
+                    details = {
+                        "observed_value": observed,
+                        "threshold_value": threshold,
+                    }
+                    if breached and not state.is_active:
+                        state.is_active = True
+                        state.cycle_number += 1
+                        state.last_detected_at = current
+                        event_type = "operations.alert_raised"
+                        raised += 1
+                    elif not breached and state.is_active:
+                        state.is_active = False
+                        state.last_recovered_at = current
+                        event_type = "operations.alert_recovered"
+                        recovered += 1
+                    else:
+                        if breached:
+                            state.last_detected_at = current
+                        state.last_details = details
+                        state.updated_at = current
+                        continue
+                    state.last_details = details
+                    state.updated_at = current
+                    payload = {
+                        "alert_type": condition["alert_type"],
+                        "alert_name": condition["alert_name"],
+                        "entity_key": condition["entity_key"],
+                        "cycle_number": state.cycle_number,
+                        "observed_value": observed,
+                        "threshold_value": threshold,
+                    }
+                    enqueue_outbox_event(
+                        session,
+                        event_type=event_type,
+                        aggregate_type="operational_alert",
+                        aggregate_id=(
+                            f"{condition['alert_type']}:{condition['entity_key']}"
+                        )[:120],
+                        payload=payload,
+                        idempotency_key=(
+                            f"operational-alert:{condition['alert_type']}:"
+                            f"{condition['entity_key']}:{state.cycle_number}:{event_type}"
+                        )[:200],
+                    )
+            return {
+                "evaluated_count": len(conditions),
+                "raised_count": raised,
+                "recovered_count": recovered,
+            }
+        except (OperationalError, SQLAlchemyError) as exc:
+            raise StorageUnavailableError(
+                "Không thể đánh giá cảnh báo độ tin cậy."
+            ) from exc
+
+    def _operational_conditions(
+        self,
+        *,
+        current: datetime,
+        outbox_age_threshold_seconds: int,
+        repeated_job_failure_threshold: int,
+        analytics_stale_seconds: int,
+        backup_overdue_seconds: int,
+        worker_stale_seconds: int,
+    ) -> list[dict[str, Any]]:
+        try:
+            with self.session_factory() as session:
+                oldest = session.scalar(
+                    select(func.min(OutboxEvent.created_at)).where(
+                        OutboxEvent.status.in_(
+                            {
+                                OutboxStatus.PENDING.value,
+                                OutboxStatus.RETRY_SCHEDULED.value,
+                                OutboxStatus.PROCESSING.value,
+                            }
+                        )
+                    )
+                )
+                oldest_age = (
+                    max(0, int((current - oldest).total_seconds())) if oldest else 0
+                )
+                dead_letters = _count_where(
+                    session,
+                    OutboxEvent,
+                    OutboxEvent.status == OutboxStatus.DEAD_LETTERED.value,
+                ) + _count_where(
+                    session,
+                    JobExecution,
+                    JobExecution.status == JobExecutionStatus.DEAD_LETTERED.value,
+                )
+                latest_heartbeat = session.scalar(
+                    select(WorkerHeartbeat).order_by(
+                        WorkerHeartbeat.last_seen_at.desc()
+                    )
+                )
+                heartbeat_age = (
+                    max(
+                        0,
+                        int(
+                            (current - latest_heartbeat.last_seen_at).total_seconds()
+                        ),
+                    )
+                    if latest_heartbeat
+                    else worker_stale_seconds + 1
+                )
+                analytics = session.get(
+                    ScheduledJob, JobType.ANALYTICS_REFRESH.value
+                )
+                analytics_age = 0
+                analytics_breached = False
+                if analytics and analytics.enabled:
+                    reference = (
+                        analytics.last_successful_run_at or analytics.created_at
+                    )
+                    analytics_age = max(
+                        0, int((current - reference).total_seconds())
+                    )
+                    analytics_breached = analytics_age > analytics_stale_seconds
+                latest_backup = session.scalar(
+                    select(ReliabilityValidationRecord)
+                    .where(
+                        ReliabilityValidationRecord.validation_type
+                        == "backup_restore",
+                        ReliabilityValidationRecord.status == "passed",
+                    )
+                    .order_by(ReliabilityValidationRecord.performed_at.desc())
+                )
+                backup_age = (
+                    max(
+                        0,
+                        int((current - latest_backup.performed_at).total_seconds()),
+                    )
+                    if latest_backup
+                    else backup_overdue_seconds + 1
+                )
+                conditions: list[dict[str, Any]] = [
+                    _alert_condition(
+                        "worker_heartbeat_stale",
+                        "primary",
+                        "Worker heartbeat quá hạn",
+                        heartbeat_age,
+                        worker_stale_seconds,
+                    ),
+                    _alert_condition(
+                        "outbox_backlog_old",
+                        "primary",
+                        "Outbox tồn đọng quá lâu",
+                        oldest_age,
+                        outbox_age_threshold_seconds,
+                    ),
+                    _alert_condition(
+                        "dead_letter_present",
+                        "primary",
+                        "Có bản ghi dead-letter chưa xử lý",
+                        dead_letters,
+                        0,
+                    ),
+                    _alert_condition(
+                        "analytics_refresh_stale",
+                        "analytics_refresh",
+                        "Analytics chưa được làm mới đúng hạn",
+                        analytics_age,
+                        analytics_stale_seconds,
+                        breached=analytics_breached,
+                    ),
+                    _alert_condition(
+                        "backup_validation_overdue",
+                        "backup_restore",
+                        "Backup chưa được restore-validate đúng hạn",
+                        backup_age,
+                        backup_overdue_seconds,
+                    ),
+                ]
+                for job in session.scalars(
+                    select(ScheduledJob).order_by(ScheduledJob.job_key)
+                ).all():
+                    recent_statuses = session.scalars(
+                        select(JobExecution.status)
+                        .where(JobExecution.job_key == job.job_key)
+                        .order_by(JobExecution.created_at.desc())
+                        .limit(repeated_job_failure_threshold)
+                    ).all()
+                    consecutive_failures = 0
+                    for status in recent_statuses:
+                        if status not in {
+                            JobExecutionStatus.FAILED.value,
+                            JobExecutionStatus.DEAD_LETTERED.value,
+                        }:
+                            break
+                        consecutive_failures += 1
+                    conditions.append(
+                        _alert_condition(
+                            "scheduled_job_repeated_failure",
+                            job.job_key,
+                            f"Job {job.job_key} lỗi liên tiếp",
+                            consecutive_failures,
+                            repeated_job_failure_threshold,
+                            breached=(
+                                consecutive_failures
+                                >= repeated_job_failure_threshold
+                            ),
+                        )
+                    )
+                return conditions
+        except (OperationalError, SQLAlchemyError) as exc:
+            raise StorageUnavailableError(
+                "Không thể đọc điều kiện cảnh báo độ tin cậy."
+            ) from exc
+
     def recover_expired_outbox_leases(
         self, *, now: datetime | None = None, limit: int = 100
     ) -> int:
@@ -1247,6 +1625,53 @@ class PostgresOperationsRepository:
                     OutboxEvent,
                     OutboxEvent.status == OutboxStatus.DEAD_LETTERED.value,
                 )
+                active_job_leases = _count_where(
+                    session,
+                    JobExecution,
+                    JobExecution.status == JobExecutionStatus.RUNNING.value,
+                )
+                active_outbox_leases = _count_where(
+                    session,
+                    OutboxEvent,
+                    OutboxEvent.status == OutboxStatus.PROCESSING.value,
+                )
+                outbox_retry_count = int(
+                    session.scalar(
+                        select(func.count())
+                        .select_from(OutboxDeliveryAttempt)
+                        .where(OutboxDeliveryAttempt.status == "failed")
+                    )
+                    or 0
+                )
+                expired_lease_recovery_count = int(
+                    session.scalar(
+                        select(func.count())
+                        .select_from(OutboxDeliveryAttempt)
+                        .where(
+                            OutboxDeliveryAttempt.safe_error_code
+                            == "lease_expired"
+                        )
+                    )
+                    or 0
+                )
+                notification_creation_count = int(
+                    session.scalar(
+                        select(func.count()).select_from(Notification)
+                    )
+                    or 0
+                )
+                active_operational_alert_count = int(
+                    session.scalar(
+                        select(func.count())
+                        .select_from(NotificationAlertState)
+                        .where(
+                            NotificationAlertState.alert_type
+                            != "inventory_low_stock",
+                            NotificationAlertState.is_active.is_(True),
+                        )
+                    )
+                    or 0
+                )
                 oldest = session.scalar(
                     select(func.min(OutboxEvent.created_at)).where(
                         OutboxEvent.status.in_(
@@ -1261,6 +1686,17 @@ class PostgresOperationsRepository:
                 jobs = session.scalars(
                     select(ScheduledJob).order_by(ScheduledJob.job_key)
                 ).all()
+                latest_backup = session.scalar(
+                    select(ReliabilityValidationRecord.performed_at)
+                    .where(
+                        ReliabilityValidationRecord.validation_type
+                        == "backup_restore",
+                        ReliabilityValidationRecord.status == "passed",
+                    )
+                    .order_by(
+                        ReliabilityValidationRecord.performed_at.desc()
+                    )
+                )
                 return {
                     "as_of": current.isoformat(),
                     "pending_job_count": pending_jobs,
@@ -1268,6 +1704,12 @@ class PostgresOperationsRepository:
                     "dead_letter_job_count": dead_jobs,
                     "pending_outbox_count": pending_outbox,
                     "dead_letter_outbox_count": dead_outbox,
+                    "active_job_lease_count": active_job_leases,
+                    "active_outbox_lease_count": active_outbox_leases,
+                    "outbox_retry_count": outbox_retry_count,
+                    "expired_lease_recovery_count": expired_lease_recovery_count,
+                    "notification_creation_count": notification_creation_count,
+                    "active_operational_alert_count": active_operational_alert_count,
                     "oldest_pending_outbox_age_seconds": (
                         max(0, int((current - oldest).total_seconds()))
                         if oldest
@@ -1281,6 +1723,14 @@ class PostgresOperationsRepository:
                         )
                         for job in jobs
                     },
+                    "last_validated_backup_at": (
+                        latest_backup.isoformat() if latest_backup else None
+                    ),
+                    "last_validated_backup_age_seconds": (
+                        max(0, int((current - latest_backup).total_seconds()))
+                        if latest_backup
+                        else None
+                    ),
                 }
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể đọc operational metrics.") from exc
@@ -1360,6 +1810,7 @@ def _outbox_values(
         "available_after": event.available_after.isoformat(),
         "status": event.status,
         "attempt_count": event.attempt_count,
+        "redrive_count": event.redrive_count,
         "lease_owner": event.lease_owner,
         "lease_expires_at": (
             event.lease_expires_at.isoformat() if event.lease_expires_at else None
@@ -1471,6 +1922,7 @@ def _record_delivery_attempt(
             id=uuid4(),
             outbox_event_id=event.id,
             attempt_number=event.attempt_count,
+            redrive_number=event.redrive_count,
             worker_identity=_worker_identity(worker_identity),
             started_at=_aware_utc(event.updated_at),
             completed_at=now,
@@ -1562,6 +2014,7 @@ def _related_entity_id(
         "job_execution": "execution_id",
         "part": "part_id",
         "maintenance_plan": "plan_id",
+        "operational_alert": "entity_key",
     }
     field = field_by_type.get(related_entity_type)
     return str(payload.get(field) or aggregate_id)[:120]
@@ -1593,7 +2046,32 @@ def _notification_content(payload: dict[str, Any]) -> dict[str, Any]:
             "generated_count",
             "skipped_count",
             "error_code",
+            "alert_type",
+            "alert_name",
+            "entity_key",
+            "cycle_number",
+            "observed_value",
+            "threshold_value",
         }
+    }
+
+
+def _alert_condition(
+    alert_type: str,
+    entity_key: str,
+    alert_name: str,
+    observed_value: int,
+    threshold_value: int,
+    *,
+    breached: bool | None = None,
+) -> dict[str, Any]:
+    return {
+        "alert_type": alert_type,
+        "entity_key": entity_key,
+        "alert_name": alert_name,
+        "observed_value": observed_value,
+        "threshold_value": threshold_value,
+        "breached": observed_value > threshold_value if breached is None else breached,
     }
 
 

@@ -122,6 +122,7 @@ class OutboxEventResponse(BaseModel):
         "pending", "processing", "processed", "retry_scheduled", "dead_lettered"
     ]
     attempt_count: int
+    redrive_count: int
     lease_owner: str | None
     lease_expires_at: datetime | None
     processed_at: datetime | None
@@ -138,6 +139,37 @@ class OutboxEventPage(BaseModel):
     total: int
 
 
+class OutboxRedriveResponse(BaseModel):
+    event: OutboxEventResponse
+    created: bool
+
+
+class OperationalAlertEvaluationResponse(BaseModel):
+    evaluated_count: int
+    raised_count: int
+    recovered_count: int
+
+
+class DatabasePoolMetrics(BaseModel):
+    size: int
+    checked_out: int
+    overflow: int
+
+
+class RequestLatencyMetrics(BaseModel):
+    p50: int | None
+    p95: int | None
+    p99: int | None
+
+
+class ApiRequestMetricsResponse(BaseModel):
+    request_count: int
+    error_count: int
+    service_unavailable_count: int
+    latency_ms: RequestLatencyMetrics
+    sample_count: int
+
+
 class OperationalMetricsResponse(BaseModel):
     as_of: datetime
     pending_job_count: int
@@ -145,8 +177,18 @@ class OperationalMetricsResponse(BaseModel):
     dead_letter_job_count: int
     pending_outbox_count: int
     dead_letter_outbox_count: int
+    active_job_lease_count: int
+    active_outbox_lease_count: int
+    outbox_retry_count: int
+    expired_lease_recovery_count: int
+    notification_creation_count: int
+    active_operational_alert_count: int
     oldest_pending_outbox_age_seconds: int | None
     last_successful_run_by_job: dict[str, datetime | None]
+    last_validated_backup_at: datetime | None
+    last_validated_backup_age_seconds: int | None
+    database_pool: DatabasePoolMetrics
+    api_requests: ApiRequestMetricsResponse
 
 
 class LivenessResponse(BaseModel):

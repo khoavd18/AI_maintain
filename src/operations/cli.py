@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import sys
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -19,6 +20,8 @@ from src.security.service import CurrentUser
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(
         description="Inspect and control supported PM7 background jobs."
     )
@@ -42,6 +45,14 @@ def main() -> None:
     retry.add_argument("execution_id", type=UUID)
     retry.add_argument("--idempotency-key", required=True)
     retry.add_argument("--actor-username", default="admin.demo")
+
+    outbox_retry = subparsers.add_parser("retry-outbox")
+    outbox_retry.add_argument("event_id", type=UUID)
+    outbox_retry.add_argument("--idempotency-key", required=True)
+    outbox_retry.add_argument("--actor-username", default="admin.demo")
+
+    alerts = subparsers.add_parser("evaluate-alerts")
+    alerts.add_argument("--actor-username", default="admin.demo")
 
     args = parser.parse_args()
     settings = get_settings()
@@ -80,13 +91,22 @@ def main() -> None:
             actor=actor,
             audit_context=context,
         )
-    else:
+    elif args.command == "retry":
         result = service.retry_execution(
             args.execution_id,
             idempotency_key=args.idempotency_key,
             actor=actor,
             audit_context=context,
         )
+    elif args.command == "retry-outbox":
+        result = service.redrive_outbox_event(
+            args.event_id,
+            idempotency_key=args.idempotency_key,
+            actor=actor,
+            audit_context=context,
+        )
+    else:
+        result = service.evaluate_operational_alerts(actor=actor)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

@@ -317,6 +317,60 @@ EVENT_CATALOG: dict[str, EventSpec] = {
         ),
         related_entity_type="job_execution",
     ),
+    "operations.alert_raised": EventSpec(
+        aggregate_type="operational_alert",
+        required_fields=_fields(
+            "alert_type",
+            "alert_name",
+            "entity_key",
+            "cycle_number",
+            "observed_value",
+            "threshold_value",
+        ),
+        allowed_fields=_fields(
+            "alert_type",
+            "alert_name",
+            "entity_key",
+            "cycle_number",
+            "observed_value",
+            "threshold_value",
+        ),
+        recipient_roles=frozenset({Role.ADMINISTRATOR}),
+        severity=NotificationSeverity.CRITICAL,
+        title="Cảnh báo độ tin cậy nội bộ",
+        body_template=(
+            "{alert_name}: giá trị quan sát {observed_value}, "
+            "ngưỡng {threshold_value}. Cần kiểm tra runbook."
+        ),
+        related_entity_type="operational_alert",
+    ),
+    "operations.alert_recovered": EventSpec(
+        aggregate_type="operational_alert",
+        required_fields=_fields(
+            "alert_type",
+            "alert_name",
+            "entity_key",
+            "cycle_number",
+            "observed_value",
+            "threshold_value",
+        ),
+        allowed_fields=_fields(
+            "alert_type",
+            "alert_name",
+            "entity_key",
+            "cycle_number",
+            "observed_value",
+            "threshold_value",
+        ),
+        recipient_roles=frozenset({Role.ADMINISTRATOR}),
+        severity=NotificationSeverity.INFO,
+        title="Điều kiện độ tin cậy đã phục hồi",
+        body_template=(
+            "{alert_name} đã trở lại trong ngưỡng: "
+            "{observed_value}/{threshold_value}."
+        ),
+        related_entity_type="operational_alert",
+    ),
 }
 
 
