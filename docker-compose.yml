@@ -25,6 +25,40 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  worker:
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "src.operations.worker"]
+    environment:
+      STORAGE_BACKEND: postgresql
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maintenance}:${POSTGRES_PASSWORD:-maintenance}@postgres:5432/${POSTGRES_DB:-maintenance_copilot}
+      APP_ENVIRONMENT: development
+      ANALYTICS_SOURCE_DIR: /app/data/raw
+      ANALYTICS_PROCESSED_DIR: /app/data/processed
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-2}
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:-10}
+      WORKER_HEARTBEAT_STALE_SECONDS: ${WORKER_HEARTBEAT_STALE_SECONDS:-60}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from src.operations.service import build_operations_service; assert build_operations_service().worker_health()['ready']",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
 volumes:
   postgres_data:
   qdrant_data:

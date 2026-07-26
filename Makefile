@@ -1,4 +1,4 @@
-.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend frontend-lint frontend-test frontend-build
+.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job job-status frontend-lint frontend-test frontend-build
 
 PYTHON ?= python
 ANALYTICS_INPUT_DIR ?= data/analytics_input
@@ -32,6 +32,12 @@ qdrant-up:
 
 qdrant-down:
 	docker compose stop qdrant
+
+worker-docker-up:
+	docker compose --profile worker up -d --build worker
+
+worker-docker-down:
+	docker compose --profile worker stop worker
 
 init-db:
 	$(PYTHON) -m src.database.init_db
@@ -122,6 +128,24 @@ run-dashboard:
 
 run-frontend:
 	npm --prefix frontend run dev
+
+run-worker:
+	$(PYTHON) -m src.operations.worker
+
+worker-once:
+	$(PYTHON) -m src.operations.worker --once
+
+run-job:
+	$(PYTHON) -m src.operations.cli trigger "$(JOB)" --idempotency-key "$(IDEMPOTENCY_KEY)" $(if $(ACTOR),--actor-username "$(ACTOR)",)
+
+set-job-enabled:
+	$(PYTHON) -m src.operations.cli set-enabled "$(JOB)" --enabled "$(ENABLED)" --expected-version "$(EXPECTED_VERSION)" $(if $(ACTOR),--actor-username "$(ACTOR)",)
+
+retry-job:
+	$(PYTHON) -m src.operations.cli retry "$(EXECUTION_ID)" --idempotency-key "$(IDEMPOTENCY_KEY)" $(if $(ACTOR),--actor-username "$(ACTOR)",)
+
+job-status:
+	$(PYTHON) -m src.operations.cli status $(if $(ACTOR),--actor-username "$(ACTOR)",)
 
 frontend-lint:
 	npm --prefix frontend run lint

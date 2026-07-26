@@ -44,6 +44,14 @@ class Settings(BaseSettings):
         le=50 * 1024 * 1024,
     )
     frontend_base_url: str = "http://localhost:3000"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    worker_poll_interval_seconds: int = Field(default=2, ge=1, le=60)
+    worker_heartbeat_interval_seconds: int = Field(default=10, ge=1, le=300)
+    worker_heartbeat_stale_seconds: int = Field(default=60, ge=10, le=900)
+    worker_outbox_lease_seconds: int = Field(default=120, ge=30, le=3600)
+    worker_batch_size: int = Field(default=20, ge=1, le=200)
+    analytics_source_dir: Path = Path("data/raw")
+    analytics_processed_dir: Path = Path("data/processed")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -73,6 +81,11 @@ class Settings(BaseSettings):
             self.token_signing_secret = secrets.token_urlsafe(48)
         if self.auth_cookie_samesite == "none" and not self.auth_cookie_secure:
             raise ValueError("SameSite=None requires AUTH_COOKIE_SECURE=true.")
+        if self.worker_heartbeat_stale_seconds <= self.worker_heartbeat_interval_seconds:
+            raise ValueError(
+                "WORKER_HEARTBEAT_STALE_SECONDS must exceed "
+                "WORKER_HEARTBEAT_INTERVAL_SECONDS."
+            )
         frontend_url = urlsplit(self.frontend_base_url)
         if (
             frontend_url.scheme not in {"http", "https"}
