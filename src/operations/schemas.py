@@ -166,4 +166,3 @@ class ReadinessResponse(BaseModel):
     database_ready: bool
     worker_ready: bool
     worker: WorkerHealthResponse
-
