@@ -87,6 +87,9 @@ class Permission(StrEnum):
     USERS_CREATE = "users:create"
     USERS_UPDATE = "users:update"
     AUDIT_LOGS_READ = "audit_logs:read"
+    NOTIFICATIONS_READ = "notifications:read"
+    JOB_OPERATIONS_READ = "job_operations:read"
+    JOB_OPERATIONS_MANAGE = "job_operations:manage"
 
 
 ROLE_DISPLAY_NAMES = {
@@ -110,6 +113,7 @@ _MAINTENANCE_TEAM = {
     Permission.MAINTENANCE_LOGS_CREATE,
     Permission.ANALYTICS_READ,
     Permission.COPILOT_USE,
+    Permission.NOTIFICATIONS_READ,
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -227,6 +231,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.WORK_ORDER_PARTS_READ,
             Permission.INVENTORY_CONSUME,
             Permission.INVENTORY_ATTACHMENTS_READ,
+            Permission.NOTIFICATIONS_READ,
         }
     ),
     Role.HELPDESK: frozenset(
@@ -245,6 +250,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.ESCALATIONS_EXECUTE,
             Permission.WORK_ORDERS_READ,
             Permission.INVENTORY_READ,
+            Permission.NOTIFICATIONS_READ,
         }
     ),
     Role.STOREKEEPER: frozenset(
@@ -265,6 +271,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.INVENTORY_ATTACHMENTS_READ,
             Permission.INVENTORY_ATTACHMENTS_CREATE,
             Permission.INVENTORY_ATTACHMENTS_DELETE,
+            Permission.NOTIFICATIONS_READ,
         }
     ),
 }
