@@ -55,6 +55,9 @@ def test_api_documentation_is_local_only() -> None:
         app_environment="pilot",
         token_signing_secret="s" * 48,
         auth_cookie_secure=True,
+        database_url=(
+            "postgresql+psycopg://pilot_user:pilot-password@db:5432/pilot_db"
+        ),
     )
 
     assert development.docs_enabled is True

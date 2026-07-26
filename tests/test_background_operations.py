@@ -1,6 +1,7 @@
 """Focused unit tests for the closed PM7 worker and event catalogs."""
 
 from datetime import datetime, timedelta, timezone
+import logging
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from src.operations.domain import (
     validate_job_configuration,
 )
 from src.operations.jobs import _validate_publication_paths
+from src.operations.logging import JsonLogFormatter
 from src.operations.worker import _run_one_iteration
 from src.repositories.postgres_operations import _next_due
 
@@ -59,6 +61,23 @@ def test_safe_error_does_not_expose_exception_message_or_path() -> None:
     assert "secret" not in summary
     assert "token" not in summary
     assert "C:\\" not in summary
+
+
+def test_structured_log_is_ascii_transport_safe_for_vietnamese_messages() -> None:
+    record = logging.LogRecord(
+        name="maintenance.worker",
+        level=logging.ERROR,
+        pathname=__file__,
+        lineno=1,
+        msg="Kho dữ liệu tạm thời không khả dụng.",
+        args=(),
+        exc_info=None,
+    )
+
+    encoded = JsonLogFormatter().format(record).encode("ascii")
+
+    assert b"\\u" in encoded
+    assert b"Traceback" not in encoded
 
 
 def test_analytics_publication_rejects_unsafe_paths(tmp_path: Path) -> None:

@@ -92,16 +92,20 @@ def _truncate_transactional_tables(engine) -> None:
         "job_executions",
         "outbox_events",
         "outbox_delivery_attempts",
+        "outbox_redrive_requests",
         "notifications",
         "notification_alert_states",
         "worker_heartbeats",
+        "reliability_validation_records",
     }
     if not required.issubset(tables):
         return
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE TABLE worker_heartbeats, notifications, "
+                "TRUNCATE TABLE reliability_validation_records, worker_heartbeats, "
+                "notifications, notification_alert_states, "
+                "outbox_redrive_requests, "
                 "outbox_delivery_attempts, outbox_events, job_executions, "
                 "audit_logs, refresh_sessions, ticket_comment_attachments, "
                 "inventory_attachments, work_order_part_returns, "

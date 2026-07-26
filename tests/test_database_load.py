@@ -96,9 +96,11 @@ def test_canonical_metadata_contains_transactional_and_security_tables() -> None
         "job_executions",
         "outbox_events",
         "outbox_delivery_attempts",
+        "outbox_redrive_requests",
         "notifications",
         "notification_alert_states",
         "worker_heartbeats",
+        "reliability_validation_records",
     }
     assert "version" in Asset.__table__.columns
     assert "version" in Ticket.__table__.columns
@@ -195,9 +197,11 @@ def test_clean_migration_upgrade_and_downgrade(postgres_database_url: str) -> No
             "job_executions",
             "outbox_events",
             "outbox_delivery_attempts",
+            "outbox_redrive_requests",
             "notifications",
             "notification_alert_states",
             "worker_heartbeats",
+            "reliability_validation_records",
         }.issubset(tables)
     finally:
         upgrade_database(postgres_database_url, "head")
