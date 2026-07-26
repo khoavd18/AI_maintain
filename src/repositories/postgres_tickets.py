@@ -43,6 +43,7 @@ from src.repositories.contracts import (
     StorageUnavailableError,
     StoredRecord,
 )
+from src.operations.outbox import enqueue_outbox_event
 from src.security.audit import AuditContext, safe_state
 from src.security.service import append_audit_event
 
@@ -340,6 +341,32 @@ class PostgresTicketRepository:
                             "occurrence_number": sla_state.occurrence_number,
                         },
                     )
+                if entity.priority == "critical":
+                    enqueue_outbox_event(
+                        session,
+                        event_type="ticket.critical_created",
+                        aggregate_type="ticket",
+                        aggregate_id=ticket_id,
+                        payload={
+                            "ticket_id": ticket_id,
+                            "asset_id": entity.asset_id,
+                            "priority": entity.priority,
+                        },
+                        idempotency_key=f"ticket:{ticket_id}:critical-created",
+                    )
+                if entity.assigned_user_id is not None:
+                    enqueue_outbox_event(
+                        session,
+                        event_type="ticket.assigned",
+                        aggregate_type="ticket",
+                        aggregate_id=ticket_id,
+                        payload={
+                            "ticket_id": ticket_id,
+                            "asset_id": entity.asset_id,
+                            "assigned_user_id": str(entity.assigned_user_id),
+                        },
+                        idempotency_key=f"ticket:{ticket_id}:initial-assignment",
+                    )
             return result
         except RepositoryError:
             raise
@@ -400,6 +427,36 @@ class PostgresTicketRepository:
                     after=result.values,
                     metadata=audit_metadata,
                 )
+                outbox_event_type = {
+                    "ticket.assigned": "ticket.assigned",
+                    "ticket.placed_on_hold": "ticket.held",
+                    "ticket.resumed": "ticket.resumed",
+                }.get(audit_action)
+                if outbox_event_type:
+                    payload = {
+                        "ticket_id": entity.ticket_id,
+                        "asset_id": entity.asset_id,
+                        "assigned_user_id": (
+                            str(entity.assigned_user_id)
+                            if entity.assigned_user_id
+                            else None
+                        ),
+                    }
+                    if (
+                        outbox_event_type != "ticket.assigned"
+                        or entity.assigned_user_id is not None
+                    ):
+                        enqueue_outbox_event(
+                            session,
+                            event_type=outbox_event_type,
+                            aggregate_type="ticket",
+                            aggregate_id=ticket_id,
+                            payload=payload,
+                            idempotency_key=(
+                                f"ticket:{ticket_id}:{outbox_event_type}:"
+                                f"version:{entity.version}"
+                            ),
+                        )
             return result
         except RepositoryError:
             raise
@@ -761,6 +818,35 @@ class PostgresTicketRepository:
                             "rule_code": entity.rule_code,
                             "occurrence_number": entity.occurrence_number,
                         },
+                    )
+                    ticket = session.get(Ticket, entity.ticket_id)
+                    if ticket is None:  # pragma: no cover - protected by FK
+                        continue
+                    event_type = (
+                        "ticket.sla_breach"
+                        if entity.rule_code.endswith("breached")
+                        else "ticket.sla_warning"
+                        if entity.rule_code.endswith("due_soon")
+                        else "ticket.escalated"
+                    )
+                    enqueue_outbox_event(
+                        session,
+                        event_type=event_type,
+                        aggregate_type="ticket",
+                        aggregate_id=entity.ticket_id,
+                        payload={
+                            "ticket_id": entity.ticket_id,
+                            "asset_id": ticket.asset_id,
+                            "rule_code": entity.rule_code,
+                            "clock_type": entity.clock_type,
+                            "occurrence_number": entity.occurrence_number,
+                            "assigned_user_id": (
+                                str(ticket.assigned_user_id)
+                                if ticket.assigned_user_id
+                                else None
+                            ),
+                        },
+                        idempotency_key=f"ticket-escalation:{entity.id}",
                     )
             return inserted
         except IntegrityError as exc:

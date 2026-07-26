@@ -41,6 +41,7 @@ from src.maintenance_management.domain import (
     WorkOrderType,
     recurrence_summary,
 )
+from src.operations.outbox import enqueue_outbox_event
 from src.repositories.contracts import (
     DuplicateIdentifierError,
     IntegrityViolationError,
@@ -593,6 +594,25 @@ class PostgresMaintenancePlanningRepository:
                     fields=WORK_ORDER_AUDIT_FIELDS,
                     metadata=audit_metadata,
                 )
+                if (
+                    audit_action == "work_order.assigned"
+                    and entity.assigned_to_user_id is not None
+                ):
+                    enqueue_outbox_event(
+                        session,
+                        event_type="work_order.assigned",
+                        aggregate_type="work_order",
+                        aggregate_id=str(entity.id),
+                        payload={
+                            "work_order_id": str(entity.id),
+                            "work_order_number": entity.work_order_number,
+                            "asset_id": entity.asset_id,
+                            "assigned_user_id": str(entity.assigned_to_user_id),
+                        },
+                        idempotency_key=(
+                            f"work-order:{entity.id}:assigned:version:{entity.version}"
+                        ),
+                    )
             return result
         except RepositoryError:
             raise
@@ -723,6 +743,26 @@ class PostgresMaintenancePlanningRepository:
                             "ticket_id": work_order.source_ticket_id,
                         },
                     )
+                enqueue_outbox_event(
+                    session,
+                    event_type="work_order.completed",
+                    aggregate_type="work_order",
+                    aggregate_id=str(work_order.id),
+                    payload={
+                        "work_order_id": str(work_order.id),
+                        "work_order_number": work_order.work_order_number,
+                        "asset_id": work_order.asset_id,
+                        "assigned_user_id": (
+                            str(work_order.assigned_to_user_id)
+                            if work_order.assigned_to_user_id
+                            else None
+                        ),
+                    },
+                    idempotency_key=(
+                        f"work-order:{work_order.id}:completed:"
+                        f"version:{work_order.version}"
+                    ),
+                )
             return result
         except RepositoryError:
             raise
@@ -945,6 +985,23 @@ class PostgresMaintenancePlanningRepository:
                         "skipped_count": len(skipped),
                     },
                 )
+                if generated:
+                    last_due = max(due_dates).isoformat()
+                    enqueue_outbox_event(
+                        session,
+                        event_type="preventive.work_orders_generated",
+                        aggregate_type="maintenance_generation",
+                        aggregate_id=str(plan.id),
+                        payload={
+                            "plan_id": str(plan.id),
+                            "plan_code": plan.plan_code,
+                            "generated_count": len(generated),
+                            "skipped_count": len(skipped),
+                        },
+                        idempotency_key=(
+                            f"preventive-generation:{plan.id}:{last_due}"
+                        ),
+                    )
                 return {
                     "plan_id": str(plan.id),
                     "plan_code": plan.plan_code,

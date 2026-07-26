@@ -55,6 +55,7 @@ from src.inventory_management.domain import (
     reorder_suggestion,
 )
 from src.maintenance_management.domain import WORK_ORDER_STATUS_LABELS, WorkOrderStatus
+from src.operations.outbox import enqueue_outbox_event
 from src.repositories.contracts import (
     DuplicateIdentifierError,
     IntegrityViolationError,
@@ -1738,6 +1739,25 @@ class PostgresInventoryRepository:
                     after=result.values,
                     fields=ISSUE_AUDIT_FIELDS,
                     metadata={"movement_id": str(movement.id)},
+                )
+                enqueue_outbox_event(
+                    session,
+                    event_type="inventory.issue_completed",
+                    aggregate_type="inventory_issue",
+                    aggregate_id=str(issue.id),
+                    payload={
+                        "issue_id": str(issue.id),
+                        "issue_number": issue.issue_number,
+                        "work_order_id": str(issue.work_order_id),
+                        "part_id": str(issue.part_id),
+                        "stock_location_id": str(issue.stock_location_id),
+                        "issued_to_user_id": (
+                            str(issue.issued_to_user_id)
+                            if issue.issued_to_user_id
+                            else None
+                        ),
+                    },
+                    idempotency_key=f"inventory-issue:{issue.id}:completed",
                 )
             return result
         except (
