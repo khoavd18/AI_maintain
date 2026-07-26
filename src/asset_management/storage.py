@@ -46,6 +46,10 @@ class AttachmentStorage(Protocol):
 
     def delete(self, storage_key: str) -> None: ...
 
+    def check_integrity(
+        self, storage_key: str, *, expected_checksum: str
+    ) -> str: ...
+
 
 _KEY_PATTERN = re.compile(
     r"^(?:assets|work-orders|inventory)/[0-9a-f]{2}/"
@@ -158,6 +162,41 @@ class LocalAttachmentStorage:
             target.unlink(missing_ok=True)
         except OSError as exc:
             raise AttachmentStorageError("Không thể xóa nội dung tệp đính kèm.") from exc
+
+    def check_integrity(
+        self, storage_key: str, *, expected_checksum: str
+    ) -> str:
+        """Stream a checksum without exposing the resolved local path."""
+
+        try:
+            target = self._resolve_key(storage_key)
+        except AttachmentStorageError:
+            return "invalid_key"
+        try:
+            digest = hashlib.sha256()
+            with target.open("rb") as source:
+                for block in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(block)
+        except FileNotFoundError:
+            return "missing"
+        except OSError:
+            return "unreadable"
+        actual = digest.hexdigest()
+        return "ok" if actual == expected_checksum else "checksum_mismatch"
+
+    def count_orphan_files(self, referenced_keys: set[str]) -> int:
+        """Count every storage-root file not referenced by active metadata."""
+
+        count = 0
+        if not self.root.exists():
+            return 0
+        for path in self.root.rglob("*"):
+            if not path.is_file():
+                continue
+            key = path.relative_to(self.root).as_posix()
+            if key not in referenced_keys:
+                count += 1
+        return count
 
     def _resolve_key(self, storage_key: str) -> Path:
         if not _KEY_PATTERN.fullmatch(storage_key):

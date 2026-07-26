@@ -1,4 +1,4 @@
-.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job job-status frontend-lint frontend-test frontend-build
+.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job retry-outbox evaluate-operational-alerts job-status reliability-load backup-restore-drill attachment-integrity frontend-lint frontend-test frontend-build
 
 PYTHON ?= python
 ANALYTICS_INPUT_DIR ?= data/analytics_input
@@ -144,8 +144,23 @@ set-job-enabled:
 retry-job:
 	$(PYTHON) -m src.operations.cli retry "$(EXECUTION_ID)" --idempotency-key "$(IDEMPOTENCY_KEY)" $(if $(ACTOR),--actor-username "$(ACTOR)",)
 
+retry-outbox:
+	$(PYTHON) -m src.operations.cli retry-outbox "$(OUTBOX_EVENT_ID)" --idempotency-key "$(IDEMPOTENCY_KEY)" $(if $(ACTOR),--actor-username "$(ACTOR)",)
+
+evaluate-operational-alerts:
+	$(PYTHON) -m src.operations.cli evaluate-alerts $(if $(ACTOR),--actor-username "$(ACTOR)",)
+
 job-status:
 	$(PYTHON) -m src.operations.cli status $(if $(ACTOR),--actor-username "$(ACTOR)",)
+
+reliability-load:
+	$(PYTHON) -m src.reliability.load_harness --profile "$(PROFILE)" --username "$(USERNAME)" $(if $(BASE_URL),--base-url "$(BASE_URL)",) $(if $(OUTPUT_DIR),--output-dir "$(OUTPUT_DIR)",)
+
+backup-restore-drill:
+	$(PYTHON) -m src.reliability.backup_restore --restore-database "$(RESTORE_DATABASE)" --output-dir "$(OUTPUT_DIR)" $(if $(DOCKER_CONTAINER),--docker-container "$(DOCKER_CONTAINER)",)
+
+attachment-integrity:
+	$(PYTHON) -m src.reliability.attachments
 
 frontend-lint:
 	npm --prefix frontend run lint
