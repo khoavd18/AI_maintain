@@ -13,4 +13,3 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 
 CMD ["python", "-m", "src.operations.worker"]
-
