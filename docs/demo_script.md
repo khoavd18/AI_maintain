@@ -1,6 +1,6 @@
 # Kịch Bản Demo Product 15–18 Phút
 
-Kịch bản dùng PostgreSQL làm transactional source of truth cho asset, ticket/SLA, work order và inventory; CSV làm synthetic seed + batch analytics contract. Đây là internal pilot demo, không phải production deployment, procurement suite hoặc complete CMMS.
+Kịch bản dùng PostgreSQL làm transactional source of truth cho asset, ticket/SLA, work order, inventory, background execution, outbox và in-app notification; CSV làm synthetic seed + batch analytics contract. Đây là internal pilot demo, không phải production deployment, procurement suite hoặc complete CMMS.
 
 ## Chuẩn Bị Trước Demo
 
@@ -113,6 +113,16 @@ python -m src.inventory_management.cli seed-development
 
 Lần đầu tạo 6 categories, 3 UOM, 5 stock locations, 8 spare parts, opening balances và selected requirements/reservations. Lần hai phải báo zero cho master/requirement/reservation mới và không tăng movement count. Seed đi qua named services, không PATCH balance.
 
+### 4.5. Kiểm tra PM7 job catalog
+
+```powershell
+python -m src.operations.cli status
+```
+
+Bốn job phải tồn tại và mặc định disabled. Demo có thể enable riêng
+`sla_escalation` hoặc dùng manual trigger; không enable toàn bộ nếu không muốn
+thay đổi data trong lúc trình bày.
+
 ### 5. Tạo analytics snapshot và chạy batch
 
 ```powershell
@@ -129,7 +139,7 @@ python -m src.features.build_features --input-dir data/analytics_input --analysi
 python -m src.rag.index_documents
 ```
 
-### 7. Khởi động FastAPI và frontend
+### 7. Khởi động FastAPI, worker và frontend
 
 Terminal 1:
 
@@ -137,7 +147,13 @@ Terminal 1:
 python -m uvicorn src.api.main:app --reload --port 8000
 ```
 
-Terminal 2, Next.js manager workspace:
+Terminal 2:
+
+```powershell
+python -m src.operations.worker
+```
+
+Terminal 3, Next.js manager workspace:
 
 ```powershell
 Set-Location frontend
@@ -185,7 +201,19 @@ python -m src.ticket_management.cli evaluate-escalations --dry-run --actor-usern
 python -m src.ticket_management.cli evaluate-escalations --actor-username manager.demo
 ```
 
-**Nói:** SLA state derive từ timestamps và policy/calendar snapshot. Escalation chỉ ghi operational event, không gửi email/SMS, không tự đổi ticket và không chạy background worker.
+**Nói:** SLA state derive từ timestamps và policy/calendar snapshot. Escalation có thể chạy explicit hoặc qua closed PM7 job, ghi append-only event/outbox và tạo in-app notification; nó không gửi email/SMS hoặc tự đổi ticket.
+
+### D. Notification Và Job Operations
+
+1. Đăng nhập `admin.demo`, mở `/admin/jobs`.
+2. Xác nhận fixed four-job catalog, worker heartbeat, queue metrics và recent
+   executions.
+3. Trigger `sla_escalation` với UI-generated stable idempotency key.
+4. Chờ worker xử lý rồi xem execution summary/outbox status.
+5. Mở bell hoặc `/notifications`; xem event phù hợp, đánh dấu read/unread rồi
+   dismiss.
+6. Chỉ ra user chỉ thấy inbox của chính mình; non-Administrator không truy cập
+   job operations.
 
 ## Preventive Plan Và Work Order Workflow
 
@@ -198,7 +226,7 @@ python -m src.ticket_management.cli evaluate-escalations --actor-username manage
 5. Mở plan detail, xem occurrence 180 ngày và warning rằng schedule change không sửa work order lịch sử.
 6. Chạy **Dry run**, sau đó **Generate**. Mở generated WO và ghi lại `work_order_number`.
 
-**Nói:** Due date là local business date. Month-end giữ anchor và clamp khi cần; execution timestamps là UTC. Generation chỉ chạy do actor explicit, không có startup scheduler.
+**Nói:** Due date là local business date. Month-end giữ anchor và clamp khi cần; execution timestamps là UTC. Generation chạy do actor explicit hoặc closed PM7 worker gọi cùng canonical service; API startup không tự generate.
 
 ### B. Technician thực thi trên mobile width
 
@@ -394,7 +422,9 @@ python -m src.risk.risk_scoring
 python -m src.features.build_features --input-dir data/analytics_input --analysis maintenance
 ```
 
-Sau đó refresh UI. Không có background scheduler trong milestone này.
+Hoặc Administrator trigger `analytics_refresh` tại `/admin/jobs`. API chỉ persist
+execution; worker chạy snapshot/pipeline trong staging rồi atomically publish cả
+output set. Ticket/inventory write vẫn không làm Risk Score/KPI đổi ngay.
 
 ## Safe Fallback Optional
 
@@ -442,9 +472,10 @@ OpenAPI vẫn có toàn bộ existing endpoints tại `http://localhost:8000/doc
 - Plan, work order, ticket và MaintenanceLog được tách; checklist version được snapshot và generation retry không tạo duplicate.
 - Part, requirement, reservation, issue, consumption, return và movement được tách; server là nguồn quantity authoritative.
 - Inventory dùng row locks, idempotency, immutable history và atomic transfer; không có procurement hoặc accounting.
-- Completion và independent verification là hai action khác nhau; ticket resolution và analytics refresh vẫn explicit.
+- Completion và independent verification là hai action khác nhau; ticket resolution vẫn explicit, còn analytics refresh là bounded batch job chứ không chạy theo transaction.
+- Worker, schedule, retry/dead-letter, outbox và notification state đều durable trong PostgreSQL; event delivery chỉ in-app.
 - RAG chỉ cung cấp source-grounded guidance; không thay thế technician.
-- Remaining gaps gồm production scheduler/worker, notifications, SSO/MFA, distributed rate limiting, signing-key rotation, backup automation, observability và deployment hardening.
+- Remaining gaps gồm worker high availability/load testing, external notifications, SSO/MFA, distributed rate limiting, signing-key rotation, backup automation, centralized observability và deployment hardening.
 
 ## Dừng Demo
 
@@ -452,4 +483,7 @@ OpenAPI vẫn có toàn bộ existing endpoints tại `http://localhost:8000/doc
 docker compose stop
 ```
 
-Không xóa PostgreSQL volume nếu muốn giữ plans/work orders/tickets/logs/inventory. Canonical reset dùng explicit import `--replace`, sau đó chạy lại explicit PM4-PM6 seeds; không dùng routine volume deletion.
+Không xóa PostgreSQL volume nếu muốn giữ plans/work orders/tickets/logs/inventory
+và PM7 operational history. Canonical reset dùng explicit import `--replace`,
+disable PM7 job catalog và xóa runtime history trước khi chạy lại explicit
+PM4-PM6 seeds; không dùng routine volume deletion.

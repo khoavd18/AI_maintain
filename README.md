@@ -2,7 +2,7 @@
 
 Nền tảng decision-support cho bảo trì thiết bị, kết hợp auditable asset lifecycle, ticket/SLA, preventive planning, standalone work orders, spare-parts stock control, Vietnamese batch analytics, explainable risk scoring và RAG retrieval trên SOP/checklist.
 
-> Trạng thái: MVP đang chuyển sang internal pilot architecture. PostgreSQL đã là transactional source of truth, nhưng repository chưa production-ready và không thay thế CMMS/S-Maintain.
+> Trạng thái: nền tảng internal-pilot với PostgreSQL transactions, durable background worker và in-app operations. Repository chưa production-ready và không thay thế CMMS/S-Maintain.
 
 ## Bài Toán
 
@@ -41,7 +41,7 @@ Không thuộc phạm vi:
 - complex approval workflow;
 - real-time IoT streaming;
 - SSO, MFA, external identity provider và enterprise IAM integration;
-- hidden/distributed production scheduler hoặc startup work-order generation;
+- arbitrary scheduler/job queue ngoài closed PM7 worker catalog hoặc startup work-order generation;
 - exact failure-time prediction.
 
 Chi tiết và tiêu chí thành công: [docs/mvp_scope.md](docs/mvp_scope.md).
@@ -64,16 +64,18 @@ Chi tiết và tiêu chí thành công: [docs/mvp_scope.md](docs/mvp_scope.md).
 - deterministic preventive recurrence/generation, concurrency-safe work-order numbers, immutable checklist snapshots và auditable work-order state machine;
 - corrective work order từ ticket không tự resolve incident; completion tạo đúng một MaintenanceLog và verification cập nhật asset dates;
 - rich ticket intake với category/source/routing, backend `impact x urgency` priority, named lifecycle actions, server-side queues và append-only communication timeline;
-- deterministic first-response/resolution SLA từ snapshotted business calendar/policy, idempotent escalation dry-run/execute qua API hoặc CLI;
+- deterministic first-response/resolution SLA từ snapshotted business calendar/policy, idempotent escalation qua API, CLI hoặc closed background job;
 - PostgreSQL spare-part master và stock locations; on-hand/reserved/available do backend quản lý bằng row locks và immutable movements;
 - explicit work-order part requirements, reservation/replacement/release, issue, technician consumption, unused-part return, atomic transfer và controlled adjustment;
-- low-stock/reorder visibility deterministic, protected inventory evidence và transaction-coupled audit, không tạo purchase order hoặc notification;
+- low-stock/reorder visibility deterministic, protected inventory evidence và deduplicated in-app alert cycle, không tạo purchase order;
+- PostgreSQL-backed worker với durable job execution, leases, bounded retry/dead-letter, transactional outbox và append-only delivery attempts;
+- owner-isolated in-app notification inbox, health/readiness/metrics, safe structured logs và Administrator operator controls;
 - Streamlit legacy development status page; protected product workflows dùng Next.js;
-- Next.js authenticated frontend có ticket inbox/intake/detail/timeline, SLA/calendar/policy administration, escalation dashboard và ticket-to-maintenance workflow;
+- Next.js authenticated frontend có ticket/work-order/inventory workflows, notification inbox và Administrator job operations page;
 - Qdrant-based SOP/checklist retrieval với metadata filters và relevance gate;
 - deterministic Maintenance Copilot response có sources, safety notice và safe fallback.
 
-Các production concerns như SSO/MFA, distributed rate limiting, scheduler, centralized observability, managed secret storage và deployment hardening chưa thuộc internal pilot hiện tại.
+Các production concerns như SSO/MFA, distributed rate limiting, high-availability worker, external notification delivery, centralized observability, managed secret storage và deployment hardening chưa thuộc internal pilot hiện tại.
 
 ## Canonical Architecture
 
@@ -82,13 +84,16 @@ Architecture là **PostgreSQL-primary cho transactional data** và **CSV batch-f
 ```mermaid
 flowchart LR
     Seed[Synthetic Vietnamese CSV seed] --> Import[Validate + idempotent import]
-    Migration[Alembic migrations] --> DB[(PostgreSQL<br/>assets, tickets, plans, work orders,<br/>inventory, logs, identity, audit)]
+    Migration[Alembic migrations] --> DB[(PostgreSQL<br/>business state, identity, audit,<br/>jobs, outbox, notifications)]
     Import --> DB
     Files[(Local attachment storage<br/>single-node pilot)]
     DB <--> Service[Repositories + business services]
     Service <--> Files
     Service <--> API[FastAPI<br/>unchanged contracts]
-    CLI[Explicit generation, escalation<br/>và inventory seed CLI] --> Service
+    CLI[Explicit domain/operator CLI] --> Service
+    Worker[Independent PM7 worker<br/>leases + bounded retry] <--> DB
+    Worker -->|existing services only| Service
+    Service -->|selected events<br/>same transaction| DB
     Service --> WO[Plan occurrence<br/>deterministic work order]
     API -->|public health only| Dashboard[Streamlit legacy status]
     API <--> Web[Next.js authenticated frontend]
@@ -127,8 +132,9 @@ CSV vẫn dùng cho synthetic generation, seed/reset, database-to-analytics snap
 5. Technician ghi consumption rõ ràng; Storekeeper return phần chưa dùng. Work-order completion chỉ cảnh báo shortage/unresolved stock và không tự tạo movement.
 6. Corrective work order và maintenance log ghi execution evidence độc lập; work-order completion/verification không tự resolve ticket.
 7. Authorized actor resolve sau khi có maintenance log, close hoặc reopen bằng named action; comments, SLA, inventory và escalation history vẫn append-only.
-8. Preventive generation và batch analytics chạy explicit; inventory transaction không tự thay Risk Score/KPI.
-9. Con người xác minh thiết bị, an toàn và quyết định cuối cùng; Risk Score/SLA/reorder suggestion chỉ hỗ trợ prioritization.
+8. Closed background jobs có thể chạy preventive generation, SLA evaluation, analytics refresh và low-stock detection; mọi execution/outbox/notification đều persist trong PostgreSQL.
+9. Inventory/ticket transaction không tự thay Risk Score/KPI; analytics chỉ publish ở batch tiếp theo và giữ output hợp lệ gần nhất khi failure.
+10. Con người xác minh thiết bị, an toàn và quyết định cuối cùng; Risk Score/SLA/reorder suggestion chỉ hỗ trợ prioritization.
 
 Quy trình nghiệp vụ chi tiết: [docs/business_process.md](docs/business_process.md).
 
@@ -300,7 +306,7 @@ Rich ticket/SLA endpoints được thêm theo hướng additive; legacy `/ticket
 - `GET|POST /ticketing/sla-policies`, `PATCH /ticketing/sla-policies/{policy_id}`;
 - `GET /ticketing/sla-summary`, `POST /ticketing/escalations/evaluate`.
 
-Rich routes dùng code-level status, Vietnamese display labels, server-side filtering/pagination và `expected_version`. Priority chỉ do backend matrix tính; SLA state chỉ derive từ snapshot/timestamps. Escalation execute tạo idempotent event, không gửi notification hoặc tự đổi ticket. Xem [API reference](docs/api.md) và [Ticket Operations/SLA](docs/ticket_operations.md).
+Rich routes dùng code-level status, Vietnamese display labels, server-side filtering/pagination và `expected_version`. Priority chỉ do backend matrix tính; SLA state chỉ derive từ snapshot/timestamps. Escalation execute tạo idempotent event và PM7 có thể chuyển event đó thành in-app notification; ticket status vẫn không tự đổi. Xem [API reference](docs/api.md) và [Ticket Operations/SLA](docs/ticket_operations.md).
 
 Asset lifecycle endpoints được thêm theo hướng additive; legacy `GET /assets` và asset analytics responses không đổi:
 
@@ -358,7 +364,18 @@ Spare-parts inventory endpoints được thêm additive, không đổi PM1-PM5 c
 
 Stock-changing requests yêu cầu caller-stable `Idempotency-Key`. Server lock inventory positions, reject negative stock/oversubscription, commit transfer-out và transfer-in cùng transaction, và derive `available = on_hand - reserved`. Movement history không có update/delete API và được bảo vệ bằng PostgreSQL trigger.
 
-`GET /health` là public. Tất cả route business còn lại cần Bearer access token và permission phù hợp. `/docs`, `/redoc` và OpenAPI schema chỉ được bật ở `development`/`test`.
+PM7 background operations và notification endpoints được thêm additive:
+
+- `GET /health/live`, `GET /health/ready`, `GET /health/worker`;
+- `GET /notifications`, `GET /notifications/unread-count`;
+- `POST /notifications/{notification_id}/read|unread|dismiss`, `POST /notifications/read-all`;
+- `GET /operations/jobs`, `PATCH /operations/jobs/{job_key}`, `POST /operations/jobs/{job_key}/trigger`;
+- `GET /operations/executions`, `POST /operations/executions/{execution_id}/retry`;
+- `GET /operations/outbox`, `GET /operations/metrics`.
+
+Manual trigger/retry yêu cầu Administrator permission và caller-stable `Idempotency-Key`; API chỉ persist execution, worker mới chạy. Job key thuộc closed four-job catalog và không nhận arbitrary executable configuration. Notification route luôn scope current user. Xem [PM7 API contract](docs/api_contract.md).
+
+Legacy `GET /health` cùng ba PM7 health routes là public. Tất cả route business còn lại cần Bearer access token và permission phù hợp. `/docs`, `/redoc` và OpenAPI schema chỉ được bật ở `development`/`test`.
 
 Các list endpoint hỗ trợ filters theo data contract. `/assets/{asset_id}/details` gom asset profile, latest risk, preventive status, risk history, anomaly, ticket, log và recurring issues mà không thay đổi RAG logic.
 
@@ -445,7 +462,13 @@ Streamlit được giữ làm **legacy development client** theo strategy B. App
 
 ## Next.js Frontend
 
-`frontend/` cung cấp authenticated operational frontend. Product Milestone 6 bổ sung:
+`frontend/` cung cấp authenticated operational frontend. Product Milestone 7 bổ sung:
+
+- notification bell với unread count và quick actions trong authenticated shell;
+- `/notifications` cho personal inbox, severity/unread filters, pagination và related-entity links;
+- `/admin/jobs` cho Administrator xem fixed job catalog, enable/disable, manual trigger, execution/dead-letter history, safe retry, outbox status và health metrics.
+
+Product Milestone 6 surfaces vẫn giữ:
 
 - `/inventory` overview/metrics, `/inventory/stock`, `/inventory/low-stock`, `/inventory/movements` và `/inventory/reservations`;
 - `/inventory/parts` và `/inventory/parts/[partId]` cho catalogue, lifecycle, balance và history;
@@ -563,6 +586,14 @@ Các biến hữu ích:
 | `ATTACHMENT_STORAGE_ROOT` | `data/attachments` | Private local file root, không được serve trực tiếp |
 | `ATTACHMENT_MAX_SIZE_BYTES` | `10485760` | Giới hạn mỗi PDF/PNG/JPG/JPEG |
 | `FRONTEND_BASE_URL` | `http://localhost:3000` | Origin dùng để tạo opaque QR lookup URL |
+| `LOG_LEVEL` | `INFO` | Safe structured API/worker logging level |
+| `WORKER_POLL_INTERVAL_SECONDS` | `2` | Bounded delay giữa worker iterations |
+| `WORKER_HEARTBEAT_INTERVAL_SECONDS` | `10` | Lease renewal/heartbeat cadence cho long job |
+| `WORKER_HEARTBEAT_STALE_SECONDS` | `60` | Ngưỡng worker readiness |
+| `WORKER_OUTBOX_LEASE_SECONDS` | `120` | Lease cho claimed outbox event |
+| `WORKER_BATCH_SIZE` | `20` | Bounded schedule/outbox batch |
+| `ANALYTICS_SOURCE_DIR` | `data/raw` | Sensor/document source cho snapshot job |
+| `ANALYTICS_PROCESSED_DIR` | `data/processed` | Atomically published batch outputs |
 | `QDRANT_URL` | `http://localhost:6333` | RAG indexing/retrieval |
 | `QDRANT_HTTP_PORT` | `6333` | Local Docker host port cho Qdrant REST |
 | `QDRANT_COLLECTION` | `maintenance_knowledge` | Qdrant collection |
@@ -647,6 +678,29 @@ python -m src.inventory_management.cli seed-development
 
 Lệnh tạo deterministic 6 categories, 3 UOM, 5 stock locations và 8 HVAC/pump/generator parts, rồi reconcile opening balances và selected work-order reservations qua named service actions. Chạy lại không tạo duplicate movement, requirement hoặc reservation.
 
+PM7 seed bốn supported jobs ở trạng thái disabled. Xem version hiện tại rồi enable có kiểm soát bằng Administrator:
+
+```powershell
+python -m src.operations.cli status
+python -m src.operations.cli set-enabled sla_escalation `
+  --enabled true --expected-version <VERSION> `
+  --actor-username admin.demo
+```
+
+Terminal worker:
+
+```powershell
+python -m src.operations.worker
+```
+
+Một iteration để smoke test: `python -m src.operations.worker --once`. Manual trigger chỉ persist execution và yêu cầu idempotency key:
+
+```powershell
+python -m src.operations.cli trigger sla_escalation `
+  --idempotency-key "local-sla-20260726-01" `
+  --actor-username admin.demo
+```
+
 Terminal API:
 
 ```powershell
@@ -676,13 +730,13 @@ Invoke-RestMethod http://localhost:8000/auth/me -Headers $headers
 Invoke-RestMethod http://localhost:8000/summary -Headers $headers
 ```
 
-Stop API/frontend bằng `Ctrl+C`, sau đó:
+Stop worker/API/frontend bằng `Ctrl+C`, sau đó:
 
 ```powershell
 docker compose stop
 ```
 
-Equivalent Make targets: `services-up`, `postgres-up`, `migrate-db`, `generate-data`, `validate-data`, `load-data`, `replace-data`, `seed-maintenance`, `seed-inventory`, `generation-dry-run`, `generate-work-orders`, `seed-ticketing`, `escalation-dry-run`, `evaluate-escalations`, `export-analytics-snapshot`, `build-features`, `detect-anomalies`, `score-risk`, `build-preventive`, `build-recurring`, `build-kpis`, `index-documents`, `bootstrap-admin`, `seed-demo-users`, `run-api`, `run-dashboard`, `run-frontend`, `create-test-db`, `test`, `test-postgres`, `lint`, `frontend-lint`, `frontend-test` và `frontend-build`.
+Equivalent Make targets: `services-up`, `postgres-up`, `migrate-db`, `generate-data`, `validate-data`, `load-data`, `replace-data`, `seed-maintenance`, `seed-inventory`, `generation-dry-run`, `generate-work-orders`, `seed-ticketing`, `escalation-dry-run`, `evaluate-escalations`, `export-analytics-snapshot`, `build-features`, `detect-anomalies`, `score-risk`, `build-preventive`, `build-recurring`, `build-kpis`, `index-documents`, `bootstrap-admin`, `seed-demo-users`, `run-api`, `run-dashboard`, `run-frontend`, `run-worker`, `worker-once`, `run-job`, `set-job-enabled`, `retry-job`, `job-status`, `worker-docker-up`, `worker-docker-down`, `create-test-db`, `test`, `test-postgres`, `lint`, `frontend-lint`, `frontend-test` và `frontend-build`.
 
 Demo 10–12 phút: [docs/demo_script.md](docs/demo_script.md).
 
@@ -710,7 +764,7 @@ Explicit canonical reset sau khi đã backup dữ liệu cần giữ:
 python -m src.ingestion.load_data --replace
 ```
 
-`--replace` xóa PM4-PM6 development plans/templates/work orders, ticket/SLA extensions, inventory data và evidence metadata trước khi khôi phục canonical `27/42/86`; private attachment backup/cleanup vẫn là trách nhiệm operator. Chạy lại các explicit seed commands sau reset nếu cần product demo data.
+`--replace` xóa PM4-PM7 development runtime data theo dependency order, gồm plans/templates/work orders, ticket/SLA extensions, inventory, outbox/execution/notification/heartbeat history và evidence metadata; fixed PM7 job catalog được trả về disabled trước khi khôi phục canonical `27/42/86`. Private attachment backup/cleanup vẫn là trách nhiệm operator. Chạy lại các explicit seed commands sau reset nếu cần product demo data.
 
 Dedicated test database:
 
@@ -745,14 +799,17 @@ Lần verify Product Milestone 5 ngày 2026-07-23: isolated PostgreSQL clean dow
 
 Lần verify Product Milestone 6 ngày 2026-07-23: isolated PostgreSQL downgrade-to-base/clean upgrade đạt revision `20260723_0006`, `alembic check` không có model drift; canonical import vẫn đúng `27/42/86`. PM4 seed tạo 3 plans/4 work orders; PM6 seed tạo 6 categories, 3 UOM, 5 stock locations, 8 parts, 8 opening positions, 3 requirements và 3 reservations, còn lần chạy thứ hai không tạo duplicate. Focused PM6 đạt `14 passed`, PM4 regression đạt `10 passed`, PM5 ticket/SLA regression đạt `28 passed`; full backend đạt `224 passed`, frontend đạt `106 passed` trên 16 files. Ruff, ESLint và Next.js production build 30 pages đều đạt. Live workflow xác nhận admin lifecycle audit; Storekeeper receipt idempotent, atomic transfer, adjustment, issue và return; assigned Technician ghi consumption riêng; Helpdesk adjustment và Technician receipt đều trả `403`. PostgreSQL restart giữ revision, `27/42/86`, 4 work orders, 8 parts, 14 movements, 3 reservations, 1 issue, 1 consumption và 1 return. OpenAPI có 128 paths, 33 Next.js routes trả `200`; snapshot batch tạo `3.240/3.240/3.240` feature/anomaly/risk rows cùng `27/25/1` maintenance reports mà không đổi canonical output hashes. Đây vẫn chỉ là local verification trên synthetic data, không phải production, security, stock-accuracy hoặc business-impact certification.
 
+Lần verify Product Milestone 7 ngày 2026-07-26: isolated PostgreSQL clean base-to-head và PM7 downgrade/re-upgrade đạt revision `20260726_0007`; `alembic check` không có model drift. PM7 focused đạt `6` pure tests và `8` PostgreSQL integration tests; targeted PM4-PM6/auth regressions đạt `73 passed`; full backend đạt `238 passed`. Frontend PM7 đạt `6 passed`, full frontend đạt `112 passed` trên 17 files; Ruff, ESLint, Next.js production build 32 pages, Markdown link check, secret/unsafe-path scan và `git diff --check` đều đạt. Docker worker trở thành healthy, one-iteration worker kết thúc với heartbeat `stopping`, manual SLA trigger replay dùng cùng execution, outbox tạo ba role-based notifications, owner actions hoạt động và `/notifications` cùng `/admin/jobs` trả `200`. Analytics publish ở temporary path và canonical outputs không đổi. PostgreSQL restart giữ revision, 27 assets, 44 tickets, 87 logs và bốn fixed jobs; verification execution/outbox/notification/heartbeat records được cleanup về 0. Đây là local internal-pilot operational verification, không phải production, security, availability, SLA-performance hoặc business-impact certification.
+
 ## Limitations
 
 - Synthetic data chưa được kiểm chứng bằng maintenance history thực tế.
 - Analytics thresholds và risk weights là transparent demo heuristics, chưa được hiệu chuẩn trên dữ liệu thực tế.
 - Synthetic chronology chỉ mô phỏng quy trình đơn giản và chưa được đối chiếu với quy tắc lịch bảo trì thực tế của một cơ sở cụ thể.
-- API phục vụ PostgreSQL transactions cùng processed CSV analytics, chưa có scheduler hoặc production cache invalidation strategy.
-- Preventive generation chỉ chạy qua explicit API/CLI; chưa có production scheduler, distributed worker, notification hoặc missed-run operations.
-- SLA/escalation evaluation cũng chạy explicit qua API/CLI; chưa có background evaluator hoặc notification delivery.
+- API phục vụ PostgreSQL transactions cùng processed CSV analytics; PM7 worker chỉ là internal-pilot PostgreSQL polling process, chưa có HA, capacity/load test hoặc production cache invalidation strategy.
+- Closed scheduler chỉ hỗ trợ bốn existing operations; chưa có distributed queue partitioning, autoscaling hoặc production missed-run/on-call operations.
+- Notification chỉ nằm trong in-app inbox; chưa có email/SMS/push, user preferences, acknowledgement hoặc external delivery monitoring.
+- Health/metrics và structured logs chưa có centralized collection, alert routing hoặc production observability platform.
 - Recurrence chỉ hỗ trợ bounded interval day/week/month/year. Chưa có calendar exceptions, holiday rules hoặc arbitrary RRULE.
 - Legacy asset `next_maintenance_date` là compatibility aggregate từ active plans; plan-specific dates và calendar mới là operational detail.
 - Analytics snapshot cố ý project maintenance dates về fixed-interval legacy contract. Vì vậy preventive plan/work-order calendar là operational source cho scheduling, còn batch preventive KPI hiện vẫn phản ánh contract cũ.
@@ -790,6 +847,7 @@ src/asset_management/ Asset lifecycle, hierarchy, attachment storage và QR help
 src/ticket_management/ Ticket lifecycle, priority, SLA, queues, communication và escalation
 src/maintenance_management/ Preventive recurrence, work-order state machine, routes và CLI
 src/inventory_management/ Spare-part master, stock-control service, routes và seed CLI
+src/operations/       Closed jobs/events, worker, notification/operator API và CLI
 src/features/         Canonical daily feature pipeline
 src/models/           Canonical anomaly pipeline
 src/risk/             Canonical risk pipeline
@@ -811,9 +869,16 @@ docs/                 Scope, architecture, process, contracts và demo docs
 - [Inventory business process](docs/inventory_business_process.md)
 - [Product Milestone 5 release notes](docs/releases/product_milestone_5.md)
 - [Product Milestone 6 release notes](docs/releases/product_milestone_6.md)
+- [Product Milestone 7 release notes](docs/releases/product_milestone_7.md)
 - [Work-order business process](docs/work_order_business_process.md)
 - [RBAC matrix](docs/rbac.md)
 - [FastAPI contract](docs/api.md)
+- [PM7 API contract](docs/api_contract.md)
+- [Background jobs and outbox](docs/background_jobs.md)
+- [In-app notifications](docs/notifications.md)
+- [Operations runbook](docs/operations_runbook.md)
+- [Security boundary](docs/security.md)
+- [Testing guide](docs/testing.md)
 - [Demo script](docs/demo_script.md)
 - [Interview notes](docs/interview_notes.md)
 - [Troubleshooting](docs/troubleshooting.md)

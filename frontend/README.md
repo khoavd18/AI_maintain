@@ -62,6 +62,12 @@ Các route analytics vẫn dùng được khi Qdrant dừng; chỉ retrieval c�
 Terminal 2:
 
 ```powershell
+python -m src.operations.worker
+```
+
+Terminal 3:
+
+```powershell
 cd frontend
 npm install
 npm run dev
@@ -104,6 +110,8 @@ Mở `http://localhost:3000`.
 | `/admin/audit` | paginated audit events | Administrator/Property Manager read-only filters |
 | `/admin/sla` | business calendars + SLA policies | Permission-aware create/update với optimistic version |
 | `/admin/escalations` | SLA summary + escalation evaluation | Dry-run hoặc idempotent execute theo permission |
+| `/notifications` | PM7 personal notification API | Unread/severity filters, read/unread/dismiss và related links |
+| `/admin/jobs` | PM7 jobs, executions, outbox, metrics và worker health | Administrator-only enable/disable, manual trigger và safe retry |
 | `/login` | auth login/refresh | Public login surface |
 | `/forbidden` | local authorization state | Friendly denied page |
 
@@ -124,7 +132,7 @@ Rich PM5 ticket workflow dùng additive typed endpoints:
 - SLA countdown/status lấy nguyên derived response, không tự tính authoritative deadline;
 - comments là append-only; visibility và reporter PII theo backend permission;
 - calendar/policy admin giữ version conflict rõ ràng;
-- escalation dry-run không write, execute không gửi notification hoặc tự đổi ticket.
+- escalation dry-run không write; execute có thể tạo PM7 in-app notification nhưng không gửi email/SMS/push hoặc tự đổi ticket.
 
 Preventive/work-order workflow dùng additive endpoints:
 
@@ -160,15 +168,18 @@ Attachment UI chỉ chấp nhận PDF/PNG/JPG/JPEG tối đa 10 MB để feedbac
 - `src/lib/api/maintenance-schemas.ts`: explicit plan/template/work-order contracts và client coherence validation.
 - `src/lib/api/ticketing-schemas.ts`: rich ticket, SLA, calendar, policy và escalation Zod contracts.
 - `src/lib/api/inventory-schemas.ts`: part/location/position/movement/work-order inventory Zod contracts.
+- `src/lib/api/operations-schemas.ts`: PM7 notification, job, execution, outbox, health và metrics contracts.
 - `src/lib/api/query-keys.ts`: stable query keys và filter serialization.
 - `src/lib/api/endpoints.ts`: toàn bộ maintenance, asset lifecycle, attachment/QR/history và Copilot calls.
 - `src/lib/api/maintenance-endpoints.ts`: typed PM4 list/action/generation/evidence calls.
 - `src/lib/api/ticketing-endpoints.ts`: PM5 intake, queues, named actions, comments và SLA administration calls.
 - `src/lib/api/inventory-endpoints.ts`: PM6 catalogue, stock, named movements, reservations, WO usage và evidence calls.
+- `src/lib/api/operations-endpoints.ts`: owner-scoped notifications và protected operator calls.
 - `src/hooks/use-api-queries.ts`: reusable TanStack Query hooks.
 - `src/hooks/use-api-mutations.ts`: confirmed-server write mutations và `useAskCopilot`; chat response không được lưu trong Query cache.
 - `src/hooks/use-ticketing.ts`: PM5 server-state queries/mutations và scoped invalidation.
 - `src/hooks/use-inventory.ts`: PM6 queries/mutations và scoped invalidation; ambiguous writes không auto-retry.
+- `src/hooks/use-operations.ts`: PM7 inbox, job, execution, outbox, metrics và heartbeat queries/mutations.
 - `src/components/auth-provider.tsx`: session restore, login/logout, route guard và permission helpers.
 - `src/lib/auth.ts`: permission constants và safe return-path validation; không có duplicate role matrix.
 - `src/lib/copilot.ts`: suggested questions theo asset type, safe answer parser và user-facing retrieval states.
@@ -213,7 +224,7 @@ Các response `empty`, `low_relevance`, `unsupported_asset_type`, `unrelated`, `
 
 ## Transaction Và Reset Demo
 
-PostgreSQL là transactional source of truth cho asset/location/attachment metadata, ticket, preventive plan, checklist template, work order, maintenance log, inventory, users, refresh sessions và audit. Attachment bytes dùng private local storage qua abstraction. Backend có FK, row locks, atomic transactions, idempotency records, generated sequences, optimistic conflicts, RBAC và transaction-coupled audit, nhưng chưa có procurement, production scheduler, SSO/MFA, distributed throttling hoặc operations hardening.
+PostgreSQL là transactional source of truth cho asset/location/attachment metadata, ticket, preventive plan, checklist template, work order, maintenance log, inventory, users, refresh sessions, audit, PM7 jobs/outbox và notifications. Attachment bytes dùng private local storage qua abstraction. Backend có FK, row locks, atomic transactions, idempotency records, generated sequences, optimistic conflicts, RBAC, transaction-coupled audit và durable worker leases, nhưng chưa có procurement, worker high availability, SSO/MFA, distributed throttling hoặc production operations hardening.
 
 Frontend mutation tests vẫn mock HTTP; backend có dedicated PostgreSQL integration tests. Để khôi phục canonical transactional data và analytics sau một demo có write, chạy từ repository root:
 
@@ -232,7 +243,7 @@ python -m src.risk.risk_scoring
 python -m src.features.build_features --input-dir data/analytics_input --analysis maintenance
 ```
 
-`--replace` là destructive với PM4-PM6 transactional demo data, gồm ticket/SLA extensions, plans/templates/work orders và inventory; chỉ dùng khi chủ động reset. Domain seeds là explicit/idempotent và không chạy ở API startup.
+`--replace` là destructive với PM4-PM7 demo data, gồm ticket/SLA extensions, plans/templates/work orders, inventory và PM7 runtime history; fixed job catalog trở về disabled. Chỉ dùng khi chủ động reset. Domain seeds là explicit/idempotent và không chạy ở API startup.
 
 ## Mock Boundary
 
@@ -247,8 +258,8 @@ $env:NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:8000"
 npm run build
 ```
 
-Frontend tests mock HTTP responses và kiểm tra login/session, guards, role-aware actions, asset lifecycle, recurrence/date validation, plan rendering/generation controls, technician WO execution, stale conflict, checklist completion guard, attachment/QR, admin/audit và risk-to-ticket flow. PM5 focused tests kiểm tra ticket/SLA/escalation; PM6 tests kiểm tra strict inventory schemas, Decimal parsing, idempotency headers, KPI/low-stock rendering, opening/transfer/adjust endpoints, reservation release/replace, assigned-technician consumption và read-only RBAC. Browser smoke test vẫn cần FastAPI để xác nhận cookie, CORS credentials, file download/print và dữ liệu hiện tại.
+Frontend tests mock HTTP responses và kiểm tra login/session, guards, role-aware actions, asset lifecycle, recurrence/date validation, plan rendering/generation controls, technician WO execution, stale conflict, checklist completion guard, attachment/QR, admin/audit và risk-to-ticket flow. PM5 focused tests kiểm tra ticket/SLA/escalation; PM6 tests kiểm tra strict inventory schemas và stock actions; PM7 tests kiểm tra notification ownership UX, unread actions, permission-aware related links, fixed job catalog, manual trigger idempotency header và Administrator-only controls. Browser smoke test vẫn cần FastAPI để xác nhận cookie, CORS credentials, file download/print và dữ liệu hiện tại.
 
 ## Security Limitations
 
-Đây là local/internal-pilot UI, chưa có SSO, MFA, password recovery, centralized session management hoặc browser-level penetration test. Attachment storage hiện single-node local, chưa có malware scanner/S3/object backup. QR chưa có camera/browser compatibility matrix và không hỗ trợ offline. Inventory chưa có barcode scan, lot/serial, procurement, automatic replenishment hoặc accounting. Non-local usage bắt buộc HTTPS và backend `Secure` cookie. In-memory access token giảm persistence nhưng XSS trong origin vẫn có thể sử dụng active session; tiếp tục cần CSP, dependency scanning và security review trước deployment thực tế.
+Đây là local/internal-pilot UI, chưa có SSO, MFA, password recovery, centralized session management hoặc browser-level penetration test. Notification chỉ in-app, chưa có external delivery hoặc acknowledgement; worker chưa có HA/load test. Attachment storage hiện single-node local, chưa có malware scanner/S3/object backup. QR chưa có camera/browser compatibility matrix và không hỗ trợ offline. Inventory chưa có barcode scan, lot/serial, procurement, automatic replenishment hoặc accounting. Non-local usage bắt buộc HTTPS và backend `Secure` cookie. In-memory access token giảm persistence nhưng XSS trong origin vẫn có thể sử dụng active session; tiếp tục cần CSP, dependency scanning và security review trước deployment thực tế.

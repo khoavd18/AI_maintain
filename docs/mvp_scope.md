@@ -48,10 +48,11 @@ Synthetic demo scope được khóa ở ba loại asset: `Máy lạnh` (HVAC), `
 - RAG Copilot tìm SOP/checklist liên quan và hiển thị nguồn.
 - Maintenance result có enum rõ ràng, liên kết ticket khi là corrective maintenance và cờ follow-up nhất quán.
 - Asset lifecycle archive/restore không phá history, unified asset timeline và mobile web QR lookup có RBAC.
-- Deterministic preventive work-order generation qua protected API/CLI; không chạy ngầm khi startup và retry không tạo occurrence trùng.
+- Deterministic preventive work-order generation qua protected API/CLI hoặc closed PM7 worker; không chạy khi API startup và retry không tạo occurrence trùng.
 - Corrective work order tạo explicit từ ticket; create/complete/verify work order không tự resolve ticket.
 - Checklist template được version hóa; work order giữ snapshot để lịch sử không đổi.
-- Operational ticket queues, first-response/resolution SLA và idempotent escalation evaluation qua API/CLI explicit; không có notification delivery.
+- Operational ticket queues, first-response/resolution SLA và idempotent escalation evaluation qua API/CLI hoặc closed PM7 worker; selected events tạo owner-isolated in-app notification.
+- Durable PostgreSQL job execution, transactional outbox, bounded retry/dead-letter, worker heartbeat và Administrator operator controls cho bốn existing operations.
 - Inventory overview, part catalogue, stock by location, low-stock queue, movement timeline và named stock actions.
 - `available = on_hand - reserved`; concurrent reserve/issue/return/transfer/adjustment đi qua PostgreSQL transaction và không cho tồn âm.
 
@@ -74,9 +75,10 @@ Synthetic demo scope được khóa ở ba loại asset: `Máy lạnh` (HVAC), `
 - preventive-plan lifecycle, controlled recurrence, standalone work-order state machine, checklist execution, evidence và independent verification;
 - rich ticket intake/priority, named lifecycle actions, business-calendar SLA snapshots, append-only communication/escalation và server-driven queues;
 - spare-part/location lifecycle, immutable movement ledger, work-order reservation/issue/consumption/return và deterministic low-stock visibility;
+- durable background worker, transactional outbox, in-app notification inbox, job history, retry/dead-letter và safe operational health/metrics;
 - Qdrant-based SOP/checklist retrieval và deterministic Copilot response.
 
-Các production concerns ngoài behavior hiện tại gồm notification delivery, production scheduler/worker, SSO/MFA, distributed throttling, key rotation, centralized observability/audit retention, deployment hardening và browser regression testing. Đây không phải current capabilities của internal pilot.
+Các production concerns ngoài behavior hiện tại gồm external notification delivery, worker high availability/autoscaling, SSO/MFA, distributed throttling, key rotation, centralized observability/audit retention, deployment hardening và browser regression testing. Đây không phải current capabilities của internal pilot.
 
 ## Ngoài Phạm Vi
 
@@ -88,14 +90,14 @@ Các production concerns ngoài behavior hiện tại gồm notification deliver
 - Complex approval workflow.
 - Real-time IoT streaming, event processing hoặc live alerting.
 - SSO, MFA, external identity provider hoặc enterprise IAM integration.
-- Hidden startup generation, distributed scheduler, job queue hoặc production scheduling infrastructure. Work order chỉ được generate qua API/CLI explicit trong current milestone.
+- Hidden startup generation, arbitrary scheduler/job queue hoặc workflow engine ngoài closed four-job PM7 worker catalog.
 - Exact failure-time prediction hoặc cam kết thời điểm thiết bị sẽ hỏng.
 - Thay thế CMMS/S-Maintain làm enterprise-wide system of record.
 - Tự động đưa ra quyết định bảo trì cuối cùng mà không có con người xác nhận.
 
 ## Giả Định
 
-- PostgreSQL là primary transactional source cho assets, locations, attachment metadata, tickets/SLA history, preventive plans, checklist templates, work orders, maintenance logs và inventory; attachment bytes ở private storage abstraction.
+- PostgreSQL là primary transactional source cho assets, locations, attachment metadata, tickets/SLA history, preventive plans, checklist templates, work orders, maintenance logs, inventory, scheduled jobs, outbox và notifications; attachment bytes ở private storage abstraction.
 - CSV là synthetic seed, import/export và batch analytics contract; explicit CSV runtime chỉ dành cho isolated fixtures.
 - Dữ liệu được xử lý theo batch; không có yêu cầu near-real-time hoặc real-time.
 - Dữ liệu hiện tại là synthetic và chỉ phục vụ development, demo, test.
@@ -111,6 +113,7 @@ Các production concerns ngoài behavior hiện tại gồm notification deliver
 - Attachment bytes dùng private local single-node storage; PostgreSQL chỉ giữ metadata/checksum. QR chỉ là identifier và vẫn yêu cầu authentication.
 - Inventory balance/state/reorder suggestion do backend derive. Reservation không phải issue; issue không mặc định là consumption; work-order completion không tạo hoặc giải phóng stock movement.
 - `parts_replaced` trong MaintenanceLog chỉ là historical narrative; inventory movement là source of truth cho quantity.
+- Worker chỉ gọi existing canonical services, dùng persisted run-as user và không tự resolve ticket, complete work order, issue stock hoặc tạo purchase order.
 
 ## Tiêu Chí Thành Công
 
@@ -128,7 +131,8 @@ MVP được xem là coherent khi:
 10. Concurrent IDs, duplicate occurrence, invalid FK, rollback và stale write có automated integration tests trên database `_test`.
 11. UI thông báo rõ risk/KPI chỉ cập nhật trong batch tiếp theo.
 12. Authorized user có thể đăng ký/update/archive/restore asset, quản lý attachment, mở QR mobile route và xem de-duplicated history; unauthorized actions bị FastAPI từ chối.
-13. Helpdesk có thể intake/route ticket; technician xử lý ticket được gán; manager theo dõi queues/SLA, comments và escalation mà không có automatic status transition hoặc notification delivery.
+13. Helpdesk có thể intake/route ticket; technician xử lý ticket được gán; manager theo dõi queues/SLA, comments và escalation; selected events tạo in-app notification nhưng không có automatic status transition hoặc external delivery.
 14. Storekeeper có thể receipt/reserve/issue/return/transfer/adjust; technician được gán chỉ có thể xem stock context và ghi permitted consumption cho work order của mình.
 15. Concurrent reservation không oversubscribe available stock; transfer commit hai movement hoặc rollback toàn bộ; history không bị sửa/xóa.
 16. Current features và future work được phân biệt rõ; tests/lint pass và không claim accuracy, ROI hoặc production readiness khi chưa có bằng chứng.
+17. Concurrent worker/outbox claims không double-process, retries/dead letters giữ durable history, notification owner isolation được test và canonical analytics files không đổi trong tests.

@@ -441,6 +441,70 @@ Các event hiện có bao gồm login/session/user; asset/location/lifecycle/att
 
 `GET /audit-logs` trả `{items, page, page_size, total, total_pages}` và hỗ trợ filter theo action, resource type, outcome, actor. Quyền đọc audit không cho quyền thay đổi event.
 
+## PM7 Operations Contract
+
+### Scheduled Jobs
+
+`scheduled_jobs` chỉ có bốn server-seeded keys:
+
+```text
+preventive_generation
+sla_escalation
+analytics_refresh
+inventory_reorder_detection
+```
+
+Minimum fields: `job_key`, `job_type`, `enabled`, `interval_seconds`,
+`timezone`, object `configuration_payload`, `next_run_at`,
+`last_successful_run_at`, `concurrency_policy`, optional active
+`run_as_user_id`, retry/lease settings, timestamps và optimistic `version`.
+`job_type` unique, interval 30-604.800 giây, timezone hiện chỉ
+`Asia/Ho_Chi_Minh`, concurrency policy chỉ `forbid_overlap`, configuration
+payload rỗng theo service contract.
+
+### Job Executions
+
+`job_executions` giữ UUID, job FK, scheduled/available/start/complete timestamps,
+trigger type, optional requester, status, attempt, worker/lease, unique
+idempotency key, bounded summary, safe error, correlation ID và version.
+Statuses:
+
+```text
+pending, running, succeeded, failed, retry_scheduled,
+dead_lettered, cancelled, skipped
+```
+
+Execution history không chứa stack trace hoặc executable payload.
+
+### Transactional Outbox
+
+`outbox_events` giữ event/aggregate identity, allow-listed JSON payload,
+SHA-256 payload hash, available time, processing status, attempts, lease,
+unique idempotency key, processed time và safe error. Payload là JSON object tối
+đa 16 KiB và không chứa credential, reporter contact, attachment path/bytes.
+
+`outbox_delivery_attempts` giữ một append-only row cho mỗi attempt với event FK,
+attempt number, worker, timestamps, status và safe error. Unique
+`(outbox_event_id, attempt_number)`; PostgreSQL trigger chặn update/delete.
+
+### Notifications
+
+`notifications` giữ recipient user FK, type, Vietnamese title/body, optional
+structured content, severity, optional related entity pair, timestamps,
+per-recipient deduplication key, source outbox FK và optimistic version.
+Unique `(recipient_user_id, deduplication_key)`. Read/dismiss state không xóa
+history và API luôn scope current owner.
+
+`notification_alert_states` giữ persistent low-stock recovery cycle theo unique
+`(alert_type, entity_key)`. Nó không phải inventory balance; chỉ quyết định khi
+một shortage đã recover và có thể alert lại.
+
+### Worker Heartbeat
+
+`worker_heartbeats` giữ bounded worker identity, process start/last-seen time,
+status, optional current execution FK và safe metadata object. Heartbeat là
+readiness signal, không phải queue authority hoặc bằng chứng job thành công.
+
 ## Transactional Import Contract
 
 `src/ingestion/load_data.py`:
@@ -450,7 +514,7 @@ Các event hiện có bao gồm login/session/user; asset/location/lifecycle/att
 - chuyển Vietnamese values sang internal codes;
 - gán category theo asset type, lifecycle `active`, ownership `owned`, `installed_at` từ installation date và deterministic QR token;
 - import toàn bộ ba table trong một transaction;
-- không tự tạo plan/template/work order hoặc inventory. `--replace` xóa PM4-PM6 transactional demo rows theo FK order trước khi khôi phục canonical 27/42/86; mỗi domain seed chạy bằng command riêng;
+- không tự tạo plan/template/work order hoặc inventory. `--replace` xóa PM4-PM7 transactional/runtime demo rows theo FK order, disable fixed job catalog rồi khôi phục canonical 27/42/86; mỗi domain seed chạy bằng command riêng;
 - đồng bộ ID sequences theo maximum imported `TCK-*` và `LOG-*`;
 - từ chối database không rỗng nếu không có `--replace`;
 - `--dry-run` không ghi dữ liệu;

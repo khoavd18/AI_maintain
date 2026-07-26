@@ -10,7 +10,7 @@ Project giúp Facility Manager ưu tiên assets cần chú ý, điều phối ti
 
 ## Vì Sao Đây Không Phải Full CMMS?
 
-CMMS là enterprise system rộng cho planning/work orders, approvals, inventory, purchasing, vendor, labor/cost và compliance. Project chỉ giữ focused asset/plan/work-order/ticket/log và spare-parts stock-control workflow để đóng vòng decision support. Nó không có procurement/suppliers, accounting/valuation, complex approvals, notifications hoặc production scheduler và không thay con người quyết định.
+CMMS là enterprise system rộng cho planning/work orders, approvals, inventory, purchasing, vendor, labor/cost và compliance. Project chỉ giữ focused asset/plan/work-order/ticket/log và spare-parts stock-control workflow để đóng vòng decision support. Nó không có procurement/suppliers, accounting/valuation, complex approvals hoặc arbitrary workflow automation; PM7 chỉ thêm closed worker và in-app notifications cho existing operations. Hệ thống không thay con người quyết định.
 
 ## Asset Lifecycle Được Thiết Kế Như Thế Nào?
 
@@ -57,13 +57,13 @@ Không. First-response và resolution clocks được derive từ source timesta
 
 ## Escalation Hoạt Động Thế Nào?
 
-API, CLI và tests gọi cùng một deterministic service để tìm due-soon, response/resolution breach, critical priority và repeated reopen. Dry-run không write; execute dùng unique ticket/rule/occurrence để retry/concurrent call không tạo duplicate; rule code đã phân biệt clock. Milestone hiện chỉ ghi operational event, chưa có scheduler hoặc email/SMS delivery.
+API, CLI, PM7 worker và tests gọi cùng một deterministic service để tìm due-soon, response/resolution breach, critical priority và repeated reopen. Dry-run không write; execute dùng unique ticket/rule/occurrence để retry/concurrent call không tạo duplicate; rule code đã phân biệt clock. Selected event đi qua transactional outbox thành in-app notification; không có email/SMS/push delivery hoặc automatic ticket transition.
 
 ## Recurrence Và Generation Có An Toàn Không?
 
 Current subset chỉ có every N day/week/month/year; raw RRULE bị từ chối. Due dates là business dates theo IANA timezone, execution timestamps là UTC. Ngày 29–31 clamp cuối tháng nhưng giữ original anchor; leap-day có test. Expansion max 256 occurrence và catch-up window 366 ngày; paused backlog bị bỏ khi resume.
 
-Generation được gọi explicit qua API/CLI, không chạy lúc startup. Plan row lock, PostgreSQL sequence và unique `(preventive_plan_id, due_date)` làm retry/concurrent calls idempotent. Future scheduler phải gọi cùng service thay vì copy logic.
+Generation được gọi explicit qua API/CLI hoặc closed PM7 worker, không chạy lúc API startup. Plan row lock, PostgreSQL sequence và unique `(preventive_plan_id, due_date)` làm retry/concurrent calls idempotent. Worker gọi cùng service thay vì copy recurrence/generation logic.
 
 ## Work-Order Completion Khác Verification Thế Nào?
 
@@ -149,11 +149,11 @@ Audit ghi actor, action, resource, request ID, outcome và safe before/after pro
 
 ## Cần Gì Trước Production Deployment?
 
-Cần integration với CMMS/BMS thực, data quality/stock ownership, cycle-count/reconciliation policy, labeled evaluation, risk/RAG calibration, scheduler, SSO/MFA hoặc enterprise IAM, distributed throttling, key rotation, centralized audit retention/observability, secrets management, backup/recovery, deployment automation, security review và field safety validation. Procurement/accounting chỉ nên được thêm bằng bounded integration riêng nếu business scope yêu cầu.
+Cần integration với CMMS/BMS thực, data quality/stock ownership, cycle-count/reconciliation policy, labeled evaluation, risk/RAG calibration, worker high availability/load testing, SSO/MFA hoặc enterprise IAM, distributed throttling, key rotation, centralized audit retention/observability, secrets management, backup/recovery, deployment automation, security review và field safety validation. Procurement/accounting chỉ nên được thêm bằng bounded integration riêng nếu business scope yêu cầu.
 
 ## Tôi Đã Trực Tiếp Thiết Kế Và Implement Gì?
 
-Tôi thiết kế data contract và deterministic generator; xây feature, anomaly, risk và maintenance analytics; triển khai Alembic schema, PostgreSQL repositories/transactions, local auth/RBAC, rotating refresh sessions và transaction-coupled immutable audit; bổ sung rich ticket/SLA/queues, controlled recurrence, standalone work orders và independent verification; xây spare-part/location master, immutable stock ledger, concurrent-safe reservations, issue/consumption/return, atomic transfer, low-stock views và work-order inventory UI; giữ legacy API/analytics contracts ổn định; kết nối Qdrant retrieval và viết concurrency/rollback/security tests.
+Tôi thiết kế data contract và deterministic generator; xây feature, anomaly, risk và maintenance analytics; triển khai Alembic schema, PostgreSQL repositories/transactions, local auth/RBAC, rotating refresh sessions và transaction-coupled immutable audit; bổ sung rich ticket/SLA/queues, controlled recurrence, standalone work orders và independent verification; xây spare-part/location master, immutable stock ledger, concurrent-safe reservations, issue/consumption/return, atomic transfer, low-stock views và work-order inventory UI; thêm PostgreSQL-backed worker, transactional outbox, bounded retry/dead-letter, in-app notification và operator UI; giữ legacy API/analytics contracts ổn định; kết nối Qdrant retrieval và viết concurrency/rollback/security tests.
 
 ## Limitations Cần Nói Thẳng
 
@@ -161,12 +161,12 @@ Tôi thiết kế data contract và deterministic generator; xây feature, anoma
 - Không có labeled failure/retrieval evaluation dataset.
 - Thresholds/weights chưa được hiệu chuẩn trên facility thực.
 - Local auth/audit chưa có SSO, MFA, recovery, distributed throttling, key rotation, external tamper-evident archive hoặc security review.
-- Preventive generation đang là explicit API/CLI, chưa có production scheduler/worker, holiday calendar, notifications hoặc missed-run operations.
-- SLA/escalation evaluation cũng explicit; chưa có notification delivery, field-level encrypted reporter PII hoặc policy approval workflow.
+- PM7 worker mới là internal-pilot PostgreSQL polling process, chưa có HA, autoscaling, load test hoặc production missed-run/on-call operations.
+- Notification chỉ in-app; chưa có external delivery, acknowledgement, field-level encrypted reporter PII hoặc policy approval workflow.
 - Recurrence mới hỗ trợ bounded day/week/month/year; work-order reopen chưa có full maintenance-record amendment/countersign workflow.
 - Transactional API chưa có backup automation hoặc centralized observability.
 - Attachment storage là local single-node, chưa có malware scanning, S3-compatible backend hoặc file/DB reconciliation worker.
 - Inventory chưa có supplier/procurement, lot/serial/expiry, cycle count, barcode scan, automatic replenishment, stock valuation hoặc accounting.
 - QR chưa có offline mode, camera/browser compatibility matrix hoặc fleet label operations.
 - Copilot composer deterministic và extractive, không phải automatic diagnosis.
-- Portfolio MVP không phải production-ready enterprise deployment.
+- Internal-pilot product chưa phải production-ready enterprise deployment.

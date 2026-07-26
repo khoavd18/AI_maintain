@@ -2,7 +2,7 @@
 
 ## Conventions
 
-- `GET /health` là public; business routes cần Bearer access token.
+- Legacy `GET /health` và PM7 `/health/live|ready|worker` là public; business routes cần Bearer access token.
 - Rich product endpoints dùng English code values và trả Vietnamese `*_display` labels.
 - Timestamps là timezone-aware ISO 8601; business due dates là local dates theo domain.
 - Mutating rich endpoints dùng `expected_version` để chống stale write.
@@ -46,13 +46,37 @@ Queue filters: `asset_id`, `status`, `priority`, `category_id`, `support_group_i
 | `GET` | `/ticketing/sla-summary` | Derived active/waiting/critical/due-soon/breached counts |
 | `POST` | `/ticketing/escalations/evaluate` | Dry-run or idempotent event creation |
 
-Escalation execute does not deliver a notification and does not change ticket status.
+Escalation execute không gửi external notification và không đổi ticket status.
+PM7 worker có thể chuyển allow-listed escalation outbox event thành in-app
+notification.
+
+## PM7 Operations Và Notifications
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/notifications` | Personal inbox với unread/severity filters và pagination |
+| `GET` | `/notifications/unread-count` | Current-user unread count |
+| `POST` | `/notifications/{id}/read\|unread\|dismiss` | Versioned owner-only actions |
+| `POST` | `/notifications/read-all` | Mark all current-user notifications read |
+| `GET` | `/operations/jobs` | Closed four-job catalog |
+| `PATCH` | `/operations/jobs/{job_key}` | Administrator enable/disable |
+| `POST` | `/operations/jobs/{job_key}/trigger` | Persist idempotent manual execution |
+| `GET` | `/operations/executions` | Filtered execution history |
+| `POST` | `/operations/executions/{id}/retry` | Persist a new eligible retry |
+| `GET` | `/operations/outbox` | Safe status view without payload |
+| `GET` | `/operations/metrics` | Queue age/counts và last-success summary |
+
+Trigger/retry yêu cầu `Idempotency-Key`; API không chạy job trong request.
+Operator routes chỉ dành cho Administrator. Chi tiết schema và errors:
+[PM7 API contract](api_contract.md).
 
 ## Legacy Compatibility
 
 Existing `/tickets` list/create and `PATCH /tickets/{ticket_id}` remain unchanged for older clients. They expose the original narrow Vietnamese lifecycle and priority values. The adapter delegates storage/rules to PM5 service, but it must not be used to infer the complete rich timeline.
 
-Existing asset, analytics, maintenance, work-order, identity and Copilot contracts remain additive and unchanged through PM6. Full route schemas are generated from Pydantic models in local OpenAPI.
+Existing asset, analytics, maintenance, work-order, identity and Copilot
+contracts remain additive and unchanged through PM7. Full route schemas are
+generated from Pydantic models in local OpenAPI.
 
 ## Spare-Part Master Và Stock
 

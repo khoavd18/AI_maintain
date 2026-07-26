@@ -24,6 +24,15 @@ flowchart LR
     G --> V[Independent verification]
     V --> H[Asset dates + reporting]
     H --> R[Risk update ở batch kế tiếp]
+    J[(PM7 job catalog)] --> K[Worker + leases]
+    K --> P
+    K --> C
+    K --> Q
+    T -. selected events .-> O[(Transactional outbox)]
+    W -. selected events .-> O
+    S -. selected events .-> O
+    O --> K
+    K --> I2[In-app notifications]
     T --> Q[Operational queues + communication]
     Q -. explicit named actions .-> X[Ticket resolution/closure]
     E -. audit .-> L[(Append-only audit log)]
@@ -42,7 +51,7 @@ Mọi bước tương tác qua product UI bắt đầu bằng authenticated user
 | 2. Ticket hoặc preventive plan | Helpdesk, Manager, Chief Engineer | Intake sự cố có category/source/impact/urgency hoặc cấu hình recurring maintenance intent | Reporter và ticket facts; hoặc interval/start/end/timezone/lead/grace/checklist | Ticket service tính priority + snapshot SLA; preventive-plan service giữ schedule intent | Ticket `open/assigned` cùng SLA hoặc plan active/paused/archived | Tách incident khỏi lịch định kỳ; plan không phải executable job |
 | 3. Operational data analysis | Batch pipeline | Tổng hợp reading theo asset và ngày | Energy, runtime, temperature, vibration | `src/features/build_features.py` | Daily asset feature records | Chuyển reading chi tiết thành tín hiệu có thể so sánh và giải thích |
 | 4. Anomaly và risk calculation | Batch pipeline | Tính anomaly score, risk components và final risk | Daily features, ticket counts, overdue days, criticality | `src/models/anomaly_detection.py`; `src/risk/risk_scoring.py` | Anomaly results, risk results, reasons, recommended action | Xếp hạng asset theo mức cần chú ý, không dự đoán chính xác thời điểm hỏng |
-| 5. Occurrence và work-order generation | Chief Engineer | Preview kỳ đến hạn, dry-run rồi trigger generation có chủ đích | Active plan, business date, asset eligibility | Bounded recurrence service; unique `(plan_id, due_date)`; CLI/API cùng service | Preventive work order planned/assigned; report generated/skipped | Phát hành công việc deterministic, retry-safe mà không có scheduler ẩn |
+| 5. Occurrence và work-order generation | Chief Engineer hoặc PM7 worker với persisted run-as actor | Preview/dry-run/trigger explicit hoặc xử lý due job | Active plan, business date, asset eligibility | Bounded recurrence service; unique `(plan_id, due_date)`; CLI/API/worker cùng service | Preventive work order planned/assigned; persisted execution report | Phát hành công việc deterministic, retry-safe qua một canonical path |
 | 6. Manager prioritization và phân công | Facility Manager, Chief Engineer, Helpdesk | Xem risk, operational ticket queues, priority/SLA; assign group/technician hoặc tạo corrective WO | Latest analytics, ticket timeline, SLA snapshot, technician roster | Server-side queues, named ticket actions, work-order service, RBAC và optimistic version | Ticket có owner/first response hoặc work order có source, priority, due date và assignee | Chuyển tín hiệu thành công việc có owner mà không nhập priority tùy ý |
 | 7. Lập nhu cầu vật tư | Chief Engineer | Thêm planned part requirement cho preventive/corrective work order | Part, planned quantity, required-by date, source stock location, notes | Inventory service kiểm tra active part/location và WO state | Requirement `planned` cùng shortage derived | Làm rõ nhu cầu; chưa reserve và chưa đổi stock |
 | 8. Reserve và issue | Storekeeper, Chief Engineer | Reserve/release/replace allocation; Storekeeper issue reserved hoặc unreserved stock | Requirement/version, available stock, idempotency key, actor/reason | Row locks, optimistic version, immutable event/movement, audit | Reserved/available update; issue giảm on-hand và liên kết WO | Chống oversubscription và phân biệt allocation với physical issue |
@@ -52,17 +61,18 @@ Mọi bước tương tác qua product UI bắt đầu bằng authenticated user
 | 12. Technical verification | Chief Engineer, Property Manager | Review checklist/evidence và verify bằng actor khác người thực hiện | Completed WO, maintenance log, version | Self-verification denial; transaction cập nhật WO, asset dates và audit | Work order `verified`; asset last/next maintenance dates được đồng bộ | Phân tách execution khỏi technical acceptance |
 | 13. Ticket decision | Authorized manager/technician | Hold/resume, comment, resolve sau maintenance log, close hoặc reopen có lý do | Ticket state/version, SLA clocks, linked maintenance evidence | Named ticket actions, append-only timeline và transaction-coupled audit | Rich status `waiting/resolved/closed/reopened` và immutable events | Không đóng incident chỉ vì WO tồn tại/complete/verify; lịch sử SLA không bị viết lại |
 | 14. Reporting và risk update | Manager, batch pipeline | Xem inventory operational metrics; export snapshot và chạy analytics | PostgreSQL transactions + generated operational data | Inventory API; snapshot bridge; canonical batch pipeline | Stock views tức thời; KPI/risk ranking của batch mới | Giữ inventory transaction tách khỏi unchanged risk/KPI formulas |
+| 15. Background operations và notification | Administrator, PM7 worker, recipient | Enable supported job, claim/execute/retry; process selected outbox event; đọc personal inbox | Closed job/event catalog, persisted run-as actor, business mutation | PostgreSQL leases, `SKIP LOCKED`, bounded retry/dead-letter, owner-isolated notification API | Execution/outbox history, heartbeat/metrics, in-app notification | Tự động hóa bốn existing operations có kiểm soát mà không tạo business domain hoặc quyết định tự động mới |
 
 ## Trách Nhiệm Quyết Định
 
 - Hệ thống đề xuất thứ tự ưu tiên và tài liệu liên quan.
 - Facility Manager quyết định kế hoạch và mức ưu tiên thực tế.
 - Technician xác nhận điều kiện thiết bị, tuân thủ an toàn và ghi nhận kết quả.
-- Preventive work order chỉ được generate khi actor được ủy quyền gọi API/CLI; không có startup generation, infinite loop hoặc distributed scheduler.
+- Preventive work order chỉ được generate khi actor được ủy quyền gọi API/CLI hoặc canonical PM7 worker dùng persisted run-as actor; không có startup generation hoặc scheduler implementation thứ hai.
 - Completion và verification không tự resolve ticket. Verification không được thực hiện bởi chính technician đã complete theo default rule.
 - Priority ticket chỉ được derive từ impact và urgency ở backend.
 - SLA breach/due-soon là trạng thái tính từ snapshot và timestamps, không phải checkbox có thể sửa.
-- Escalation chỉ tạo operational event qua API/CLI explicit; chưa có email/SMS hoặc background worker.
+- Escalation chạy qua API/CLI hoặc closed PM7 job, giữ append-only event và có thể tạo in-app notification; chưa có email/SMS/push hoặc automatic ticket transition.
 - Storekeeper xác nhận physical receipt/issue/return/transfer/adjustment. Reorder suggestion không tự mua hàng.
 - Work-order completion chỉ hiển thị warning khi còn shortage hoặc unresolved issued stock; không tạo stock action ẩn.
 
@@ -72,7 +82,7 @@ Mọi bước tương tác qua product UI bắt đầu bằng authenticated user
 - **Chief Engineer:** assign/execute/resolve/reopen ticket kỹ thuật; quản lý plan/checklist/generation/work order, thêm part requirement và reserve/release theo technical oversight.
 - **Technician:** chỉ đọc và execute/resolve assigned ticket/work order, ghi checklist/evidence và permitted consumption cho issued stock của work order được gán; không issue/return/adjust hoặc tự verify.
 - **Helpdesk:** intake/assign/acknowledge ticket, trao đổi requester, xem SLA và limited part availability; không thực hiện stock mutation.
-- **Administrator:** quản lý account, role, active state và xem audit; business permissions vẫn đi qua cùng service rules.
+- **Administrator:** quản lý account, role, active state, xem audit và PM7 job operations; background business actions vẫn đi qua cùng service/RBAC rules.
 - **Storekeeper:** quản lý part/location master, receipt, reservation/release, issue, return, transfer, adjustment và inventory evidence; không thay đổi ticket lifecycle hoặc maintenance verification.
 
 Login/session/account, asset/location/lifecycle/attachment, ticket assignment/status/priority và maintenance log đều tạo audit event phù hợp. Audit chỉ hỗ trợ điều tra và traceability; nó không tạo approval workflow.
@@ -91,4 +101,4 @@ planned -> active <-> inactive -> retired
 
 ## Trạng Thái Triển Khai
 
-Các bước asset data, rich ticket intake/priority/SLA/queues/comments/escalation, preventive plan, deterministic generation, standalone work order, spare-part stock control, checklist/evidence execution, MaintenanceLog, independent verification, operational analysis, anomaly/risk calculation, reporting, authenticated workflow, PostgreSQL audit và SOP retrieval đã có implementation. FastAPI phục vụ protected product workflow cho Next.js theo additive contracts. Streamlit chỉ còn public health/status client. Hệ thống vẫn chưa có procurement/suppliers, notification delivery, production scheduler/worker, SSO/MFA, distributed rate limiting, centralized observability, backup automation hoặc deployment hardening.
+Các bước asset data, rich ticket intake/priority/SLA/queues/comments/escalation, preventive plan, deterministic generation, standalone work order, spare-part stock control, checklist/evidence execution, MaintenanceLog, independent verification, operational analysis, anomaly/risk calculation, reporting, authenticated workflow, PostgreSQL audit, durable PM7 worker/outbox/in-app notifications và SOP retrieval đã có implementation. FastAPI phục vụ protected product workflow cho Next.js theo additive contracts. Streamlit chỉ còn public health/status client. Hệ thống vẫn chưa có procurement/suppliers, external notification delivery, worker high availability, SSO/MFA, distributed rate limiting, centralized observability, backup automation hoặc deployment hardening.

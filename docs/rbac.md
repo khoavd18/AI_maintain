@@ -28,6 +28,20 @@
 
 Administrator có toàn bộ permission codes. Bảng thể hiện behavior chính; exact list luôn lấy từ `GET /users/roles`.
 
+## Notifications Và Background Operations
+
+| Capability | Administrator | Property Manager | Chief Engineer | Technician | Helpdesk | Storekeeper |
+|---|---:|---:|---:|---:|---:|---:|
+| Đọc/mutate personal notification | Có | Có | Có | Có | Có | Có |
+| Đọc job/execution/outbox/metrics | Có | Không | Không | Không | Không | Không |
+| Enable/disable supported job | Có | Không | Không | Không | Không | Không |
+| Manual trigger/retry | Có | Không | Không | Không | Không | Không |
+
+Notification permission không cho đọc inbox của user khác. Administrator operator
+permission cũng không tạo generic cross-user notification read API. Enable job
+snapshot Administrator làm run-as actor, nhưng worker vẫn gọi canonical business
+service và chịu permission/resource rules.
+
 ## Work-Order Separation
 
 - Property Manager và Chief Engineer có thể tạo/link corrective work order theo permission hiện có.
@@ -60,7 +74,8 @@ Không role nào được PATCH balance, sửa/xóa movement hoặc tự động
 
 - Role thiếu `ticket_pii:read` nhận contact fields là `null`.
 - Internal comments chỉ trả cho actor có internal-comment permission.
-- Requester-visible comments có thể dùng làm phối hợp, nhưng milestone này không gửi email/SMS.
+- Requester-visible comments có thể dùng làm phối hợp, nhưng PM7 chỉ tạo internal
+  in-app notification và không gửi email/SMS/push.
 - Audit chỉ giữ safe actor/action/resource metadata; reporter contact và secret bị loại.
 
 ## Authorization Failures

@@ -2,7 +2,7 @@
 
 ## Architecture Decision
 
-PostgreSQL là runtime transactional source of truth cho asset, hierarchical location, attachment metadata, rich ticket/SLA history, preventive maintenance plan, checklist template, standalone work order, maintenance log, spare-part inventory, user identity, refresh session và audit log. FastAPI vẫn là serving và authorization boundary duy nhất. Product Milestone 6 bổ sung stock control theo additive API contracts; legacy asset/ticket/log, PM4/PM5, analytics và RAG behavior vẫn được giữ.
+PostgreSQL là runtime transactional source of truth cho asset, hierarchical location, attachment metadata, rich ticket/SLA history, preventive maintenance plan, checklist template, standalone work order, maintenance log, spare-part inventory, user identity, refresh session, audit log, scheduled job, outbox event và in-app notification. FastAPI vẫn là serving và authorization boundary duy nhất. Product Milestone 7 bổ sung một worker độc lập, PostgreSQL-backed; legacy API, PM1-PM6 domain behavior, analytics formulas và RAG behavior vẫn được giữ.
 
 Analytics vẫn **batch-first**. CSV không còn là mutable runtime source of truth; nó giữ bốn vai trò rõ ràng:
 
@@ -11,7 +11,7 @@ Analytics vẫn **batch-first**. CSV không còn là mutable runtime source of t
 - snapshot từ PostgreSQL sang input contract của batch analytics;
 - lưu processed feature, anomaly, risk, preventive, recurring issue và KPI outputs.
 
-Qdrant chỉ lưu vector chunks cho RAG retrieval. Kiến trúc này là bước hướng tới internal pilot, chưa phải production-ready architecture.
+Qdrant chỉ lưu vector chunks cho RAG retrieval. PM7 tạo nền tảng vận hành cho internal pilot, chưa phải production-ready architecture.
 
 ## System Map
 
@@ -20,10 +20,12 @@ flowchart LR
     Seed[Canonical synthetic CSV seed<br/>27 assets, 42 tickets, 86 logs]
     Migration[Alembic migrations]
     Import[Validated idempotent import]
-    DB[(PostgreSQL<br/>assets + tickets + plans + work orders<br/>inventory + logs + identity + audit)]
+    DB[(PostgreSQL<br/>business state + identity + audit<br/>jobs + outbox + notifications)]
     Files[(Private local attachment bytes)]
     Repo[Repository interfaces<br/>PostgreSQL implementation]
     Service[Business services<br/>asset + ticket/SLA + maintenance + inventory]
+    Ops[Operations service<br/>closed job + event catalogs]
+    Worker[Independent PM7 worker<br/>bounded polling + leases]
     API[FastAPI<br/>unchanged contracts]
     Streamlit[Streamlit legacy health client]
     Next[Next.js authenticated frontend]
@@ -37,7 +39,13 @@ flowchart LR
     Service <--> API
     API -->|public health only| Streamlit
     API <--> Next
-    CLI[Explicit generation, escalation<br/>và inventory seed CLI] --> Service
+    CLI[Explicit domain and operator CLI] --> Service
+    CLI --> Ops
+    Worker <--> Ops
+    Ops <--> DB
+    Service -->|business state + outbox<br/>same transaction| DB
+    Worker -->|invoke existing services only| Service
+    Worker -->|create in-app notifications| DB
     Service -->|deterministic generation| WO[Plan occurrence -> work order]
     Next -->|opaque authenticated lookup| QR[Mobile web QR route]
 
@@ -69,12 +77,47 @@ flowchart LR
 1. Alembic tạo và version schema; API không gọi `metadata.create_all()`.
 2. `src/ingestion/load_data.py` validate full synthetic dataset, tạo deterministic location hierarchy/defaults rồi import assets, tickets và logs trong một transaction.
 3. `src/repositories/contracts.py` định nghĩa storage-neutral operations.
-4. `src/repositories/postgres.py`, `postgres_assets.py`, `postgres_tickets.py`, `postgres_maintenance.py` và `postgres_inventory.py` thực thi từng bounded context, dùng PostgreSQL constraints/sequence/row locks và không được gọi trực tiếp từ routes.
-5. `src/api/services.py`, `src/asset_management/service.py`, `src/ticket_management/service.py`, `src/maintenance_management/service.py` và `src/inventory_management/service.py` giữ lifecycle, priority/SLA, chronology, recurrence, stock-control, completion và verification rules.
+4. `src/repositories/postgres.py`, `postgres_assets.py`, `postgres_tickets.py`, `postgres_maintenance.py`, `postgres_inventory.py` và `postgres_operations.py` thực thi từng bounded context, dùng PostgreSQL constraints/sequence/row locks và không được gọi trực tiếp từ routes.
+5. `src/api/services.py`, các canonical domain services và `src/operations/service.py` giữ lifecycle, priority/SLA, chronology, recurrence, stock-control, completion, verification và operator rules.
 6. FastAPI routes chỉ phụ thuộc service; route không chọn storage backend.
 7. API startup kiểm tra PostgreSQL connection và migration tables. Nếu PostgreSQL không sẵn sàng, startup fail rõ ràng và không fallback sang mutable CSV.
 
 `src/repositories/csv.py` cùng `src/api/csv_repository.py` được giữ làm compatibility adapter cho isolated tests và fixtures. Adapter vẫn có atomic file replacement nhưng không phải normal product mode.
+
+## Background Jobs, Outbox Và Notifications
+
+```mermaid
+sequenceDiagram
+    participant API as FastAPI/domain service
+    participant DB as PostgreSQL
+    participant Worker as PM7 worker
+    participant User as In-app recipient
+
+    API->>DB: Commit business mutation + allow-listed outbox event
+    Worker->>DB: Claim due execution/event FOR UPDATE SKIP LOCKED
+    Worker->>DB: Renew lease while long job runs
+    Worker->>API: Invoke existing canonical service
+    Worker->>DB: Persist summary or retry/dead-letter state
+    Worker->>DB: Resolve recipients + create deduplicated notifications
+    User->>DB: Read/mutate only own notification via FastAPI
+```
+
+PM7 có một closed job catalog, không nhận arbitrary code:
+
+| Job key | Default interval | Max attempts | Existing operation reused |
+|---|---:|---:|---|
+| `preventive_generation` | 3.600 giây | 3 | Canonical preventive generation service |
+| `sla_escalation` | 300 giây | 3 | Ticket SLA/escalation service |
+| `analytics_refresh` | 86.400 giây | 2 | Snapshot + canonical batch analytics |
+| `inventory_reorder_detection` | 900 giây | 3 | Canonical inventory balance/reorder rules |
+
+Các job được seed ở trạng thái disabled. Administrator enable một job bằng optimistic version; actor đó được snapshot làm `run_as_user_id`. Scheduled execution của job disabled không được claim. Manual trigger/retry tạo persisted execution bình thường, cần caller-stable `Idempotency-Key` và không chạy code trong API process.
+
+Worker claim bằng `FOR UPDATE SKIP LOCKED`, áp dụng `forbid_overlap`, bounded batch/polling, lease renewal và expired-lease recovery. Failure dùng exponential backoff có giới hạn; hết `max_attempts` chuyển execution sang `dead_lettered`. Outbox có retry riêng, tối đa 5 attempts, và append-only delivery-attempt history. Operator retry tạo execution mới, không sửa lịch sử dead-letter.
+
+Event catalog chỉ chứa payload fields tối thiểu, giới hạn 16 KiB và từ chối credential, token, reporter contact, storage path hoặc file bytes. Recipient được resolve từ active user, existing role và explicit assignment. Notification chỉ là in-app record; không có email, SMS, push hoặc webhook.
+
+Chi tiết: [Background jobs](background_jobs.md), [Notifications](notifications.md) và [Operations runbook](operations_runbook.md).
 
 ## Authentication Và Session Flow
 
@@ -218,7 +261,7 @@ FastAPI kiểm tra permission trước khi vào service; service tiếp tục ki
 - Business calendar giữ IANA timezone, same-day periods và holidays; policy giữ effective range, pause behavior và một target cho mỗi priority.
 - `ticket_sla_states` snapshot policy targets và calendar khi intake để policy update không sửa lịch sử. First-response và resolution state luôn derive từ timestamps/snapshot, không có editable breach flag.
 - `ticket_sla_events`, `ticket_comments` và `ticket_escalation_events` là append-only qua PostgreSQL triggers.
-- Escalation uniqueness theo ticket/rule/occurrence làm API/CLI retry idempotent; rule code phân biệt first-response và resolution. Event không phải notification delivery và không đổi ticket status.
+- Escalation uniqueness theo ticket/rule/occurrence làm API/CLI/worker retry idempotent; rule code phân biệt first-response và resolution. Domain event không tự đổi ticket status; PM7 outbox consumer chỉ tạo in-app notification theo explicit catalog.
 - Chi tiết lifecycle, matrix và clock semantics: [Ticket Operations Và SLA](ticket_operations.md).
 
 ### MaintenanceLog
@@ -380,7 +423,7 @@ flowchart LR
 - Month-end giữ original day anchor và clamp khi tháng ngắn; leap-day clamp 28/02 ở năm không nhuận.
 - `local_timezone` phải là IANA zone; due date là business date, execution timestamps là UTC và không có silent conversion.
 - Expansion có max 256 occurrence/request và catch-up window 366 ngày. Pause không phát hành WO; resume bỏ backlog paused và derive kỳ tiếp theo từ resume date.
-- Generation chỉ chạy qua protected `POST /maintenance-plans/generate`, dry-run endpoint hoặc `src.maintenance_management.cli`. API startup không generate, không có loop/scheduler/worker ẩn.
+- Generation chỉ chạy qua protected `POST /maintenance-plans/generate`, dry-run endpoint, `src.maintenance_management.cli` hoặc canonical PM7 worker gọi cùng service. API startup không generate và không có implementation recurrence/generation thứ hai.
 
 ## Work-Order State Machine
 
@@ -427,7 +470,7 @@ PostgreSQL transaction data
         -> FastAPI reads next batch
 ```
 
-Ghi ticket hoặc log không tự chạy pipeline. UI phải tiếp tục thông báo Risk Score và KPI chỉ cập nhật trong batch tiếp theo.
+Ghi ticket hoặc log không tự chạy pipeline. Analytics chỉ được làm mới khi operator trigger hoặc job `analytics_refresh` đến hạn; UI phải tiếp tục thông báo Risk Score và KPI chỉ cập nhật trong batch tiếp theo.
 
 ## Canonical Analytics Implementations
 
@@ -466,9 +509,10 @@ Không có automatic fallback. `STORAGE_BACKEND=postgresql` cùng database unava
 
 - Local authentication/RBAC/audit phù hợp internal pilot nhưng chưa có SSO, MFA, recovery, signing-key rotation, external audit sink hoặc multi-tenancy.
 - Basic login limiter chỉ nằm trong một API process; chưa có distributed throttling hoặc lockout operations workflow.
-- Chưa có production scheduler/worker cho preventive generation, snapshot hoặc analytics batch; operator gọi API/CLI explicit.
-- SLA/escalation evaluation cũng chỉ chạy bằng API/CLI explicit; chưa có notification delivery hoặc background evaluator.
-- Chưa có production backup automation, failover, observability hoặc connection-pool tuning theo tải thật.
+- Worker hiện là PostgreSQL polling process cho internal pilot; chưa có high availability, autoscaling, load test, queue partitioning hoặc distributed operations rehearsal.
+- Notification chỉ có in-app inbox; chưa có external delivery, user preference, digest hoặc delivery acknowledgement.
+- Health/metrics là safe operational JSON và structured logs cục bộ; chưa có centralized metrics/log aggregation, alert routing hoặc on-call integration.
+- Chưa có production backup automation, point-in-time recovery rehearsal, failover hoặc connection-pool tuning theo tải thật.
 - CSV analytics snapshot replacement chưa phải distributed transaction với PostgreSQL.
 - Local attachment storage chỉ phù hợp một API node; chưa có S3-compatible implementation, malware scanner, object lifecycle/backup hoặc reconciler cho cleanup pending.
 - QR lookup đã authenticated nhưng chưa có camera/browser compatibility matrix, label fleet management hoặc offline scan.
@@ -480,4 +524,4 @@ Không có automatic fallback. `STORAGE_BACKEND=postgresql` cùng database unava
 
 ## Human-In-The-Loop Boundary
 
-Risk Score là tín hiệu prioritization, không phải calibrated failure probability. Manager quyết định ưu tiên, lịch và phân công; Storekeeper chịu trách nhiệm kiểm đếm và stock action; technician xác nhận hiện trường, usage và maintenance result; authorized reviewer xác minh độc lập. Hệ thống có thể generate work order deterministic khi người dùng gọi explicit API/CLI, nhưng không tự mua hàng, tự issue/consume stock, chạy scheduler, phê duyệt, resolve ticket, điều khiển thiết bị hoặc dự đoán chính xác thời điểm hỏng.
+Risk Score là tín hiệu prioritization, không phải calibrated failure probability. Manager quyết định ưu tiên, lịch và phân công; Storekeeper chịu trách nhiệm kiểm đếm và stock action; technician xác nhận hiện trường, usage và maintenance result; authorized reviewer xác minh độc lập. PM7 worker chỉ gọi bốn existing deterministic operations và tạo in-app records; nó không tự mua hàng, tự issue/consume stock, tự phê duyệt/resolve ticket, điều khiển thiết bị hoặc dự đoán chính xác thời điểm hỏng.

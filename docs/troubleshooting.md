@@ -74,7 +74,10 @@ Chỉ khi chủ động reset demo về canonical 27/42/86:
 python -m src.ingestion.load_data --replace
 ```
 
-`--replace` xóa và import lại ba transactional tables trong cùng database transaction. Nó không xóa processed analytics hoặc Qdrant collection.
+`--replace` xóa PM4-PM7 development/runtime records theo dependency order,
+disable fixed job catalog và import lại canonical `27/42/86` trong cùng database
+transaction. Nó không xóa processed analytics, Qdrant collection hoặc private
+attachment bytes.
 
 ## Import Vi Phạm Constraint
 
@@ -222,18 +225,101 @@ Kiểm tra:
 
 Không sửa deadline, `breached` hoặc `due_soon` trực tiếp trong database/client. Nếu calendar/policy update trả `409`, tải version mới nhất rồi review trước khi gửi lại.
 
-## Escalation Dry-Run Có Candidate Nhưng Không Có Notification
+## Escalation Có Event Nhưng Chưa Có Notification
 
-Đây là behavior đúng. PM5 chỉ ghi append-only escalation event:
+PM5 action ghi append-only escalation event. PM7 còn cần outbox event được worker
+claim thành công:
 
 ```powershell
 python -m src.ticket_management.cli evaluate-escalations --dry-run
 python -m src.ticket_management.cli evaluate-escalations
 ```
 
-Dry-run không write. Execute chạy lại không tạo duplicate cùng ticket/rule/occurrence; rule code đã phân biệt first-response và resolution. Milestone này không có email/SMS, notification worker hoặc startup scheduler.
+Dry-run không write. Execute chạy lại không tạo duplicate cùng
+ticket/rule/occurrence; rule code đã phân biệt first-response và resolution.
+Kiểm tra worker heartbeat, `/operations/outbox` và recipient active state.
+Notification chỉ là in-app; không có email/SMS/push.
 
 Nếu execute trả `403`, actor thiếu `escalations:execute`. Nếu không có candidate, kiểm tra `as_of`, ticket active status, priority, reopen count và derived SLA state.
+
+## Worker Missing Hoặc Stale
+
+Triệu chứng: `/health/worker` trả `503`, `/health/ready` báo `degraded`, hoặc
+notification/outbox không tiến triển.
+
+```powershell
+python -m alembic current
+python -m src.operations.worker --once --worker-id diagnostic-worker
+python -m src.operations.cli status
+```
+
+Kiểm tra PostgreSQL, revision `20260726_0007`, active run-as user và worker logs.
+Nếu chạy Docker:
+
+```powershell
+docker compose --profile worker ps
+docker compose --profile worker logs worker
+```
+
+Worker recover expired leases ở iteration kế tiếp. Không update lease/status bằng
+SQL và không chạy một scheduler implementation khác để bù.
+
+## Job Không Chạy
+
+- Job mới được seed disabled; Administrator phải enable với latest
+  `expected_version`.
+- Enable snapshots Administrator thành run-as user; account đó phải còn active.
+- Scheduled job disabled trước claim sẽ bị `cancelled`.
+- `forbid_overlap` tạo `skipped` occurrence khi cùng job còn active.
+- Manual trigger cần caller-stable `Idempotency-Key`; API chỉ tạo execution,
+  worker mới thực thi.
+- `retry_scheduled` chỉ claim sau `available_after`.
+
+Xem `/admin/jobs` hoặc:
+
+```powershell
+python -m src.operations.cli status
+```
+
+## Job Dead-Lettered
+
+Đọc safe error code, correlation ID và structured worker log. Khắc phục database,
+source/output path, active run-as actor hoặc domain validation trước khi retry.
+
+```powershell
+python -m src.operations.cli retry <EXECUTION_UUID> `
+  --idempotency-key "retry-<EXECUTION_UUID>-01" `
+  --actor-username admin.demo
+```
+
+Retry tạo execution mới, không sửa execution cũ. Outbox dead-letter không có
+generic redrive API trong PM7; giữ lịch sử, điều tra nguyên nhân và theo
+[operations runbook](operations_runbook.md).
+
+## Notification Không Hiển Thị
+
+- User chỉ đọc notification của chính mình; cross-user ID trả `404`.
+- Recipient phải active và khớp event role/assignment tại thời điểm delivery.
+- Dismissed item không nằm trong default quick list.
+- Worker retry không tạo duplicate nhờ per-recipient deduplication key.
+- Low-stock chỉ alert một lần trong active cycle; phải recover rồi thấp lại mới
+  có cycle mới.
+- Related link vẫn chịu destination permission; notification không cấp quyền.
+
+## Analytics Refresh Failure
+
+Job dùng staging và atomic publication. Failure phải giữ output hợp lệ gần nhất.
+Kiểm tra:
+
+```dotenv
+ANALYTICS_SOURCE_DIR=data/raw
+ANALYTICS_PROCESSED_DIR=data/processed
+```
+
+Target không được là repository/filesystem root hoặc trùng source. Tests phải
+dùng temporary target; không chạy PM7 analytics test vào canonical
+`data/processed`. Terminal failure sau exhausted attempts tạo critical in-app
+notification cho Administrator/Property Manager.
 
 ## Reporter PII Hoặc Comment Bị Ẩn
 
@@ -345,7 +431,7 @@ python -m alembic upgrade head
 python -m alembic check
 ```
 
-Canonical head cho Product Milestone 4 là `20260720_0004`. API không tự `create_all`; không sửa table thủ công. Với database test, tên phải kết thúc `_test`.
+Canonical head hiện tại là `20260726_0007`. API không tự `create_all`; không sửa table thủ công. Với database test, tên phải kết thúc `_test`.
 
 ## Không Có Preventive Plan Sau Canonical Import
 

@@ -15,6 +15,22 @@ Human facility managers and technicians remain responsible for prioritization, s
 - Keep CSV for synthetic generation, explicit seed/import, database-to-analytics snapshots, canonical demo reset, and batch analytics contracts.
 - At the snapshot boundary, preserve the validated legacy interval contract: project asset/log `next_maintenance_date` from `last_maintenance_date` or `maintenance_date` plus `maintenance_interval_days`. Keep real plan-derived dates in PostgreSQL plans/work orders; do not weaken legacy analytics validation.
 - Keep analytics batch-first. PostgreSQL transactional writes must not trigger or imitate immediate Risk Score/KPI recalculation.
+- Keep `src/operations/worker.py` as the only background worker and
+  `src/operations/domain.py` as the closed scheduled-job and notification-event
+  catalog. PostgreSQL job, lease, outbox, delivery-attempt, notification, and
+  heartbeat records are authoritative; never replace them with in-memory queue
+  state.
+- Background work may invoke only the four existing PM7 operations:
+  preventive generation, ticket SLA/escalation evaluation, batch analytics
+  refresh, and inventory reorder detection. Do not accept arbitrary cron,
+  Python, shell, SQL, module, function, or workflow definitions.
+- Write selected outbox events in the same PostgreSQL transaction as their
+  business mutation. Claim jobs and outbox events with bounded leases and
+  concurrency-safe row locking; retries and dead-letter state must remain
+  durable and operator-visible.
+- Keep notifications in-app only. Notification payloads must use the explicit
+  allow-listed catalog, minimum business context, owner-isolated reads, and
+  existing RBAC. Do not add email, SMS, push, webhooks, or external delivery.
 - Keep FastAPI as the serving boundary. Streamlit must consume FastAPI and must not read raw or processed CSV files directly.
 - Select storage in the service/repository factory, never in route functions. Do not silently fall back from unavailable PostgreSQL to mutable CSV storage.
 - Keep the CSV repository only as an explicit compatibility adapter for isolated tests and demo fixtures.
@@ -27,7 +43,10 @@ Human facility managers and technicians remain responsible for prioritization, s
 - Keep `PreventiveMaintenancePlan`, `WorkOrder`, `ChecklistTemplate`, `WorkOrderChecklistItem`, `MaintenanceLog`, and `Ticket` as separate concepts. Never merge them into a generic maintenance record.
 - Support only bounded interval recurrence in days, weeks, months, and years. Due dates are local business dates under an explicit IANA timezone; execution timestamps are UTC. Overdue is derived from due date and grace period, never an editable state.
 - Preserve the documented month-end anchor, leap-year behavior, 366-day catch-up bound, and paused-backlog skip policy. Schedule changes affect only ungenerated occurrences.
-- Generate preventive work orders only through the explicit service invoked by protected API or CLI commands. Do not generate at application startup, add a hidden scheduler loop, or duplicate generation logic in a future scheduler.
+- Generate preventive work orders only through the explicit service invoked by
+  protected API/CLI commands or the canonical PM7 worker. Do not generate at
+  application startup, add another scheduler loop, or duplicate generation
+  logic.
 - Keep work-order numbers and plan occurrences concurrency-safe and idempotent. A generated `(preventive_plan_id, due_date)` pair is unique.
 - Keep checklist template versions immutable. Work orders execute a snapshot, so later versions or archived templates never alter history.
 - Enforce the canonical work-order state machine in the service. Completion creates or links exactly one `MaintenanceLog`; independent verification by a different authorized actor updates asset maintenance dates. Verified records are immutable without a separately authorized future correction design.
@@ -46,7 +65,11 @@ Human facility managers and technicians remain responsible for prioritization, s
 - Require caller-stable idempotency keys for stock-changing commands. Replaying the same command returns its committed result; reusing a key with a different payload is a conflict.
 - Keep transfer-out and transfer-in atomic. Never expose a generic balance PATCH endpoint.
 - Archived parts and inactive/archived stock locations remain visible in history but cannot be used for new receipt, reservation, issue, or transfer operations except an explicitly supported return to a valid active location.
-- Derive low-stock state and reorder suggestion on the server from effective part/location thresholds and available quantity. Do not create purchase orders, supplier actions, notifications, or inventory optimization.
+- Derive low-stock state and reorder suggestion on the server from effective
+  part/location thresholds and available quantity. PM7 may create only the
+  deduplicated in-app low-stock notification from a persisted detection cycle;
+  do not create purchase orders, supplier actions, external notifications, or
+  inventory optimization.
 - Reuse `AttachmentStorage` for inventory evidence and preserve authorization, signature/MIME/extension validation, generated keys, checksums, soft deletion, and path secrecy.
 
 ## Ticket Operations And SLA
@@ -59,7 +82,10 @@ Human facility managers and technicians remain responsible for prioritization, s
 - Keep working periods same-day, timezone-aware, non-overlapping, and explicitly versioned. Waiting pauses require a reason; reopen creates a new SLA occurrence without erasing prior events.
 - Keep ticket comments, SLA events, and escalation events append-only. Preserve reporter PII redaction and visibility permissions; do not place reporter contact details in audit payloads.
 - Evaluate escalation only through the explicit service used by API, CLI, and tests. Dry-run must not write; execution must remain idempotent through the `(ticket_id, rule_code, occurrence_number)` uniqueness boundary. Each rule code already identifies its clock where applicable.
-- Do not add a hidden escalation scheduler, notification worker, email/SMS sender, or automatic ticket transition. Escalation events are operational records, not delivered notifications.
+- SLA/escalation evaluation may run only through the existing explicit API/CLI
+  service or the canonical PM7 worker. It may create cataloged in-app
+  notifications but must never add another hidden scheduler, email/SMS sender,
+  or automatic ticket transition.
 - Keep corrective work-order creation/linkage separate from ticket status. Work-order completion or verification never resolves or closes its source ticket.
 
 ## Asset Lifecycle And Files
@@ -95,7 +121,9 @@ Do not add or propose implementation work for the following areas unless the rep
 - real-time IoT streaming or live event processing;
 - complex approval workflows;
 - SSO, MFA, external identity providers, or enterprise IAM integration;
-- hidden or distributed scheduling, job queues, or startup work-order generation;
+- any scheduler, job queue, workflow engine, or startup work-order generation
+  outside the canonical PostgreSQL-backed PM7 worker and its closed four-job
+  catalog;
 - exact failure-time prediction.
 
 Historical `parts_replaced` data may remain in maintenance logs, but it must not duplicate or replace canonical work-order inventory movements.
