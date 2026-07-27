@@ -16,6 +16,7 @@ from fastapi import (
     status,
 )
 
+from src.config.settings import get_settings
 from src.operations.schemas import (
     JobEnabledRequest,
     JobExecutionPage,
@@ -78,8 +79,13 @@ IdempotencyKey = Annotated[
     response_model=LivenessResponse,
     tags=["system"],
 )
-def liveness() -> dict[str, str]:
-    return {"status": "alive"}
+def liveness() -> dict[str, object]:
+    settings = get_settings()
+    return {
+        "status": "alive",
+        "release": settings.release_identity.as_dict(),
+        "test_database_fingerprint": settings.test_database_fingerprint,
+    }
 
 
 @router.get(

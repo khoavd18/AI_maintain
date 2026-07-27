@@ -20,6 +20,7 @@ from src.operations.metrics import api_request_metrics
 from src.operations.routes import router as operations_router
 from src.operations.service import build_operations_service
 from src.repositories.contracts import RepositoryError
+from src.release import APPLICATION_VERSION
 from src.security.routes import router as security_router
 from src.ticket_management.routes import router as ticket_operations_router
 
@@ -51,7 +52,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         description="AI decision-support layer for predictive maintenance workflows.",
-        version="0.1.0",
+        version=APPLICATION_VERSION,
         lifespan=_lifespan,
         docs_url="/docs" if settings.docs_enabled else None,
         redoc_url="/redoc" if settings.docs_enabled else None,

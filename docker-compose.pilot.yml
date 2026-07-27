@@ -1,0 +1,217 @@
+name: ai-maintenance-copilot-pilot
+
+x-python-build: &python-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    RELEASE_IDENTIFIER: ${RELEASE_IDENTIFIER:?RELEASE_IDENTIFIER is required}
+    RELEASE_GIT_COMMIT: ${RELEASE_GIT_COMMIT:?RELEASE_GIT_COMMIT is required}
+
+x-app-environment: &app-environment
+  APP_ENVIRONMENT: ${APP_ENVIRONMENT:?APP_ENVIRONMENT is required}
+  STORAGE_BACKEND: ${STORAGE_BACKEND:?STORAGE_BACKEND is required}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  TOKEN_SIGNING_SECRET: ${TOKEN_SIGNING_SECRET:?TOKEN_SIGNING_SECRET is required}
+  TOKEN_SIGNING_PREVIOUS_SECRET: ${TOKEN_SIGNING_PREVIOUS_SECRET:-}
+  ACCESS_TOKEN_LIFETIME_MINUTES: ${ACCESS_TOKEN_LIFETIME_MINUTES:?ACCESS_TOKEN_LIFETIME_MINUTES is required}
+  REFRESH_SESSION_LIFETIME_DAYS: ${REFRESH_SESSION_LIFETIME_DAYS:?REFRESH_SESSION_LIFETIME_DAYS is required}
+  REFRESH_COOKIE_NAME: ${REFRESH_COOKIE_NAME:?REFRESH_COOKIE_NAME is required}
+  CSRF_COOKIE_NAME: ${CSRF_COOKIE_NAME:?CSRF_COOKIE_NAME is required}
+  AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?AUTH_COOKIE_SECURE is required}
+  AUTH_COOKIE_SAMESITE: ${AUTH_COOKIE_SAMESITE:?AUTH_COOKIE_SAMESITE is required}
+  LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:?LOGIN_RATE_LIMIT_ATTEMPTS is required}
+  LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${LOGIN_RATE_LIMIT_WINDOW_SECONDS:?LOGIN_RATE_LIMIT_WINDOW_SECONDS is required}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required}
+  TRUSTED_HOSTS: ${TRUSTED_HOSTS:?TRUSTED_HOSTS is required}
+  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?FRONTEND_BASE_URL is required}
+  QDRANT_URL: ${QDRANT_URL:?QDRANT_URL is required}
+  QDRANT_COLLECTION: ${QDRANT_COLLECTION:?QDRANT_COLLECTION is required}
+  EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:?EMBEDDING_MODEL_NAME is required}
+  ATTACHMENT_STORAGE_BACKEND: ${ATTACHMENT_STORAGE_BACKEND:?ATTACHMENT_STORAGE_BACKEND is required}
+  ATTACHMENT_STORAGE_ROOT: ${ATTACHMENT_STORAGE_ROOT:?ATTACHMENT_STORAGE_ROOT is required}
+  ATTACHMENT_MAX_SIZE_BYTES: ${ATTACHMENT_MAX_SIZE_BYTES:?ATTACHMENT_MAX_SIZE_BYTES is required}
+  ANALYTICS_SOURCE_DIR: ${ANALYTICS_SOURCE_DIR:?ANALYTICS_SOURCE_DIR is required}
+  ANALYTICS_PROCESSED_DIR: ${ANALYTICS_PROCESSED_DIR:?ANALYTICS_PROCESSED_DIR is required}
+  LOG_LEVEL: ${LOG_LEVEL:?LOG_LEVEL is required}
+  DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:?DATABASE_CONNECT_TIMEOUT_SECONDS is required}
+  DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:?DATABASE_POOL_SIZE is required}
+  DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:?DATABASE_MAX_OVERFLOW is required}
+  DATABASE_POOL_TIMEOUT_SECONDS: ${DATABASE_POOL_TIMEOUT_SECONDS:?DATABASE_POOL_TIMEOUT_SECONDS is required}
+  DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:?DATABASE_STATEMENT_TIMEOUT_SECONDS is required}
+  DATABASE_LOCK_TIMEOUT_SECONDS: ${DATABASE_LOCK_TIMEOUT_SECONDS:?DATABASE_LOCK_TIMEOUT_SECONDS is required}
+  DATABASE_IDLE_TRANSACTION_TIMEOUT_SECONDS: ${DATABASE_IDLE_TRANSACTION_TIMEOUT_SECONDS:?DATABASE_IDLE_TRANSACTION_TIMEOUT_SECONDS is required}
+  WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:?WORKER_POLL_INTERVAL_SECONDS is required}
+  WORKER_HEARTBEAT_INTERVAL_SECONDS: ${WORKER_HEARTBEAT_INTERVAL_SECONDS:?WORKER_HEARTBEAT_INTERVAL_SECONDS is required}
+  WORKER_HEARTBEAT_STALE_SECONDS: ${WORKER_HEARTBEAT_STALE_SECONDS:?WORKER_HEARTBEAT_STALE_SECONDS is required}
+  WORKER_OUTBOX_LEASE_SECONDS: ${WORKER_OUTBOX_LEASE_SECONDS:?WORKER_OUTBOX_LEASE_SECONDS is required}
+  WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:?WORKER_BATCH_SIZE is required}
+  OPERATIONAL_OUTBOX_AGE_ALERT_SECONDS: ${OPERATIONAL_OUTBOX_AGE_ALERT_SECONDS:?OPERATIONAL_OUTBOX_AGE_ALERT_SECONDS is required}
+  OPERATIONAL_REPEATED_JOB_FAILURE_THRESHOLD: ${OPERATIONAL_REPEATED_JOB_FAILURE_THRESHOLD:?OPERATIONAL_REPEATED_JOB_FAILURE_THRESHOLD is required}
+  OPERATIONAL_ANALYTICS_STALE_SECONDS: ${OPERATIONAL_ANALYTICS_STALE_SECONDS:?OPERATIONAL_ANALYTICS_STALE_SECONDS is required}
+  OPERATIONAL_BACKUP_OVERDUE_SECONDS: ${OPERATIONAL_BACKUP_OVERDUE_SECONDS:?OPERATIONAL_BACKUP_OVERDUE_SECONDS is required}
+  OPERATIONAL_DISK_WARNING_FREE_PERCENT: ${OPERATIONAL_DISK_WARNING_FREE_PERCENT:?OPERATIONAL_DISK_WARNING_FREE_PERCENT is required}
+  OPERATIONAL_DISK_CRITICAL_FREE_PERCENT: ${OPERATIONAL_DISK_CRITICAL_FREE_PERCENT:?OPERATIONAL_DISK_CRITICAL_FREE_PERCENT is required}
+  RELEASE_IDENTIFIER: ${RELEASE_IDENTIFIER:?RELEASE_IDENTIFIER is required}
+  RELEASE_GIT_COMMIT: ${RELEASE_GIT_COMMIT:?RELEASE_GIT_COMMIT is required}
+  RELEASE_GIT_TAG: ${RELEASE_GIT_TAG:?RELEASE_GIT_TAG is required}
+  RELEASE_ALEMBIC_REVISION: ${RELEASE_ALEMBIC_REVISION:?RELEASE_ALEMBIC_REVISION is required}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - pilot_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${PILOT_POSTGRES_BIND_ADDRESS:?PILOT_POSTGRES_BIND_ADDRESS is required}:${PILOT_POSTGRES_PORT:?PILOT_POSTGRES_PORT is required}:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    volumes:
+      - pilot_qdrant_data:/qdrant/storage
+    ports:
+      - "${PILOT_QDRANT_BIND_ADDRESS:?PILOT_QDRANT_BIND_ADDRESS is required}:${PILOT_QDRANT_PORT:?PILOT_QDRANT_PORT is required}:6333"
+    restart: unless-stopped
+
+  migrate:
+    image: ${PILOT_APP_IMAGE:?PILOT_APP_IMAGE is required}
+    build: *python-build
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: ${PILOT_APP_IMAGE:?PILOT_APP_IMAGE is required}
+    build: *python-build
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "src.api.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "1",
+      ]
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_started
+    ports:
+      - "${PILOT_API_BIND_ADDRESS:?PILOT_API_BIND_ADDRESS is required}:${PILOT_API_PORT:?PILOT_API_PORT is required}:8000"
+    volumes:
+      - type: bind
+        source: "${PILOT_ALLOWED_DATA_ROOT:?PILOT_ALLOWED_DATA_ROOT is required}/attachments"
+        target: /app/data/attachments
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${PILOT_ALLOWED_DATA_ROOT:?PILOT_ALLOWED_DATA_ROOT is required}/analytics-output"
+        target: /app/data/processed
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+
+  worker:
+    image: ${PILOT_APP_IMAGE:?PILOT_APP_IMAGE is required}
+    build: *python-build
+    command: ["python", "-m", "src.operations.worker"]
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - type: bind
+        source: "${PILOT_ALLOWED_DATA_ROOT:?PILOT_ALLOWED_DATA_ROOT is required}/analytics-input"
+        target: /app/data/raw
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${PILOT_ALLOWED_DATA_ROOT:?PILOT_ALLOWED_DATA_ROOT is required}/analytics-output"
+        target: /app/data/processed
+        bind:
+          create_host_path: false
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from src.operations.service import build_operations_service; assert build_operations_service().worker_health()['ready']",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    image: ${PILOT_FRONTEND_IMAGE:?PILOT_FRONTEND_IMAGE is required}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?NEXT_PUBLIC_API_BASE_URL is required}
+        NEXT_PUBLIC_CSRF_COOKIE_NAME: ${CSRF_COOKIE_NAME:?CSRF_COOKIE_NAME is required}
+        RELEASE_IDENTIFIER: ${RELEASE_IDENTIFIER:?RELEASE_IDENTIFIER is required}
+        RELEASE_GIT_COMMIT: ${RELEASE_GIT_COMMIT:?RELEASE_GIT_COMMIT is required}
+    environment:
+      NODE_ENV: production
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${PILOT_FRONTEND_BIND_ADDRESS:?PILOT_FRONTEND_BIND_ADDRESS is required}:${PILOT_FRONTEND_PORT:?PILOT_FRONTEND_PORT is required}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  pilot_postgres_data:
+  pilot_qdrant_data:

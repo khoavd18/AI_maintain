@@ -1,0 +1,385 @@
+{
+  "schema_version": "1.0",
+  "manifest_kind": "ai_maintenance_copilot_internal_pilot",
+  "compose_file": "docker-compose.pilot.yml",
+  "release": {
+    "release_id": "product-milestone-9",
+    "commit_resolution": "exact_tag_target",
+    "tag_recommendation": "product-milestone-9",
+    "tag_status": "pending_checkpoint",
+    "alembic_revision": "20260726_0008"
+  },
+  "versions": {
+    "application": "0.1.0",
+    "frontend": "0.1.0",
+    "python": "3.11.9",
+    "node": "22.20.0",
+    "postgresql": "16",
+    "qdrant": "1.10.1",
+    "nextjs": "16.2.10"
+  },
+  "images": {
+    "application": "ai-maintenance-copilot:product-milestone-9",
+    "frontend": "ai-maintenance-copilot-frontend:product-milestone-9",
+    "python_base": "python:3.11.9-slim",
+    "node_base": "node:22.20.0-alpine",
+    "postgresql": "postgres:16-alpine",
+    "qdrant": "qdrant/qdrant:v1.10.1"
+  },
+  "services": [
+    {
+      "name": "postgres",
+      "required": true,
+      "version_ref": "postgresql",
+      "readiness": "pg_isready"
+    },
+    {
+      "name": "qdrant",
+      "required": true,
+      "version_ref": "qdrant",
+      "readiness": "/readyz",
+      "internal_url": "http://qdrant:6333"
+    },
+    {
+      "name": "api",
+      "required": true,
+      "version_ref": "application",
+      "readiness": "/health/ready"
+    },
+    {
+      "name": "worker",
+      "required": true,
+      "version_ref": "application",
+      "readiness": "/health/worker"
+    },
+    {
+      "name": "frontend",
+      "required": true,
+      "version_ref": "frontend",
+      "readiness": "authenticated_browser_request"
+    }
+  ],
+  "ports": [
+    {
+      "name": "postgresql",
+      "service": "postgres",
+      "host_port": 5432,
+      "container_port": 5432,
+      "protocol": "tcp",
+      "bind_address_environment": "PILOT_POSTGRES_BIND_ADDRESS",
+      "host_port_environment": "PILOT_POSTGRES_PORT"
+    },
+    {
+      "name": "qdrant_http",
+      "service": "qdrant",
+      "host_port": 6333,
+      "container_port": 6333,
+      "protocol": "tcp",
+      "bind_address_environment": "PILOT_QDRANT_BIND_ADDRESS",
+      "host_port_environment": "PILOT_QDRANT_PORT"
+    },
+    {
+      "name": "api_http",
+      "service": "api",
+      "host_port": 8000,
+      "container_port": 8000,
+      "protocol": "tcp",
+      "bind_address_environment": "PILOT_API_BIND_ADDRESS",
+      "host_port_environment": "PILOT_API_PORT"
+    },
+    {
+      "name": "frontend_http",
+      "service": "frontend",
+      "host_port": 3000,
+      "container_port": 3000,
+      "protocol": "tcp",
+      "bind_address_environment": "PILOT_FRONTEND_BIND_ADDRESS",
+      "host_port_environment": "PILOT_FRONTEND_PORT"
+    }
+  ],
+  "volumes": [
+    {
+      "name": "pilot_postgres_data",
+      "service": "postgres",
+      "purpose": "transactional_database",
+      "persistent": true,
+      "kind": "compose_named_volume"
+    },
+    {
+      "name": "pilot_qdrant_data",
+      "service": "qdrant",
+      "purpose": "rag_document_index",
+      "persistent": true,
+      "kind": "compose_named_volume"
+    },
+    {
+      "name": "pilot_attachment_bind",
+      "service": "api",
+      "purpose": "local_attachment_bytes",
+      "persistent": true,
+      "kind": "host_bind",
+      "storage_path_ref": "attachments",
+      "mounted_by": [
+        "api"
+      ]
+    },
+    {
+      "name": "pilot_analytics_input_bind",
+      "service": "worker",
+      "purpose": "batch_analytics_contracts",
+      "persistent": true,
+      "kind": "host_bind",
+      "storage_path_ref": "analytics_source",
+      "mounted_by": [
+        "worker"
+      ]
+    },
+    {
+      "name": "pilot_analytics_output_bind",
+      "service": "worker",
+      "purpose": "batch_analytics_contracts",
+      "persistent": true,
+      "kind": "host_bind",
+      "storage_path_ref": "analytics_output",
+      "mounted_by": [
+        "api",
+        "worker"
+      ]
+    },
+    {
+      "name": "pilot_backup_directory",
+      "service": "postgres",
+      "purpose": "validated_backup_archives",
+      "persistent": true,
+      "kind": "operator_managed_directory",
+      "storage_path_ref": "backups"
+    }
+  ],
+  "storage": {
+    "allowed_roots": {
+      "data": {
+        "environment_variable": "PILOT_ALLOWED_DATA_ROOT",
+        "scope": "host",
+        "outside_repository": true
+      },
+      "backup": {
+        "environment_variable": "PILOT_BACKUP_ROOT",
+        "scope": "host",
+        "outside_repository": true
+      }
+    },
+    "paths": {
+      "attachments": {
+        "root": "data",
+        "relative_path": "attachments",
+        "container_path": "/app/data/attachments",
+        "configuration_environment": "ATTACHMENT_STORAGE_ROOT"
+      },
+      "analytics_source": {
+        "root": "data",
+        "relative_path": "analytics-input",
+        "container_path": "/app/data/raw",
+        "configuration_environment": "ANALYTICS_SOURCE_DIR"
+      },
+      "analytics_output": {
+        "root": "data",
+        "relative_path": "analytics-output",
+        "container_path": "/app/data/processed",
+        "configuration_environment": "ANALYTICS_PROCESSED_DIR"
+      },
+      "backups": {
+        "root": "backup",
+        "relative_path": "postgresql",
+        "retention_keep_count": 7
+      }
+    }
+  },
+  "required_environment_variables": [
+    {"name": "ACCESS_TOKEN_LIFETIME_MINUTES", "secret": false},
+    {"name": "ANALYTICS_PROCESSED_DIR", "secret": false},
+    {"name": "ANALYTICS_SOURCE_DIR", "secret": false},
+    {"name": "APP_ENVIRONMENT", "secret": false},
+    {"name": "ATTACHMENT_MAX_SIZE_BYTES", "secret": false},
+    {"name": "ATTACHMENT_STORAGE_BACKEND", "secret": false},
+    {"name": "ATTACHMENT_STORAGE_ROOT", "secret": false},
+    {"name": "AUTH_COOKIE_SAMESITE", "secret": false},
+    {"name": "AUTH_COOKIE_SECURE", "secret": false},
+    {"name": "CORS_ALLOWED_ORIGINS", "secret": false},
+    {"name": "CSRF_COOKIE_NAME", "secret": false},
+    {"name": "DATABASE_CONNECT_TIMEOUT_SECONDS", "secret": false},
+    {"name": "DATABASE_IDLE_TRANSACTION_TIMEOUT_SECONDS", "secret": false},
+    {"name": "DATABASE_LOCK_TIMEOUT_SECONDS", "secret": false},
+    {"name": "DATABASE_MAX_OVERFLOW", "secret": false},
+    {"name": "DATABASE_POOL_SIZE", "secret": false},
+    {"name": "DATABASE_POOL_TIMEOUT_SECONDS", "secret": false},
+    {"name": "DATABASE_STATEMENT_TIMEOUT_SECONDS", "secret": false},
+    {"name": "DATABASE_URL", "secret": true},
+    {"name": "EMBEDDING_MODEL_NAME", "secret": false},
+    {"name": "FRONTEND_BASE_URL", "secret": false},
+    {"name": "LOG_LEVEL", "secret": false},
+    {"name": "LOGIN_RATE_LIMIT_ATTEMPTS", "secret": false},
+    {"name": "LOGIN_RATE_LIMIT_WINDOW_SECONDS", "secret": false},
+    {"name": "NEXT_PUBLIC_API_BASE_URL", "secret": false},
+    {"name": "OPERATIONAL_ANALYTICS_STALE_SECONDS", "secret": false},
+    {"name": "OPERATIONAL_BACKUP_OVERDUE_SECONDS", "secret": false},
+    {"name": "OPERATIONAL_DISK_CRITICAL_FREE_PERCENT", "secret": false},
+    {"name": "OPERATIONAL_DISK_WARNING_FREE_PERCENT", "secret": false},
+    {"name": "OPERATIONAL_OUTBOX_AGE_ALERT_SECONDS", "secret": false},
+    {"name": "OPERATIONAL_REPEATED_JOB_FAILURE_THRESHOLD", "secret": false},
+    {"name": "PILOT_ALLOWED_DATA_ROOT", "secret": false},
+    {"name": "PILOT_API_BIND_ADDRESS", "secret": false},
+    {"name": "PILOT_API_PORT", "secret": false},
+    {"name": "PILOT_APP_IMAGE", "secret": false},
+    {"name": "PILOT_BACKUP_RETENTION_COUNT", "secret": false},
+    {"name": "PILOT_BACKUP_ROOT", "secret": false},
+    {"name": "PILOT_FRONTEND_BIND_ADDRESS", "secret": false},
+    {"name": "PILOT_FRONTEND_IMAGE", "secret": false},
+    {"name": "PILOT_FRONTEND_PORT", "secret": false},
+    {"name": "PILOT_HOST_IDENTIFIER", "secret": false},
+    {"name": "PILOT_POSTGRES_BIND_ADDRESS", "secret": false},
+    {"name": "PILOT_POSTGRES_PORT", "secret": false},
+    {"name": "PILOT_QDRANT_BIND_ADDRESS", "secret": false},
+    {"name": "PILOT_QDRANT_PORT", "secret": false},
+    {"name": "POSTGRES_DB", "secret": false},
+    {"name": "POSTGRES_PASSWORD", "secret": true},
+    {"name": "POSTGRES_USER", "secret": false},
+    {"name": "QDRANT_COLLECTION", "secret": false},
+    {"name": "QDRANT_URL", "secret": false},
+    {"name": "REFRESH_COOKIE_NAME", "secret": false},
+    {"name": "REFRESH_SESSION_LIFETIME_DAYS", "secret": false},
+    {"name": "RELEASE_ALEMBIC_REVISION", "secret": false},
+    {"name": "RELEASE_GIT_COMMIT", "secret": false},
+    {"name": "RELEASE_GIT_TAG", "secret": false},
+    {"name": "RELEASE_IDENTIFIER", "secret": false},
+    {"name": "STORAGE_BACKEND", "secret": false},
+    {"name": "TOKEN_SIGNING_SECRET", "secret": true},
+    {"name": "TRUSTED_HOSTS", "secret": false},
+    {"name": "WORKER_BATCH_SIZE", "secret": false},
+    {"name": "WORKER_HEARTBEAT_INTERVAL_SECONDS", "secret": false},
+    {"name": "WORKER_HEARTBEAT_STALE_SECONDS", "secret": false},
+    {"name": "WORKER_OUTBOX_LEASE_SECONDS", "secret": false},
+    {"name": "WORKER_POLL_INTERVAL_SECONDS", "secret": false}
+  ],
+  "health_endpoints": [
+    {
+      "service": "api",
+      "kind": "liveness",
+      "path": "/health/live",
+      "expected_status": [
+        200
+      ]
+    },
+    {
+      "service": "api",
+      "kind": "readiness",
+      "path": "/health/ready",
+      "expected_status": [
+        200
+      ]
+    },
+    {
+      "service": "api",
+      "kind": "worker_readiness",
+      "path": "/health/worker",
+      "expected_status": [
+        200
+      ]
+    }
+  ],
+  "scheduled_jobs": [
+    {
+      "job_type": "preventive_generation",
+      "enabled": false
+    },
+    {
+      "job_type": "sla_escalation",
+      "enabled": false
+    },
+    {
+      "job_type": "analytics_refresh",
+      "enabled": false
+    },
+    {
+      "job_type": "inventory_reorder_detection",
+      "enabled": false
+    }
+  ],
+  "worker": {
+    "instance_count": 1,
+    "poll_interval_seconds": 2,
+    "heartbeat_interval_seconds": 10,
+    "heartbeat_stale_seconds": 60,
+    "outbox_lease_seconds": 120,
+    "batch_size": 20
+  },
+  "retry_and_dead_letter": {
+    "jobs": {
+      "preventive_generation": {
+        "max_attempts": 3,
+        "lease_seconds": 300,
+        "retry_backoff_seconds": 30
+      },
+      "sla_escalation": {
+        "max_attempts": 3,
+        "lease_seconds": 180,
+        "retry_backoff_seconds": 30
+      },
+      "analytics_refresh": {
+        "max_attempts": 2,
+        "lease_seconds": 3600,
+        "retry_backoff_seconds": 120
+      },
+      "inventory_reorder_detection": {
+        "max_attempts": 3,
+        "lease_seconds": 180,
+        "retry_backoff_seconds": 30
+      }
+    },
+    "outbox": {
+      "max_attempts": 5,
+      "retry_backoff_seconds": 30
+    },
+    "dead_letter_operator_visible": true,
+    "manual_redrive_only": true
+  },
+  "operational_alerts": {
+    "outbox_oldest_age_seconds": 300,
+    "repeated_job_failure_count": 3,
+    "analytics_stale_seconds": 172800,
+    "backup_overdue_seconds": 604800,
+    "worker_heartbeat_stale_seconds": 60,
+    "disk_warning_free_percent": 20,
+    "disk_critical_free_percent": 10,
+    "delivery": "in_app_only"
+  },
+  "database": {
+    "pool_size": 5,
+    "max_overflow": 10,
+    "connect_timeout_seconds": 5,
+    "pool_timeout_seconds": 30,
+    "statement_timeout_seconds": 30,
+    "lock_timeout_seconds": 5,
+    "idle_transaction_timeout_seconds": 60
+  },
+  "restore_prerequisites": {
+    "separate_restore_database_required": true,
+    "restore_database_name_suffix": "_restore",
+    "postgresql_integration_test_database_name_suffix": "_test",
+    "validated_checksum_required": true,
+    "backup_metadata_required": true,
+    "compatible_postgresql_tools_required": true,
+    "attachment_snapshot_required_when_metadata_is_nonempty": true,
+    "owner_approval_required": true
+  },
+  "rollback": {
+    "target_release_id": "product-milestone-8",
+    "target_git_tag": "product-milestone-8",
+    "target_git_commit": "ad4779e4e21322789e1e7b9d98b485127f1fa95f",
+    "target_alembic_revision": "20260726_0008",
+    "mode": "application_then_validated_restore_if_data_or_schema_is_incompatible",
+    "database_downgrade_allowed": false,
+    "validated_backup_required": true,
+    "rehearsal_status": "unverified"
+  },
+  "production_readiness_claim": false
+}

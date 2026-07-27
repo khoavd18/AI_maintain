@@ -39,6 +39,7 @@ from src.security.audit import (
     safe_state,
 )
 from src.security.service import append_audit_event
+from src.release import CANONICAL_SCHEMA_REVISION
 from src.ticket_management.domain import (
     LEGACY_STATUS_LABELS,
     TicketStatus,
@@ -100,7 +101,6 @@ REQUIRED_TABLES = {
     "reliability_validation_records",
     "alembic_version",
 }
-CANONICAL_SCHEMA_REVISION = "20260726_0008"
 TICKET_SEQUENCE = "maintenance_ticket_id_seq"
 LOG_SEQUENCE = "maintenance_log_id_seq"
 

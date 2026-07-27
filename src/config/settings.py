@@ -1,13 +1,20 @@
 """Application settings loaded from environment variables."""
 
+import hashlib
+import re
+import secrets
 from functools import lru_cache
 from pathlib import Path
-import secrets
 from typing import Literal
 from urllib.parse import unquote, urlsplit
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from src.release import APPLICATION_VERSION, CANONICAL_SCHEMA_REVISION, ReleaseIdentity
+
+_GIT_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+_UNVERIFIED_RELEASE_VALUES = {"", "development", "unverified", "unset"}
 
 
 class Settings(BaseSettings):
@@ -15,6 +22,10 @@ class Settings(BaseSettings):
 
     app_name: str = "AI Maintenance Copilot"
     app_environment: Literal["development", "test", "pilot", "production"] = "development"
+    release_identifier: str = "development"
+    release_git_commit: str = "unverified"
+    release_git_tag: str = "unverified"
+    release_alembic_revision: str = CANONICAL_SCHEMA_REVISION
     storage_backend: Literal["postgresql", "csv"] = "postgresql"
     database_url: str = (
         "postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot"
@@ -71,6 +82,8 @@ class Settings(BaseSettings):
     operational_backup_overdue_seconds: int = Field(
         default=604800, ge=3600, le=7776000
     )
+    operational_disk_warning_free_percent: int = Field(default=20, ge=5, le=50)
+    operational_disk_critical_free_percent: int = Field(default=10, ge=1, le=40)
     analytics_source_dir: Path = Path("data/raw")
     analytics_processed_dir: Path = Path("data/processed")
 
@@ -88,6 +101,10 @@ class Settings(BaseSettings):
                 "STORAGE_BACKEND=postgresql."
             )
         if self.app_environment in {"pilot", "production"}:
+            if self.storage_backend != "postgresql":
+                raise ValueError(
+                    "STORAGE_BACKEND must be postgresql outside development/test."
+                )
             if len(self.token_signing_secret) < 32:
                 raise ValueError(
                     "TOKEN_SIGNING_SECRET must contain at least 32 characters outside "
@@ -129,6 +146,19 @@ class Settings(BaseSettings):
                     "DATABASE_URL must replace every example placeholder outside "
                     "development/test."
                 )
+            if (
+                self.release_identifier.lower() in _UNVERIFIED_RELEASE_VALUES
+                or self.release_git_tag.lower() in _UNVERIFIED_RELEASE_VALUES
+                or not _GIT_COMMIT_PATTERN.fullmatch(self.release_git_commit)
+            ):
+                raise ValueError(
+                    "Pilot release identity requires an identifier, tag, and "
+                    "40-character Git commit."
+                )
+            if self.release_alembic_revision != CANONICAL_SCHEMA_REVISION:
+                raise ValueError(
+                    "RELEASE_ALEMBIC_REVISION must match the application schema head."
+                )
         elif not self.token_signing_secret:
             # Local tokens intentionally stop working after a process restart.
             self.token_signing_secret = secrets.token_urlsafe(48)
@@ -147,6 +177,14 @@ class Settings(BaseSettings):
             raise ValueError(
                 "WORKER_HEARTBEAT_STALE_SECONDS must exceed "
                 "WORKER_HEARTBEAT_INTERVAL_SECONDS."
+            )
+        if (
+            self.operational_disk_critical_free_percent
+            >= self.operational_disk_warning_free_percent
+        ):
+            raise ValueError(
+                "OPERATIONAL_DISK_CRITICAL_FREE_PERCENT must be lower than "
+                "OPERATIONAL_DISK_WARNING_FREE_PERCENT."
             )
         frontend_url = urlsplit(self.frontend_base_url)
         if (
@@ -188,6 +226,31 @@ class Settings(BaseSettings):
         """Expose interactive API documentation only for local development and tests."""
 
         return self.app_environment in {"development", "test"}
+
+    @property
+    def release_identity(self) -> ReleaseIdentity:
+        """Return the public release identity without inspecting Git at runtime."""
+
+        return ReleaseIdentity(
+            identifier=self.release_identifier,
+            application_version=APPLICATION_VERSION,
+            git_commit=self.release_git_commit,
+            git_tag=self.release_git_tag,
+            alembic_revision=self.release_alembic_revision,
+        )
+
+    @property
+    def test_database_fingerprint(self) -> str | None:
+        """Identify only an explicitly isolated test database without exposing its name."""
+
+        if self.app_environment != "test" or self.storage_backend != "postgresql":
+            return None
+        database_name = unquote(urlsplit(self.database_url).path.strip("/"))
+        if not database_name.endswith("_test"):
+            return None
+        return hashlib.sha256(
+            f"pm9-test-database:{database_name}".encode("utf-8")
+        ).hexdigest()
 
 
 @lru_cache

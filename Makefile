@@ -1,7 +1,15 @@
-.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job retry-outbox evaluate-operational-alerts job-status reliability-load backup-restore-drill attachment-integrity frontend-lint frontend-test frontend-build
+.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job retry-outbox evaluate-operational-alerts job-status reliability-load backup-restore-drill attachment-integrity pilot-contract-validate pilot-decision-validate pilot-release-validate pilot-rehearsal-plan pilot-rehearsal-execute pilot-rehearsal-cleanup pilot-backup-schedule pilot-step-load frontend-lint frontend-test frontend-build
 
 PYTHON ?= python
 ANALYTICS_INPUT_DIR ?= data/analytics_input
+PILOT_ENV_FILE ?= .env.pilot
+PILOT_PROJECT_NAME ?= pm9-pilot-rehearsal
+PILOT_DATA_MODE ?= existing_approved
+PILOT_BACKUP_TARGET ?= pilot_primary
+PILOT_POSTGRES_CONTAINER ?= $(PILOT_PROJECT_NAME)-postgres-1
+PILOT_LOAD_PROFILE ?= capacity
+PILOT_LOAD_PASSWORD_ENV ?= PM9_LOAD_PASSWORD
+PILOT_AUTHENTICATED_POST_START ?= false
 
 install:
 	$(PYTHON) -m pip install -e ".[dev,rag,postgres]"
@@ -161,6 +169,30 @@ backup-restore-drill:
 
 attachment-integrity:
 	$(PYTHON) -m src.reliability.attachments
+
+pilot-contract-validate:
+	$(PYTHON) -m src.reliability.pilot_contract --manifest-only --skip-environment
+
+pilot-decision-validate:
+	$(PYTHON) -m src.reliability.pilot_contract --skip-environment
+
+pilot-release-validate:
+	$(PYTHON) -m src.reliability.pilot_contract --skip-environment $(if $(ACTUAL_RELEASE_COMMIT),--actual-commit "$(ACTUAL_RELEASE_COMMIT)",) $(if $(ACTUAL_RELEASE_TAG),--actual-tag "$(ACTUAL_RELEASE_TAG)",) $(if $(ACTUAL_RELEASE_TAG_TARGET_COMMIT),--actual-tag-target-commit "$(ACTUAL_RELEASE_TAG_TARGET_COMMIT)",) $(if $(ACTUAL_MIGRATION_REVISION),--actual-migration-revision "$(ACTUAL_MIGRATION_REVISION)",)
+
+pilot-rehearsal-plan:
+	$(PYTHON) -m src.reliability.deployment_rehearsal --environment-file "$(PILOT_ENV_FILE)" --project-name "$(PILOT_PROJECT_NAME)" --data-mode "$(PILOT_DATA_MODE)" $(if $(PILOT_INTENDED_HOST),--intended-host,)
+
+pilot-rehearsal-execute:
+	$(PYTHON) -m src.reliability.deployment_rehearsal --environment-file "$(PILOT_ENV_FILE)" --project-name "$(PILOT_PROJECT_NAME)" --data-mode "$(PILOT_DATA_MODE)" --execute $(if $(PILOT_EVIDENCE_DIR),--evidence-dir "$(PILOT_EVIDENCE_DIR)",) $(if $(PILOT_INTENDED_HOST),--intended-host,) $(if $(filter true,$(PILOT_AUTHENTICATED_POST_START)),--authenticated-post-start,)
+
+pilot-rehearsal-cleanup:
+	$(PYTHON) -m src.reliability.deployment_rehearsal --environment-file "$(PILOT_ENV_FILE)" --project-name "$(PILOT_PROJECT_NAME)" --cleanup-only
+
+pilot-backup-schedule:
+	$(PYTHON) -m src.reliability.backup_schedule --environment-file "$(PILOT_ENV_FILE)" --target-label "$(PILOT_BACKUP_TARGET)" --docker-container "$(PILOT_POSTGRES_CONTAINER)"
+
+pilot-step-load:
+	$(PYTHON) -m src.reliability.load_harness --step-load-profile "$(PILOT_LOAD_PROFILE)" --username "$(PILOT_LOAD_USERNAME)" --password-env "$(PILOT_LOAD_PASSWORD_ENV)" $(if $(PILOT_API_BASE_URL),--base-url "$(PILOT_API_BASE_URL)",) $(if $(PILOT_LOAD_OUTPUT_DIR),--output-dir "$(PILOT_LOAD_OUTPUT_DIR)",) $(if $(PILOT_MUTATION_FIXTURE),--mutation-fixture "$(PILOT_MUTATION_FIXTURE)",)
 
 frontend-lint:
 	npm --prefix frontend run lint

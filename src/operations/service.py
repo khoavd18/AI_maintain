@@ -222,11 +222,13 @@ class OperationsService:
     def readiness(self) -> dict[str, Any]:
         self.repository.check_health()
         worker = self.worker_health()
+        release = get_settings().release_identity
         return {
             "status": "ready" if worker["ready"] else "degraded",
             "database_ready": True,
             "worker_ready": worker["ready"],
             "worker": worker,
+            "release": release.as_dict(),
         }
 
     @staticmethod

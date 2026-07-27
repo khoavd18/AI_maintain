@@ -191,8 +191,18 @@ class OperationalMetricsResponse(BaseModel):
     api_requests: ApiRequestMetricsResponse
 
 
+class ReleaseIdentityResponse(BaseModel):
+    identifier: str
+    application_version: str
+    git_commit: str
+    git_tag: str
+    alembic_revision: str
+
+
 class LivenessResponse(BaseModel):
     status: Literal["alive"]
+    release: ReleaseIdentityResponse
+    test_database_fingerprint: str | None = None
 
 
 class WorkerHealthResponse(BaseModel):
@@ -208,3 +218,4 @@ class ReadinessResponse(BaseModel):
     database_ready: bool
     worker_ready: bool
     worker: WorkerHealthResponse
+    release: ReleaseIdentityResponse

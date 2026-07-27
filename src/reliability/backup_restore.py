@@ -40,6 +40,7 @@ from src.repositories.postgres_operations import PostgresOperationsRepository
 
 _DESTRUCTIVE_FLAG = "PM8_ALLOW_DESTRUCTIVE_TESTS"
 _MANIFEST_VERSION = 1
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 VALIDATED_MODELS = {
     "users": User,
@@ -427,8 +428,7 @@ def _validate_restore_database(source_database: str, restore_database: str) -> N
 
 def _validated_output_dir(path: Path) -> Path:
     resolved = path.resolve()
-    repository = Path.cwd().resolve()
-    if resolved == repository or resolved.is_relative_to(repository):
+    if resolved == _REPOSITORY_ROOT or resolved.is_relative_to(_REPOSITORY_ROOT):
         raise ValueError("Backup output must be outside the repository.")
     return resolved
 

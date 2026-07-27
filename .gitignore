@@ -9,6 +9,9 @@ __pycache__/
 venv/
 
 .env
+.env.*
+!.env.example
+!.env.pilot.example
 .DS_Store
 
 data/raw/*
@@ -20,3 +23,18 @@ data/attachments/
 
 reports/*
 sop_docs/*
+
+# PM9 evidence and recovery artifacts must stay outside tracked paths.
+*.dump
+*.dump.metadata.json
+postgresql-*.manifest.json
+*.backup
+*.bak
+*.partial
+*.sha256
+*.restore.sql
+*.load.json
+*.rehearsal.log
+pilot-evidence/
+restore-data/
+attachment-drill/
