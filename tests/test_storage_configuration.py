@@ -53,6 +53,9 @@ def test_api_documentation_is_local_only() -> None:
     development = Settings(app_environment="development")
     pilot = Settings(
         app_environment="pilot",
+        release_identifier="product-milestone-9-test",
+        release_git_commit="a" * 40,
+        release_git_tag="product-milestone-9-test",
         token_signing_secret="s" * 48,
         auth_cookie_secure=True,
         database_url=(
@@ -62,6 +65,32 @@ def test_api_documentation_is_local_only() -> None:
 
     assert development.docs_enabled is True
     assert pilot.docs_enabled is False
+
+
+def test_pilot_mode_requires_postgresql_and_verified_release_identity() -> None:
+    safe = {
+        "token_signing_secret": "s" * 48,
+        "auth_cookie_secure": True,
+        "database_url": (
+            "postgresql+psycopg://pilot_user:pilot-password@db:5432/pilot_db"
+        ),
+    }
+    with pytest.raises(ValidationError, match="STORAGE_BACKEND"):
+        Settings(
+            app_environment="pilot",
+            storage_backend="csv",
+            **safe,
+        )
+    with pytest.raises(ValidationError, match="release identity"):
+        Settings(app_environment="pilot", **safe)
+
+
+def test_disk_capacity_thresholds_are_ordered() -> None:
+    with pytest.raises(ValidationError, match="must be lower"):
+        Settings(
+            operational_disk_warning_free_percent=10,
+            operational_disk_critical_free_percent=10,
+        )
 
 
 def test_repository_factory_never_falls_back_from_unavailable_postgresql(

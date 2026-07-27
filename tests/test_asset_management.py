@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import hashlib
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -22,6 +23,11 @@ from src.database.session import get_session_factory
 from src.ingestion.load_data import import_csv_dataset
 from src.repositories.postgres import PostgresMaintenanceRepository
 from src.repositories.postgres_assets import PostgresAssetRepository
+from src.reliability.drills import (
+    AttachmentArchiveEntry,
+    create_attachment_archive,
+    restore_attachment_archive,
+)
 from src.security.permissions import Permission, ROLE_PERMISSIONS, Role
 from tests.auth_helpers import authorize_app, build_test_user, persist_test_user
 
@@ -368,6 +374,84 @@ def test_safe_attachment_upload_download_delete_and_audit_redaction(
         "attachment.deleted",
     }
     assert all("storage" not in str(row.after_state).lower() for row in audit_rows)
+
+
+@pytest.mark.postgres
+def test_pm9_nonempty_attachment_archive_restore_uses_authorized_path(
+    asset_system: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    client: TestClient = asset_system["client"]
+    body = b"%PDF-1.4\nPM9 generated recovery fixture\n%%EOF"
+    uploaded = client.post(
+        "/assets/GENERATOR_002/attachments",
+        data={"category": "technical_manual"},
+        files={"file": ("pm9-recovery.pdf", body, "application/pdf")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    attachment_id = UUID(uploaded.json()["id"])
+    record = asset_system["asset_repository"].get_attachment(
+        "GENERATOR_002",
+        attachment_id,
+    )
+    assert record is not None
+    entry = AttachmentArchiveEntry(
+        storage_key=str(record.values["_storage_key"]),
+        sha256=hashlib.sha256(body).hexdigest(),
+    )
+    archive_root = tmp_path / "paired-backup"
+    report = create_attachment_archive(
+        storage_root=asset_system["storage"].root,
+        entries=(entry,),
+        archive_root=archive_root,
+        archive_name="pm9-attachments.zip",
+    )
+    assert report.attachment_count == 1
+    restored = restore_attachment_archive(
+        archive_path=archive_root / report.archive_name,
+        restore_root=tmp_path / "restore",
+        restore_label="pm9_restore",
+        expected_entries=(entry,),
+    )
+    assert restored.restored_count == 1
+
+    restored_storage = LocalAttachmentStorage(
+        tmp_path / "restore" / restored.restore_label
+    )
+    restored_service = AssetManagementService(
+        asset_system["asset_repository"],
+        restored_storage,
+        attachment_max_size_bytes=1024,
+        frontend_base_url="http://localhost:3000",
+    )
+    app = asset_system["app"]
+    app.dependency_overrides[_service] = lambda: ProcessedDataService(
+        repository=asset_system["service"].repository,
+        asset_management=restored_service,
+    )
+    authorize_app(app, build_test_user(Role.ADMINISTRATOR))
+    restored_download = TestClient(app).get(
+        f"/assets/GENERATOR_002/attachments/{attachment_id}"
+    )
+    assert restored_download.status_code == 200
+    assert restored_download.content == body
+    authorize_app(app, build_test_user(Role.HELPDESK))
+    assert (
+        TestClient(app).get(
+            f"/assets/GENERATOR_002/attachments/{attachment_id}"
+        ).status_code
+        == 403
+    )
+    restored_storage.delete(entry.storage_key)
+    app.dependency_overrides[_service] = lambda: asset_system["service"]
+    authorize_app(app, build_test_user(Role.ADMINISTRATOR))
+    assert (
+        TestClient(app).delete(
+            f"/assets/GENERATOR_002/attachments/{attachment_id}"
+        ).status_code
+        == 200
+    )
+    (archive_root / report.archive_name).unlink()
 
 
 @pytest.mark.postgres
