@@ -4,6 +4,18 @@ Checklist giữ PM8 checkpoint làm historical evidence và theo dõi các gate 
 cho internal-pilot deployment rehearsal. Nó không chứng minh production
 readiness.
 
+## PM9 Three-Gate Classification
+
+- [x] Engineering readiness: `PASS` — design, contracts, tooling, procedures,
+  tests, and operational templates are present.
+- [x] Local rehearsal: `PARTIAL` — executed local/static/synthetic evidence is
+  recorded separately from unexecuted live profiles.
+- [ ] Real-company pilot: `BLOCKED — EXTERNAL DEPENDENCY` — sponsor, approved
+  host, company owners, users/data, secrets, and organizational acceptance are
+  not available.
+
+Overall external pilot decision: `NO-GO / WAITING FOR PILOT SPONSOR`.
+
 ## Release Gate
 
 - [x] Reviewable PM8 commit sequence và annotated local
@@ -101,6 +113,9 @@ readiness.
 
 ## PM9 Human And Security Gate
 
+- [x] Solo technical stewardship is recorded for release preparation, rollback
+  procedure maintenance, backup/database drills, development support, and
+  security implementation.
 - [ ] Cả chín ownership/contact roles được assign bằng role và approved internal
   channel.
 - [ ] Support hours, incident communication và escalation path được xác nhận.
@@ -112,9 +127,11 @@ readiness.
 
 ## Decision
 
-`GO` chỉ khi mọi gate bắt buộc có current-revision evidence và không có unresolved
-integrity/dead-letter/backup issue. Nếu một critical gate chưa chạy, kết quả là
-`NO-GO / NOT YET VERIFIED`, không suy luận từ PM7/PM8 historical results.
+The engineering, local-rehearsal, and real-company gates are evaluated
+separately. A real-company `GO` still requires current-revision evidence for
+every mandatory gate and no unresolved integrity, authorization, or recovery
+issue. Generic technical validators may return `NO-GO / NOT YET VERIFIED`;
+PM9's overall external decision is `NO-GO / WAITING FOR PILOT SPONSOR`.
 
 ### PM8 Local Validation Decision - 2026-07-26
 
@@ -133,10 +150,16 @@ attachment-byte restore, and intended pilot-host rehearsal. Real pilot secret
 rotation also remains unexecuted. See the PM8 release note for exact
 measurements. Closing commit/tag did not change the overall decision.
 
-### PM9 Implementation-Session Decision - 2026-07-26
+### PM9 Design-Readiness Closure - 2026-07-27
 
 ```text
-NO-GO / NOT YET VERIFIED
+PILOT-READY BY DESIGN
+NOT PILOT-VERIFIED IN PRACTICE
+
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 PM9 tooling và focused synthetic/local tests không thay thế intended-host
@@ -146,13 +169,19 @@ failure, durable disk-alert path, real pilot secret rotation và paired
 PostgreSQL dump + representative attachment recovery vẫn chưa chạy. Local
 valid/invalid-database `pg_dump`, connection-termination và authorized
 attachment archive boundaries đã pass nhưng không đóng các broader gates.
-Ownership, incident path, support coverage và limitation acceptance đều còn
-placeholder.
+Solo technical stewardship is acknowledged. Company ownership, incident path,
+support coverage, and organizational limitation acceptance remain externally
+blocked and were not fabricated.
 
-Static contract validation trả expected blockers và cùng quyết định trên. Xem
+Static contract validation returns expected blockers. The complete release
+record maps those blockers to the externally waiting decision. Xem
 [PM9 release note](releases/product_milestone_9.md),
 [pilot deployment](pilot_deployment.md), [load results](pilot_load_results.md)
 và [ownership](operational_ownership.md).
+
+The next external workstream is
+[Pilot 01 — Company-Specific Deployment](pilot_01_company_specific_deployment.md),
+not PM10.
 
 ## Explicit Remaining Boundary
 

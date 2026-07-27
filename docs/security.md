@@ -166,10 +166,15 @@ verify trong grace period. PM9 focused tests xác nhận missing/placeholder pil
 secret và report redaction. Không có approved pilot key/database credential,
 real rotation, active-session measurement hoặc rollback-window rehearsal.
 
-Vì vậy secret gate vẫn:
+Vì vậy engineering implementation cho secret controls là complete, nhưng local
+rehearsal chỉ `PARTIAL` và real-company secret gate vẫn bị chặn bởi external
+dependency:
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 Procedure đầy đủ tại [PM9 secret rotation](pilot_secret_rotation.md). Không mark
@@ -184,8 +189,10 @@ download `200` và Helpdesk `403` đã pass trên disposable PostgreSQL 16 `_tes
 Test dùng original database metadata; paired PostgreSQL dump +
 database/filesystem restore chưa chạy.
 
-Ownership record cũng đang placeholder: security contact, incident coordinator
-và support coverage chưa được assign. Technical controls không thay thế
-organizational custody và approved incident channel. Xem
+Solo project developer được ghi nhận là security implementation contact cho
+technical controls. Company-approved security owner, incident coordinator,
+production support coverage và approved incident channel vẫn là
+`BLOCKED_EXTERNAL_DEPENDENCY`; technical stewardship không thay thế
+organizational authority. Xem
 [operational ownership](operational_ownership.md) và
 [known limitations](known_limitations_acceptance.md).

@@ -4,40 +4,61 @@
 
 Machine-readable source: [operational ownership record](../deployment/operational_ownership.json).
 
-Không có owner, contact, support coverage, incident channel hoặc escalation
-approval nào được cung cấp. Placeholder cố ý làm contract fail.
+The solo project developer holds technical stewardship for the repository and
+local engineering procedures. No sponsoring company, company owner, approved
+contact channel, support coverage, incident organization, or business approval
+exists. The organizational contract therefore remains externally blocked.
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering readiness: PASS
+Real-company ownership: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 Chỉ ghi role và approved internal channel. Không commit private phone number,
 personal email hoặc dữ liệu cá nhân.
 
+## Solo Technical Stewardship
+
+The structured role label is `Solo project developer`. It applies only to:
+
+| Technical responsibility | Current holder | Authority boundary |
+|---|---|---|
+| Release preparation owner | `Solo project developer` | Prepare/checkpoint repository artifacts; cannot approve a company deployment window |
+| Rollback procedure owner | `Solo project developer` | Maintain and locally test the procedure; cannot decide company traffic or data recovery |
+| Backup drill operator | `Solo project developer` | Run safe local `_test` drills; cannot own a company schedule or retention policy |
+| Database recovery drill operator | `Solo project developer` | Validate isolated recovery tooling; cannot authorize recovery of company data |
+| Development application support | `Solo project developer` | Diagnose the development system; not production support coverage |
+| Security implementation contact | `Solo project developer` | Maintain security controls/tests; not company security acceptance or incident authority |
+
+These assignments do not satisfy any company ownership gate.
+
 ## Required Assignments
 
 | Record key | Trách nhiệm bắt buộc | Assignment | Approved channel | Status |
 |---|---|---|---|---|
-| `operational_owner` | Daily health/metrics/inbox review, service coordination | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
-| `backup_owner` | Schedule, last-good protection, retention và restore evidence | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
-| `release_owner` | Release inputs, deployment window và evidence approval | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
-| `rollback_owner` | Rollback decision, quiesce và traffic reopen | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
-| `incident_coordinator` | Severity, timeline, communication và closure | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
-| `security_contact` | Secret rotation, suspected compromise và security acceptance | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
-| `database_recovery_contact` | PostgreSQL backup/restore/integrity decision | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
-| `application_support_contact` | First response cho API/frontend/worker issues | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
-| `pilot_business_owner` | Pilot scope, business interruption và limitation acceptance | `PENDING_ASSIGNMENT` | `PENDING_APPROVED_INTERNAL_CHANNEL` | Unassigned |
+| `operational_owner` | Daily health/metrics/inbox review, service coordination | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
+| `backup_owner` | Company schedule, last-good protection, retention and restore evidence | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
+| `release_owner` | Company deployment window and evidence approval | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
+| `rollback_owner` | Rollback decision, quiesce and traffic reopen | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
+| `incident_coordinator` | Severity, timeline, communication and closure | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
+| `security_contact` | Company secret/incident authority and security acceptance | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
+| `database_recovery_contact` | Company PostgreSQL recovery/integrity decision | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
+| `application_support_contact` | Production-facing API/frontend/worker support | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
+| `pilot_business_owner` | Pilot scope, interruption and limitation acceptance | `PENDING_PILOT_SPONSOR_ASSIGNMENT` | `PENDING_SPONSOR_APPROVED_CHANNEL` | `BLOCKED_EXTERNAL_DEPENDENCY` |
 
-Responsibility descriptions không phải assignment. Mỗi role cần evidence link
-tới approved internal record trước khi đổi status thành `assigned`.
+One sponsored person may hold multiple compatible roles; nine different people
+are not required. Responsibility descriptions and solo technical stewardship
+are not company assignments. Each company role needs an approved channel and
+evidence before status becomes `assigned`.
 
 ## Incident Communication
 
 Current structured status:
 
-- primary internal channel: `PENDING_APPROVED_INTERNAL_CHANNEL`;
-- fallback internal channel: `PENDING_APPROVED_INTERNAL_CHANNEL`;
-- status: `unconfigured`;
+- primary internal channel: `PENDING_SPONSOR_APPROVED_CHANNEL`;
+- fallback internal channel: `PENDING_SPONSOR_APPROVED_CHANNEL`;
+- status: `BLOCKED_EXTERNAL_DEPENDENCY`;
 - audience: pilot operators và business owner;
 - support hours/timezone/after-hours assumption: chưa được xác nhận;
 - escalation path: chưa được cấu hình.
@@ -88,9 +109,10 @@ record được owner điền và approve.
 python -m src.reliability.pilot_contract --skip-environment
 ```
 
-Static run ngày 2026-07-26 trả blocker cho cả chín assignment, incident path,
-support coverage và escalation path. Đó là expected result của placeholder
-record.
+Static validation intentionally returns blockers for all nine company
+assignments, the incident path, support coverage, and escalation path. That is
+the expected result of an externally blocked record, not an engineering
+implementation failure.
 
 Ownership gate chỉ pass khi:
 

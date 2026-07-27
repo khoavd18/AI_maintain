@@ -5,23 +5,27 @@
 | Field | Current record |
 |---|---|
 | Release name | `product-milestone-9` |
-| Candidate commit | `PENDING_PM9_CHECKPOINT` |
-| Tag recommendation | `product-milestone-9` |
+| Implementation commits | `425a652`, `e6a5cd8`, `b1fd8c3` |
+| Design-readiness checkpoint | Resolved by the final local annotated tag after this documentation commit |
+| Tag recommendation | `product-milestone-9-pilot-ready-by-design` |
 | Current base/tag | PM8 commit `ad4779e4e21322789e1e7b9d98b485127f1fa95f`, local tag `product-milestone-8` |
 | Alembic revision | `20260726_0008` |
 | PM9 migration | Không có trong candidate hiện tại |
 | Rollback target | PM8 commit/tag ở cùng revision `20260726_0008` |
-| Release record status | `draft` |
+| Release record status | `design_complete_external_verification_blocked` |
 
-Không commit/tag/push tự động trong implementation session. Full PM9 commit chỉ
-được ghi sau khi final verification và review; tag cũ không được di chuyển.
+The design-readiness tag is created only after final safe verification. It does
+not move any existing tag, is not pushed, and must not be named
+`product-milestone-9`, which could imply real-company pilot completion.
 
 Manifest không tự nhúng SHA của commit chứa chính manifest đó. Contract dùng
 `commit_resolution=exact_tag_target` để tránh self-reference không thể
 checkpoint. Quy trình release provenance bắt buộc là:
 
 1. commit candidate đã review với manifest hash ổn định;
-2. tạo exact immutable tag `product-milestone-9` trên commit đó;
+2. for this design-only closure, create exact annotated tag
+   `product-milestone-9-pilot-ready-by-design`; a future company deployment must
+   use its separately approved release identity;
 3. lấy full SHA bằng Git tag target và inject cùng giá trị vào
    `RELEASE_GIT_COMMIT` của protected environment;
 4. executor xác nhận HEAD có exact tag và environment commit khớp full observed
@@ -39,10 +43,16 @@ Observed tag, Alembic revision và protected environment cũng là input bắt b
 cho final validation. Không được nhập giá trị dự đoán hoặc chỉ lặp lại manifest
 mà chưa quan sát Git/runtime.
 
-Quyết định hiện tại:
+Current classification:
 
 ```text
-NO-GO / NOT YET VERIFIED
+PILOT-READY BY DESIGN
+NOT PILOT-VERIFIED IN PRACTICE
+
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 ## Phạm Vi Rehearsal

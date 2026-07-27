@@ -626,12 +626,27 @@ mocked HTTP transport nhưng chưa contact live PM9 stack. Local disposable
 `_test` backup drill đã chạy valid `pg_dump` và controlled invalid-database
 failure; nó không phải intended-host/service-account evidence.
 
-Ownership, incident path và limitation acceptance records vẫn chứa placeholder.
-Do đó system boundary vẫn là internal-pilot candidate và quyết định là:
+PM9 engineering architecture and control-plane implementation are complete.
+Technical stewardship is recorded for the solo developer; company ownership,
+incident paths, real users/data, secrets, and limitation acceptance remain
+external dependencies. Therefore the architecture classification is:
 
 ```text
-NO-GO / NOT YET VERIFIED
+PILOT-READY BY DESIGN
+NOT PILOT-VERIFIED IN PRACTICE
+
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
+
+Pilot-ready by design describes the presence of architecture, deployment
+contracts, validation tooling, recovery procedures, and operational templates.
+Pilot-verified in practice requires their execution on an approved company
+host with real organizational authority and representative inputs. PM10 is not
+started; the next possible external workstream is
+[Pilot 01 — Company-Specific Deployment](pilot_01_company_specific_deployment.md).
 
 PM9 không thiết lập production readiness. HA, automatic PITR, managed secrets,
 centralized observability/on-call, external notifications, object storage,

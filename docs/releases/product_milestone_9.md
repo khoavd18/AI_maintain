@@ -2,19 +2,39 @@
 
 ## Status
 
-Product Milestone 9 is an implementation candidate on 2026-07-26. It has not
-been checkpointed, tagged, deployed to the intended pilot host or accepted by
+Product Milestone 9 engineering implementation is complete. The repository is
+pilot-ready by design, but it has not been pilot-verified in practice. It has
+not been deployed to an approved pilot host or accepted by real company
 operational/business owners.
 
 Final decision:
 
 ```text
-NO-GO / NOT YET VERIFIED
+PILOT-READY BY DESIGN
+NOT PILOT-VERIFIED IN PRACTICE
+
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 PM9 rehearses an internal pilot. It does not establish production readiness,
 an SLA, a capacity guarantee, recovery objectives, model accuracy or business
 impact.
+
+**Pilot-ready by design** means that the system contains the architecture,
+deployment contracts, validation tooling, recovery procedures, and operational
+templates needed to begin a pilot when a sponsoring organization and approved
+environment become available.
+
+**Pilot-verified in practice** means that those procedures have actually been
+executed on an approved pilot host with real organizational owners, pilot-grade
+secrets, representative data, and real users.
+
+The missing sponsor, host, users, company data, operational organization, and
+business acceptance are external dependencies. They are not application
+features and were not fabricated.
 
 ## Objective And Product Boundary
 
@@ -44,13 +64,15 @@ job execution was added.
 | Exact local tag at HEAD | `product-milestone-8` |
 | PM8 migration head | `20260726_0008` |
 | PM9 migration | None in current candidate |
-| PM9 candidate commit | `PENDING_PM9_CHECKPOINT` |
-| PM9 tag recommendation | `product-milestone-9`; not created |
-| Deployment manifest canonical semantic-JSON SHA-256 | `68f7ad8cd51dd7da90a060675eba113c81c11418c91cddbccf8a8800fad14bcb` |
+| PM9 implementation commits | `425a652`, `e6a5cd8`, `b1fd8c3` |
+| PM9 design-readiness checkpoint | This classification follow-up commit; tag created only after verification |
+| PM9 tag recommendation | `product-milestone-9-pilot-ready-by-design`; do not create `product-milestone-9` |
+| Deployment manifest canonical semantic-JSON SHA-256 | `59a533845e83197aefe3c3c7201f9173ae66a00f4afdfd571471a45957db6dad` |
 | Push | Not performed |
 
-The PM9 worktree is intentionally dirty with implementation changes. Existing
-PM1–PM8 migration history and tag were not rewritten.
+The three PM9 implementation commits are local. This follow-up changes only
+structured decision records, their validator tests, and documentation. Existing
+PM1–PM8 migration history and tags are not rewritten.
 
 ## Environment Findings
 
@@ -224,11 +246,29 @@ Final verification on the settled worktree additionally passed:
 - one Alembic head `20260726_0008`, `current`, `check`, and a clean
   base-to-head migration on a temporary `_test` database;
 - pilot Compose syntax validation;
-- deterministic manifest/full/release-identity validators, each returning the
-  expected nonzero blocking result and exact `NO-GO / NOT YET VERIFIED`.
+- deterministic validators returned expected nonzero blocking results:
+  manifest-only remained generic `NO-GO / NOT YET VERIFIED`, while the full
+  checked-in three-gate contract returned
+  `NO-GO / WAITING FOR PILOT SPONSOR`; release identity remained fail-closed
+  before the final local checkpoint/tag.
 
 The settled manifest semantic-JSON SHA-256 is
-`68f7ad8cd51dd7da90a060675eba113c81c11418c91cddbccf8a8800fad14bcb`.
+`59a533845e83197aefe3c3c7201f9173ae66a00f4afdfd571471a45957db6dad`.
+
+The 2026-07-27 design-readiness classification follow-up additionally ran:
+
+- revised decision/deployment contract tests: `47 passed`;
+- full backend without `TEST_DATABASE_URL`: `303 passed, 73 skipped`, with the
+  same existing Starlette TestClient deprecation warning; the skips are the
+  PostgreSQL-marked tests and do not replace the earlier database-enabled
+  `374 passed` result;
+- full frontend: `112 passed` across 17 files; ESLint passed; Next.js generated
+  32 pages, then `.next` was removed;
+- repository-wide Ruff, focused format check for the 3 changed Python files,
+  documentation-link test (`1 passed`), JSON parsing, manifest digest check and
+  `git diff --check` all passed;
+- manifest-only and full checked-in contract commands both returned expected
+  exit `2` with their respective generic and sponsor-waiting decisions.
 
 The three interruption tests terminated PostgreSQL connections, not a live
 worker process. The attachment drill reused its original `_test` PostgreSQL
@@ -256,6 +296,15 @@ limit or an SLA. PM8 attachment metadata was empty.
 
 ## PM9 Gate Results
 
+| Decision gate | Result | Evidence boundary |
+|---|---|---|
+| Engineering readiness | `PASS` | Architecture, deployment/recovery contracts, tests, runbooks, and release procedures are complete by design |
+| Local rehearsal | `PARTIAL` | Deterministic, static, synthetic, and isolated PostgreSQL evidence exists; important live local profiles were not executed |
+| Real-company pilot | `BLOCKED — EXTERNAL DEPENDENCY` | Sponsor, approved host, company owners, users/data, secrets, and organizational acceptance do not exist |
+
+The detailed execution gates below remain intentionally open where practice has
+not matched the design.
+
 | Gate | Result | Reason |
 |---|---|---|
 | Deployment manifest/static decision | Executed, intentionally blocking | Placeholder release/owners/acceptance and open critical gates |
@@ -274,9 +323,9 @@ limit or an SLA. PM8 attachment metadata was empty.
 | Disk warning/recovery | Unverified | Synthetic injected state only; no durable operational alert path rehearsal |
 | Real pilot secret rotation | Unverified | Synthetic values only; no restart/database credential/elapsed window |
 | Representative attachment restore | API/archive boundary passed; paired restore open | Authorized non-empty upload/archive/restore/download passed, but original `_test` metadata was reused and no paired PostgreSQL restore ran |
-| Operational ownership | Unverified | Nine assignments remain placeholders |
-| Incident path/support coverage | Unverified | Unconfigured/unconfirmed |
-| Known-limitations acceptance | Unverified | All critical limitations pending |
+| Operational ownership | Externally blocked | Solo technical stewardship is recorded; nine company authority keys require a sponsor |
+| Incident path/support coverage | Externally blocked | A sponsoring company must configure and approve them |
+| Known-limitations acceptance | Externally blocked | 14/14 documented by engineering; 0/14 organizationally accepted |
 
 ## Load And Capacity Result
 
@@ -306,9 +355,19 @@ See [pilot backup schedule](../pilot_backup_schedule.md) and
 
 ## Ownership And Acceptance
 
-All required ownership roles are unassigned. Incident channels, escalation and
-support coverage are unconfigured. Every limitation in the structured register
-is pending. No names, contacts or approvals were invented.
+The solo project developer truthfully holds technical stewardship for release
+preparation, rollback procedure maintenance, backup and database-recovery
+drills, development application support, and security implementation. These
+responsibilities do not grant company operational or approval authority.
+
+All nine company ownership keys remain `blocked_external_dependency`. Incident
+channels, escalation, production support coverage, company security authority,
+and the pilot business owner must be supplied by a future sponsor. The 14
+limitations are engineering-documented as
+`DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED`; organizational acceptance remains
+`BLOCKED_EXTERNAL_DEPENDENCY`, with accepted count `0/14`. No names, contacts,
+companies, channels, or approvals were invented, and nine different people are
+not required when a sponsor eventually assigns compatible roles.
 
 See [operational ownership](../operational_ownership.md) and
 [known-limitations acceptance](../known_limitations_acceptance.md).
@@ -320,8 +379,9 @@ application rollback at the same revision. If PM9 data/schema compatibility
 requires it, use a separately protected, restore-validated backup; the manifest
 does not allow database downgrade by default.
 
-No deploy→PM8 rollback→PM9 redeploy sequence ran. Candidate commit/tag remain
-pending and the release record remains draft. See
+No deploy→PM8 rollback→PM9 redeploy sequence ran. The implementation commits are
+local; the design-readiness tag is distinct from a real-pilot release tag. The
+release record is design-complete but externally blocked. See
 [release rehearsal](../pilot_release_rehearsal.md).
 
 The source-checkout protocol requires an exact tag, matching full SHA and clean
@@ -343,11 +403,13 @@ release/rollback rehearsal or intended-service-account backup drill ran.
 Therefore this checkpoint makes no generic host, process, container, volume or
 deployment cleanup claim.
 
-No commit, tag or push was performed by PM9 implementation.
+The three PM9 implementation commits are local and nothing has been pushed. The
+design-readiness classification is checkpointed separately; it does not claim
+that a real pilot occurred.
 
 ## Changed-Path Categories
 
-Current candidate changes are organized under:
+PM9 implementation is organized under:
 
 - release/deployment: `Dockerfile`, `frontend/Dockerfile`,
   `docker-compose.pilot.yml`, `.env.pilot.example`, `deployment/`;
@@ -357,14 +419,15 @@ Current candidate changes are organized under:
 - focused tests under `tests/`;
 - this README and PM9/operator documentation under `docs/`.
 
-Exact final changed paths must come from `git status --short` after concurrent
-work is complete.
+This follow-up changes only structured PM9 records, their narrow validator
+tests, and documentation.
 
 ## Remaining Risks
 
 - no evidence from intended pilot host or representative pilot data;
 - no live execution of the implemented authenticated post-start validation;
-- no completed owner/incident/support/acceptance model;
+- no sponsoring organization, company owner/incident/support organization, or
+  organizational limitation acceptance;
 - no real pilot secrets or rotation;
 - no sustained/mutation/capacity boundary;
 - no live worker-process kill; connection-termination boundaries alone do not
@@ -381,8 +444,10 @@ work is complete.
 
 ## Recommended Next Work
 
-Do not start a feature milestone. Complete the PM9 execution/ownership closure
-on an approved intended or pilot-equivalent host:
+Do not start PM10 to compensate for missing external resources. The next
+workstream is [Pilot 01 — Company-Specific Deployment](../pilot_01_company_specific_deployment.md),
+and it begins only after a sponsoring organization and approved environment
+exist:
 
 1. assign owners, channels, coverage and limitation acceptance;
 2. provision protected real pilot configuration;
@@ -396,8 +461,14 @@ on an approved intended or pilot-equivalent host:
 7. run full regressions/static/build/migration/scans/cleanup;
 8. regenerate/review release record and reevaluate the deterministic decision.
 
-Until every mandatory gate has evidence, the decision remains exactly:
+The completed PM9 engineering boundary and external decision are:
 
 ```text
-NO-GO / NOT YET VERIFIED
+PILOT-READY BY DESIGN
+NOT PILOT-VERIFIED IN PRACTICE
+
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```

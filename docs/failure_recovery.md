@@ -97,10 +97,14 @@ unit test:
 | Attachment recovery | PM9 authorized non-empty API upload/archive/restore/download test pass trên original `_test` metadata | Paired PostgreSQL dump + metadata/bytes restore chưa chạy |
 | Release rollback | Contract metadata tests | PM9→PM8→PM9 rehearsal chưa chạy |
 
-Quyết định vẫn là:
+Failure-recovery engineering controls đã complete; local evidence chỉ partial và
+không thay thế execution trên approved pilot host:
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 ## Exact Worker-Termination Acceptance

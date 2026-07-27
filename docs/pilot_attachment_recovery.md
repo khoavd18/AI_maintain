@@ -24,7 +24,10 @@ Test không tạo/restore PostgreSQL dump và không chứng minh metadata/bytes
 recovery từ một paired backup. Gate đó vẫn mở.
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering implementation: COMPLETE
+Local rehearsal: PARTIAL — API/archive boundary only
+Real-company recovery: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 ## Fixture Bắt Buộc

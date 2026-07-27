@@ -6,11 +6,22 @@ PM9 cung cấp một deployment contract và một closed Docker Compose rehears
 internal pilot. Nó không tạo generic deployment platform, cloud/Kubernetes
 stack, scheduler mới hay job thứ năm.
 
-Deployment trên intended pilot host chưa được thực hiện. Trạng thái hiện tại:
+The deployment design, closed execution tooling, validation controls, and
+runbook are complete. Deployment on an approved pilot host has not been
+performed. Current classification:
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
+
+Pilot-ready by design means the deployment architecture and procedures are
+available for a future sponsor. Pilot-verified in practice requires their actual
+execution on an approved host with company owners, secrets, representative
+data, and real users. This workstation provides only local evidence and is not
+an approved pilot host.
 
 Nguồn authoritative:
 
@@ -271,7 +282,7 @@ PM8 immutable trên intended environment.
 | Manifest/Compose/rehearsal reconciliation | `22 passed`; Ruff, Compose config và Make dry-runs pass |
 | Closed command construction, dotenv protection, opt-in, host approval, `_test` empty-data guard và exact fixed-stop construction | Covered by focused local tests; no real stop execution |
 | Authenticated post-start implementation | `16 passed` focused deployment/post-start tests cover closed API checks, redaction, HTTPS/loopback guard, data attestation và failure cleanup; chưa chạy trên live PM9 stack |
-| Static checked-in contract | Executed locally; expected blockers; `NO-GO / NOT YET VERIFIED` |
+| Static checked-in contract | Executed locally; generic technical blockers remain fail-closed |
 | Docker pilot Compose deployment | Chưa chạy |
 | Intended-host deployment | Chưa chạy |
 | Authenticated/RBAC/jobs/notifications/analytics smoke | Tooling implemented/unit-tested; live execution chưa chạy |
@@ -279,3 +290,8 @@ PM8 immutable trên intended environment.
 | Cleanup after real deployment rehearsal | Chưa có execution để xác minh |
 
 PM9 rehearsal không thiết lập production readiness.
+
+The next external workstream is
+[Pilot 01 — Company-Specific Deployment](pilot_01_company_specific_deployment.md).
+It is not PM10 and must not start until a sponsor supplies the required company
+environment and authority.

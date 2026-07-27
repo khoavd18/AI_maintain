@@ -391,14 +391,20 @@ xem [release rehearsal](pilot_release_rehearsal.md).
 
 ## PM9 Incident Ownership
 
-Current [ownership record](../deployment/operational_ownership.json) có chín
-unassigned roles, unconfigured incident channels và unconfirmed support
-coverage. Không tự điền tên/contact. Trong incident thật, nếu approved path chưa
-có thì pilot không được mở; đây là release blocker, không phải runbook detail có
-thể bỏ qua.
+Current [ownership record](../deployment/operational_ownership.json) assigns
+technical procedure stewardship to the `Solo project developer`, but all nine
+company authority keys, incident channels, and production support coverage are
+`blocked_external_dependency`. Do not infer a company contact or approval. A
+real pilot cannot open until a sponsor supplies them.
 
 Quyết định PM9 hiện tại:
 
 ```text
-NO-GO / NOT YET VERIFIED
+PILOT-READY BY DESIGN
+NOT PILOT-VERIFIED IN PRACTICE
+NO-GO / WAITING FOR PILOT SPONSOR
 ```
+
+Execution of this runbook on a company host belongs to
+[Pilot 01 — Company-Specific Deployment](pilot_01_company_specific_deployment.md),
+not PM10.

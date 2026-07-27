@@ -139,8 +139,12 @@ thay last-good hoặc để lại partial. Chưa có controlled failure dưới 
 service account, scheduled execution hoặc PM9 separate restore trên intended
 host.
 
-Backup/restore decision PM9 hiện là:
+Backup/restore engineering contract đã complete, nhưng local rehearsal chỉ đóng
+publication/failure boundary và real-company restore gate chưa thể chạy:
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```

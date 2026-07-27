@@ -5,12 +5,19 @@
 Machine-readable source:
 [known-limitations record](../deployment/known_limitations.json).
 
-Tất cả limitation dưới đây đang `pending`, owner role là
-`PENDING_ASSIGNMENT`, `accepted_by_role` chưa có và không có approval evidence.
-Không limitation nào được đánh dấu accepted bằng suy luận.
+All 14 limitations are documented and understood by the
+`Solo project developer` as engineering constraints. Their engineering status
+is `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED`. This acknowledgement is not
+company, business, security, or production acceptance.
+
+Organizational acceptance remains `BLOCKED_EXTERNAL_DEPENDENCY`: there is no
+sponsoring organization or pilot business owner, so the accepted count remains
+`0/14`. No acceptance was inferred or fabricated.
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering documentation: COMPLETE
+Organizational acceptance: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 ## Acceptance Register
@@ -20,7 +27,8 @@ NO-GO / NOT YET VERIFIED
 - Description: pilot chỉ chạy một API process.
 - Consequence: API dừng trong restart hoặc process failure.
 - Mitigation: giới hạn pilot, theo dõi readiness, restart theo runbook.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: sau API incident hoặc trước khi tăng pilot scope.
 
 ### Single Worker Instance
@@ -29,7 +37,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: background work dừng đến khi worker phục hồi; durable lease giữ
   retry boundary.
 - Mitigation: theo dõi heartbeat, lease, dead letter và recovery runbook.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: sau worker outage hoặc backlog vượt threshold.
 
 ### Single PostgreSQL Instance
@@ -37,7 +46,8 @@ NO-GO / NOT YET VERIFIED
 - Description: pilot dùng một PostgreSQL instance.
 - Consequence: mất PostgreSQL làm dừng transactional và background workflows.
 - Mitigation: checksummed backup, separate restore và rehearsed rollback.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: sau database incident hoặc trước khi nhận customer data.
 
 ### No Automatic Failover
@@ -45,7 +55,8 @@ NO-GO / NOT YET VERIFIED
 - Description: không có automatic failover cho API, worker hoặc PostgreSQL.
 - Consequence: human recovery và downtime.
 - Mitigation: assign owners, configure incident path, rehearse restart/rollback.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: khi availability requirement vượt internal-pilot scope.
 
 ### No Automated PITR
@@ -54,7 +65,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: chỉ restore về validated backup gần nhất, có thể mất thay đổi sau
   backup.
 - Mitigation: operator schedule, overdue alert và separate restore drill.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: khi xác định data-loss objective hoặc trước pilot expansion.
 
 ### Local Attachment Storage
@@ -62,7 +74,8 @@ NO-GO / NOT YET VERIFIED
 - Description: attachment bytes nằm trên local storage của một host.
 - Consequence: host loss có thể làm metadata và bytes không đồng bộ.
 - Mitigation: paired PostgreSQL/filesystem backup, checksum và orphan checks.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: sau attachment recovery failure hoặc trước multi-host use.
 
 ### No Malware Scanning
@@ -71,7 +84,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: MIME/signature/extension/size checks không phát hiện mọi nội dung
   độc hại.
 - Mitigation: limited types, authorized download và approved pilot data.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: trước khi nhận file ngoài approved pilot group.
 
 ### In-App Alerts Only
@@ -80,7 +94,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: owner có thể bỏ lỡ alert khi không đăng nhập.
 - Mitigation: confirmed support hours, incident channel và operator review
   cadence.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: sau missed alert hoặc coverage change.
 
 ### No Centralized Observability Or On-Call Platform
@@ -89,7 +104,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: investigation phụ thuộc safe local logs, health, metrics và
   host procedure.
 - Mitigation: bounded logs, operator metric review và documented escalation.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: sau hard-to-detect incident hoặc trước coverage expansion.
 
 ### No Managed Secrets
@@ -98,7 +114,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: distribution, rotation và rollback cần secure operator process.
 - Mitigation: runtime injection only, no values in evidence và rehearsed
   rotation.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: sau rotation failure hoặc operating-model change.
 
 ### Single-Host Capacity Evidence
@@ -107,7 +124,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: không ngoại suy sang capacity, SLA hoặc host khác.
 - Mitigation: record host/profile, opt-in soak/step load và automatic safety
   stop.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: khi host, configuration hoặc demand thay đổi.
 
 ### No Multi-Tenancy
@@ -116,7 +134,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: một deployment không được dùng để cô lập nhiều independent
   customers.
 - Mitigation: giới hạn một approved internal-pilot boundary.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: trước đề xuất deployment cho nhiều tổ chức.
 
 ### No SSO Or MFA
@@ -125,7 +144,8 @@ NO-GO / NOT YET VERIFIED
 - Consequence: access control không tích hợp enterprise identity policy.
 - Mitigation: bounded user group, current RBAC/session controls và explicit CLI
   bootstrap.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: trước khi tăng data sensitivity hoặc user scope.
 
 ### No Customer-Facing SLA
@@ -133,8 +153,15 @@ NO-GO / NOT YET VERIFIED
 - Description: pilot không có customer-facing SLA.
 - Consequence: rehearsal không cam kết uptime, latency hoặc recovery time.
 - Mitigation: chỉ báo observed envelope và confirmed support assumptions.
-- Owner/status: `PENDING_ASSIGNMENT` / `pending`.
+- Engineering status: `DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED` / `Solo project developer`.
+- Organizational owner/status: `PENDING_PILOT_SPONSOR_ASSIGNMENT` / `BLOCKED_EXTERNAL_DEPENDENCY`.
 - Review trigger: trước mọi service commitment.
+
+## Engineering Documentation Versus Organizational Acceptance
+
+Engineering documentation confirms that each limitation has a description,
+operational consequence, mitigation, and review trigger. It does not authorize
+company risk acceptance or permit a real pilot to start.
 
 ## Acceptance Rule
 

@@ -18,8 +18,15 @@ không chứa generated secret, JWT hoặc refresh/CSRF token material. Không c
 process restart, database credential hay elapsed overlap-window evidence.
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering implementation: COMPLETE
+Local rehearsal: PARTIAL — synthetic values only
+Real-company rotation: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
+
+The solo developer owns the security implementation and synthetic test
+procedure, not company secret custody, security acceptance, or incident
+authority. A future sponsor must provide those roles and protected values.
 
 ## Required Approval
 

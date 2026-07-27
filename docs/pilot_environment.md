@@ -6,15 +6,20 @@ Tài liệu này ghi lại môi trường đã quan sát cho Product Milestone 9
 phân biệt nó với intended pilot host. PM9 là diễn tập cho internal pilot, không
 phải chứng nhận production readiness.
 
-Quyết định hiện tại:
+Current three-gate classification:
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 Không có tài liệu, biến môi trường hay approval record nào xác định workstation
 đang dùng là intended pilot host. Vì vậy mọi kiểm tra phụ thuộc pilot host vẫn
-chưa được xác minh.
+chưa được xác minh. There is also no sponsoring organization, real pilot user,
+representative company data, operational team, or company acceptance authority.
+No missing external condition is treated as an application defect or fabricated.
 
 ## Snapshot Môi Trường Đã Quan Sát
 
@@ -165,9 +170,11 @@ python -m src.reliability.pilot_contract --skip-environment
 ```
 
 Lần chạy local ngày 2026-07-26 trả đúng
-`NO-GO / NOT YET VERIFIED` và findings dạng blocker cho release placeholder,
-ownership/incident path, limitation acceptance, rollback và các critical gate
-chưa có evidence. Đây là expected safety behavior, không phải pilot-host
+generic technical `NO-GO / NOT YET VERIFIED` và findings dạng blocker cho
+release placeholder, ownership/incident path, limitation acceptance, rollback
+và các critical gate chưa có evidence. The complete release record separately
+classifies the external decision as `NO-GO / WAITING FOR PILOT SPONSOR`. Đây là
+expected safety behavior, không phải pilot-host
 rehearsal.
 
 Xem thêm [ownership](operational_ownership.md),

@@ -264,10 +264,27 @@ Final verification trên settled worktree ghi thêm:
 - Alembic có một head `20260726_0008`; `current`, `check` và clean
   base-to-head trên temporary `_test` database: pass;
 - `docker compose ... config --quiet`: pass;
-- manifest/full/release-identity validators: expected exit `2` với exact
+- manifest-only technical validator: expected exit `2` với generic
   `NO-GO / NOT YET VERIFIED`;
+- full checked-in three-gate contract: expected exit `2` với exact
+  `NO-GO / WAITING FOR PILOT SPONSOR`; release-identity validation vẫn fail
+  closed khi chưa có final local tag/observations;
 - deployment manifest semantic JSON SHA-256:
-  `68f7ad8cd51dd7da90a060675eba113c81c11418c91cddbccf8a8800fad14bcb`.
+  `59a533845e83197aefe3c3c7201f9173ae66a00f4afdfd571471a45957db6dad`.
+
+Design-readiness classification follow-up ngày 2026-07-27 chạy riêng và ghi:
+
+- revised decision/deployment contract tests: `47 passed`;
+- full backend khi `TEST_DATABASE_URL` unset: `303 passed, 73 skipped`, cùng một
+  existing Starlette TestClient deprecation warning; 73 PostgreSQL-marked skips
+  không thay thế database-enabled result `374 passed` ở trên;
+- full frontend: `112 passed` trên 17 files; ESLint pass; Next.js build 32 pages
+  rồi `.next` được xóa;
+- Ruff repository-wide, format check cho 3 changed Python files,
+  documentation-link test (`1 passed`), JSON parse, manifest digest và
+  `git diff --check`: pass;
+- manifest-only/full checked-in contract commands đều exit `2` đúng với generic
+  technical decision và sponsor-waiting decision tương ứng.
 
 Các focused count không được cộng cơ học thành full-backend result và không thay
 PM8 checkpoint counts. `73 passed, 239 deselected` là PostgreSQL-marked

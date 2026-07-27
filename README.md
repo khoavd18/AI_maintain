@@ -2,11 +2,28 @@
 
 Nền tảng decision-support cho bảo trì thiết bị, kết hợp auditable asset lifecycle, ticket/SLA, preventive planning, standalone work orders, spare-parts stock control, Vietnamese batch analytics, explainable risk scoring và RAG retrieval trên SOP/checklist.
 
-> Trạng thái: PM9 internal-pilot deployment/recovery rehearsal candidate trên nền
-> PM1–PM8. Tooling đã có nhưng intended-host, owners, incident path, real secrets,
-> representative recovery và workload gates chưa được xác minh. Quyết định:
-> `NO-GO / NOT YET VERIFIED`. Repository không production-ready và không thay
-> thế CMMS/S-Maintain.
+> Trạng thái: **Product Milestone 9 engineering implementation complete — pilot-ready
+> by design, not pilot-verified in practice.** Repository chưa production-ready,
+> chưa có sponsoring organization hoặc approved pilot host, và không thay thế
+> CMMS/S-Maintain. Overall external pilot decision:
+> `NO-GO / WAITING FOR PILOT SPONSOR`.
+
+**Pilot-ready by design** means that the system contains the architecture,
+deployment contracts, validation tooling, recovery procedures, and operational
+templates needed to begin a pilot when a sponsoring organization and approved
+environment become available.
+
+**Pilot-verified in practice** means that those procedures have actually been
+executed on an approved pilot host with real organizational owners, pilot-grade
+secrets, representative data, and real users.
+
+Current PM9 gates:
+
+| Gate | Result | Meaning |
+|---|---|---|
+| Engineering readiness | `PASS` | Repository architecture, tooling, contracts, tests, runbooks, and release procedures are complete for the recorded scope |
+| Local rehearsal | `PARTIAL` | Deterministic/local/synthetic checks passed, but live Compose, soak, mutation, capacity, live worker kill, and paired restore were not executed |
+| Real-company pilot | `BLOCKED — EXTERNAL DEPENDENCY` | No sponsor, approved host, company owners, real users/data, pilot secrets, or organizational acceptance exists |
 
 ## Bài Toán
 
@@ -922,9 +939,9 @@ mutation load, capacity/degradation, live worker-process kill, real secret
 rotation, durable disk alert hay paired PostgreSQL dump + attachment restore.
 Local disposable `_test` drill đã chạy một valid `pg_dump` và một
 invalid-database failure mà không publish partial hoặc thay last-good index; đây
-không phải intended-host/service-account evidence. Owner/incident/acceptance
-records vẫn là placeholder; candidate commit/tag và rollback rehearsal vẫn
-unverified.
+không phải intended-host/service-account evidence. Technical stewardship is
+recorded for the solo developer, while company owner/incident/acceptance
+authority and rollback rehearsal remain externally blocked.
 
 Final local verification trên settled worktree đạt `374 passed` cho full backend
 với cả `73` PostgreSQL-marked tests trên fresh disposable PostgreSQL 16 `_test`;
@@ -934,17 +951,26 @@ database-enabled run. Full frontend đạt `112 passed` trên 17 files, ESLint p
 và Next.js production build tạo 32 pages rồi `.next` được xóa. Ruff check toàn
 repository pass; 19 PM9 Python files pass focused format check. Alembic có một
 head `20260726_0008`, current/check pass và fresh `_test` database migrate sạch
-từ base đến head. Pilot Compose config pass; contract/release validators vẫn
-fail closed với exact `NO-GO / NOT YET VERIFIED`.
+từ base đến head. Pilot Compose config pass. Manifest-only technical validation
+continues to fail closed with generic `NO-GO / NOT YET VERIFIED`; the complete
+three-gate release record classifies the external decision separately.
 
-Quyết định:
+PM9 closure decision:
 
 ```text
-NO-GO / NOT YET VERIFIED
+PILOT-READY BY DESIGN
+NOT PILOT-VERIFIED IN PRACTICE
+
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 Xem [PM9 release note](docs/releases/product_milestone_9.md) và
-[PM9 load results](docs/pilot_load_results.md). PM8 measurements không được
+[PM9 load results](docs/pilot_load_results.md). Future external work is
+[Pilot 01 — Company-Specific Deployment](docs/pilot_01_company_specific_deployment.md),
+not PM10. PM8 measurements không được
 đổi nhãn thành PM9 evidence.
 
 ## Limitations

@@ -11,14 +11,17 @@ host chưa được cấu hình hay thực thi. PM8 manual backup/isolated resto
 evidence, không phải PM9 scheduled-backup evidence.
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering implementation: COMPLETE
+Local rehearsal: PARTIAL — local publication/failure boundary only
+Real-company schedule and restore: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 ## Policy Record Cần Owner Điền
 
 | Field | Current status |
 |---|---|
-| Backup owner | `PENDING_ASSIGNMENT` |
+| Company backup owner | `BLOCKED_EXTERNAL_DEPENDENCY`; future pilot sponsor phải assign |
 | Service account/operator role | Unverified |
 | Approved schedule | Unconfigured |
 | Protected backup root | Unverified; không ghi absolute path vào Git |

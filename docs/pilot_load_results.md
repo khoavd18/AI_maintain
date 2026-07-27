@@ -6,12 +6,21 @@ Không có PM9 host workload nào đã chạy. Không có soak result, mutation 
 first observed degradation point hay capacity result để công bố.
 
 ```text
-NO-GO / NOT YET VERIFIED
+Engineering readiness: PASS
+Local rehearsal: PARTIAL
+Real-company pilot: BLOCKED — EXTERNAL DEPENDENCY
+Overall: NO-GO / WAITING FOR PILOT SPONSOR
 ```
 
 Workstation hiện tại không được xác nhận là pilot host và chỉ còn khoảng
 0,92 GiB memory khả dụng tại lúc inspection. Vì vậy 900-second soak và opt-in
 step load không được chạy trong phiên này.
+
+The unexecuted profiles keep the local rehearsal gate `PARTIAL`; they do not
+negate engineering readiness and cannot be replaced with fabricated demand or
+results. Execution belongs to
+[Pilot 01 — Company-Specific Deployment](pilot_01_company_specific_deployment.md)
+after a sponsor approves the host, users, data, and drill authorization.
 
 ## Evidence Classification
 
