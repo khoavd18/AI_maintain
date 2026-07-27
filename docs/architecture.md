@@ -553,3 +553,92 @@ operational state vẫn ở PostgreSQL.
 Backup CLI dùng supported PostgreSQL tools và restore vào database `_restore`
 riêng. Attachment bytes vẫn cần backup/integrity step riêng. Xem
 [reliability validation](reliability_validation.md).
+
+## PM9 Deployment And Ownership Boundary
+
+PM9 không đổi canonical transactional/data-flow architecture và hiện không thêm
+migration sau `20260726_0008`. Nó bổ sung control-plane artifacts cho
+internal-pilot rehearsal:
+
+```text
+versioned secret-free manifest
+        + protected environment supplied by operator
+        + closed Docker Compose rehearsal
+        + opt-in closed authenticated post-start validator
+        + structured ownership/limitation/release records
+        + bounded reliability/recovery helpers
+```
+
+Runtime topology vẫn là một PostgreSQL, một Qdrant, một FastAPI process, một
+`src/operations/worker.py` và một Next.js frontend. Migration container là
+one-shot Alembic command, không phải service authority hoặc scheduler mới.
+Background catalog vẫn chính xác bốn job:
+
+- `preventive_generation`;
+- `sla_escalation`;
+- `analytics_refresh`;
+- `inventory_reorder_detection`.
+
+OS/operator-driven backup invocation nằm ngoài worker catalog. Step load,
+deployment rehearsal, disk fixture và attachment archive là explicit operator/
+test tooling; chúng không chạy ở API startup và không nhận arbitrary
+executable definition.
+
+Release identity được expose dạng additive, secret-free trên liveness/readiness
+và OpenAPI metadata. Pilot settings fail closed nếu storage không phải
+PostgreSQL, secret/default không đạt hoặc release identity chưa được verify.
+FastAPI, service/repository boundaries và RBAC vẫn là authority; Compose hoặc
+frontend không thay thế authorization.
+
+Authenticated post-start validator chỉ gọi closed FastAPI read/auth surface. Nó
+validate unauthenticated/auth/RBAC, release/database/worker, exact four-job
+catalog, approved-data reads, batch analytics và owner-isolated notifications.
+Business writes vẫn ngoài scope; chỉ authentication session creation, rotation
+và revocation xảy ra. Validator cần explicit process guard, approved-data
+attestation/evidence ID, protected credentials và HTTPS (trừ isolated loopback
+test được opt in riêng). Redacted evidence nằm ngoài repository.
+
+Persistent-state boundary của single-host pilot:
+
+- PostgreSQL transactional state;
+- Qdrant RAG-only index;
+- local attachment bytes;
+- batch analytics inputs/last-valid outputs;
+- protected backup artifacts ngoài repository.
+
+PostgreSQL dump và attachment archive phải restore theo cặp khi metadata không
+rỗng. Đây không phải distributed transaction, automated PITR, object storage
+hoặc HA.
+
+## PM9 Verification Status
+
+Current checkpoint đã chạy focused local/synthetic tests cho contract,
+deployment planning, load safety, temporary artifact/checksum helpers và
+injected disk capacity. Trên disposable local PostgreSQL 16 `_test`,
+PostgreSQL-marked selection đạt `73 passed, 239 deselected`: ba real connection
+terminations và một authorized non-empty attachment API/archive boundary pass.
+
+Evidence này không phải full-stack intended-host run. Chưa chạy authenticated
+deployment smoke, soak/mutation/capacity load, live worker-process kill, durable
+disk alert, real secret rotation hoặc paired PostgreSQL dump + attachment
+recovery. Authenticated post-start implementation đã có focused unit tests với
+mocked HTTP transport nhưng chưa contact live PM9 stack. Local disposable
+`_test` backup drill đã chạy valid `pg_dump` và controlled invalid-database
+failure; nó không phải intended-host/service-account evidence.
+
+Ownership, incident path và limitation acceptance records vẫn chứa placeholder.
+Do đó system boundary vẫn là internal-pilot candidate và quyết định là:
+
+```text
+NO-GO / NOT YET VERIFIED
+```
+
+PM9 không thiết lập production readiness. HA, automatic PITR, managed secrets,
+centralized observability/on-call, external notifications, object storage,
+malware scanning, multi-tenancy, SSO/MFA, Kubernetes và cloud deployment vẫn
+ngoài completed boundary.
+
+Xem [pilot deployment](pilot_deployment.md),
+[pilot environment](pilot_environment.md),
+[operational ownership](operational_ownership.md) và
+[PM9 release note](releases/product_milestone_9.md).

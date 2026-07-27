@@ -2,8 +2,8 @@
 
 ## Mục Tiêu
 
-Runbook này dành cho local/internal-pilot operator của PM7. Nó không thay thế
-backup policy, incident response hoặc SRE runbook cấp production.
+Runbook này dành cho local/internal-pilot operator của PM7–PM9. Nó không thay
+thế backup policy, incident response hoặc SRE runbook cấp production.
 
 ## Startup Chuẩn
 
@@ -257,3 +257,148 @@ khác khi event không còn dead-letter bị reject. Delivery attempt cũ không
 
 Không mở pilot nếu [checklist](internal_pilot_checklist.md) còn gate bắt buộc chưa
 có current-revision evidence. PM7 historical result không thay PM8 evidence.
+
+## PM9 Pilot Preflight
+
+PM9 deployment dùng contract riêng, không thay development Compose ở phần đầu
+runbook:
+
+1. Đọc [pilot environment record](pilot_environment.md) và xác nhận host có thật
+   sự là intended/pilot-equivalent host.
+2. Đo lại memory/disk/ports; không dùng snapshot cũ làm safety approval.
+3. Xác nhận ownership, support coverage, incident path và limitation acceptance.
+4. Tạo protected populated env ngoài repository từ
+   [`.env.pilot.example`](../.env.pilot.example); không in secret.
+5. Xác nhận release commit/tag/revision và manifest hash.
+6. Xác nhận approved data source, last-good backup, attachment pairing và rollback
+   owner.
+7. Chạy static/runtime contract validation; không override blocker.
+
+Current repository/environment chưa hoàn thành các điều kiện này.
+
+## PM9 Deployment Plan Và Execute
+
+Plan-only:
+
+```powershell
+python -m src.reliability.deployment_rehearsal `
+  --environment-file "<protected-pilot-env>"
+```
+
+Execute chỉ trên approved host:
+
+```powershell
+$env:PM9_ALLOW_DEPLOYMENT_REHEARSAL = "true"
+python -m src.reliability.deployment_rehearsal `
+  --environment-file "<protected-pilot-env>" `
+  --evidence-dir "<protected-outside-repository-directory>" `
+  --execute `
+  --intended-host
+```
+
+Mặc định tool stop services trong `finally` và không xóa volume. Execute từ chối
+dirty worktree và project name đã có container trước build. `--leave-running`
+chỉ có hiệu lực sau khi toàn bộ authenticated post-start sequence pass; cleanup
+failure làm command fail/exit `2`. Không dùng `--intended-host` trên workstation
+chưa được xác nhận.
+
+Automated rehearsal hiện validate exact tag/clean worktree, project collision,
+Compose/build/start, wait migration, yêu cầu đúng một `alembic current`, API
+liveness/readiness release identity, worker readiness, Qdrant readiness và
+frontend availability. Mặc định nó ghi approved data,
+authenticated login/RBAC, exact four-job catalog, notification owner isolation
+và analytics checks là `not_executed`, rồi fail overall.
+
+Closed authenticated post-start validator đã được implement và unit-test nhưng
+chưa chạy trên live PM9 stack. Để opt in trên approved host:
+
+1. inject `PM9_ALLOW_POST_START_VALIDATION=true`,
+   `PM9_APPROVED_DATA_ATTESTED=true` và opaque
+   `PM9_APPROVED_DATA_EVIDENCE_ID` vào process environment;
+2. inject bốn secret variables `PM9_SMOKE_OPERATOR_USERNAME`,
+   `PM9_SMOKE_OPERATOR_PASSWORD`, `PM9_SMOKE_RESTRICTED_USERNAME` và
+   `PM9_SMOKE_RESTRICTED_PASSWORD` từ protected source; không in chúng;
+3. dùng HTTPS API origin. Chỉ isolated loopback test mới được phép thêm
+   `PM9_ALLOW_HTTP_TEST_SMOKE=true`;
+4. thêm `--authenticated-post-start` vào execute command.
+
+Validator kiểm tra unauthenticated `401`, release/API/database/worker readiness,
+login, refresh rotation cùng old-session rejection, logout cùng access/refresh
+revocation, positive/negative RBAC, exact four-job enable/dead-letter
+state, non-empty approved-data reads, batch analytics và non-empty
+owner-isolated notifications. Nó chỉ tạo/revoke authentication sessions, không
+business-mutate, trigger job, restore/seed data, mutate notification,
+content-smoke Qdrant hoặc kiểm tra attachment recovery. Failure luôn cleanup
+dedicated Compose project kể cả khi `--leave-running` được yêu cầu.
+
+Make target cũng giữ opt-in tắt mặc định; set
+`PILOT_AUTHENTICATED_POST_START=true` để thêm flag. Approval và credential
+variables vẫn đi qua protected process environment, không qua Make arguments.
+Chi tiết tại [pilot deployment](pilot_deployment.md).
+
+## PM9 Scheduled Backup
+
+Schedule thuộc OS/operator boundary, không phải job thứ năm:
+
+```powershell
+$env:PM9_ALLOW_SCHEDULED_BACKUP = "true"
+python -m src.reliability.backup_schedule `
+  --backup-root "<approved-outside-repository-root>" `
+  --target-label "pilot" `
+  --retention-keep-count 7 `
+  --docker-container "<approved-postgresql-container>"
+```
+
+Successful publication chỉ xác nhận dump/checksum pair; `restore_validated`
+vẫn false cho đến separate restore drill. Current command không tự prune old
+archives. Chỉ xóa sau owner-reviewed last-good selection. Xem
+[pilot backup schedule](pilot_backup_schedule.md).
+
+## PM9 Disk Capacity Response
+
+PM9 tests dùng injected capacity values, không fill disk thật. Khi external
+host monitor hoặc approved check báo:
+
+- warning: dừng extended artifacts/load, kiểm tra database/attachment/backup
+  growth và báo operational owner;
+- critical: dừng release/mutation/backup publication mới, báo incident
+  coordinator và bảo vệ last-good;
+- repeated same state: deduplicate, không spam;
+- recovered: chỉ record recovery sau khi free space và representative write/
+  backup smoke được xác minh.
+
+Synthetic state machine hiện chưa persist durable in-app disk alert qua
+operational outbox. Host monitoring và approved incident channel vẫn là
+detection/escalation boundary; disk gate chưa đóng.
+
+## PM9 Release/Rollback Decision
+
+PM9 candidate và PM8 target cùng revision `20260726_0008`. Đường ưu tiên là:
+
+```text
+quiesce API/worker
+→ verify protected backup
+→ stop PM9 application
+→ deploy PM8 application at exact tagged commit
+→ validate health/auth/RBAC/worker/data
+→ decide restore only if data/schema compatibility requires it
+```
+
+Database downgrade không được mặc định cho phép. Restore phải dùng validated
+artifact và separate database rehearsal trước. Sau rollback rehearsal phải
+redeploy PM9 và chạy lại cùng smoke. Procedure này chưa chạy trên intended host;
+xem [release rehearsal](pilot_release_rehearsal.md).
+
+## PM9 Incident Ownership
+
+Current [ownership record](../deployment/operational_ownership.json) có chín
+unassigned roles, unconfigured incident channels và unconfirmed support
+coverage. Không tự điền tên/contact. Trong incident thật, nếu approved path chưa
+có thì pilot không được mở; đây là release blocker, không phải runbook detail có
+thể bỏ qua.
+
+Quyết định PM9 hiện tại:
+
+```text
+NO-GO / NOT YET VERIFIED
+```

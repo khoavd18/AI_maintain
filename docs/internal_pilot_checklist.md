@@ -1,7 +1,8 @@
 # Internal Pilot Go/No-Go Checklist
 
-PM8 chỉ validate internal-pilot operating envelope; checklist này không chứng
-minh production readiness.
+Checklist giữ PM8 checkpoint làm historical evidence và theo dõi các gate PM9
+cho internal-pilot deployment rehearsal. Nó không chứng minh production
+readiness.
 
 ## Release Gate
 
@@ -22,6 +23,10 @@ minh production readiness.
   không có missing/checksum/orphan finding.
 - [ ] Representative non-empty attachment metadata và bytes được backup/restore,
   rồi checksum-validate.
+- [x] Trên disposable PostgreSQL 16 `_test`, generated non-empty PDF upload trả
+  `201`, archive/restore thành công, Administrator download `200` với matching
+  bytes và Helpdesk nhận `403`; test dùng original metadata và không restore
+  paired PostgreSQL dump.
 - [x] PostgreSQL interruption/recovery giữ pending work và data.
 - [x] Analytics publication failure giữ last-valid output.
 
@@ -48,11 +53,68 @@ minh production readiness.
 - [ ] Secret values khác development placeholders/defaults.
 - [ ] Real pilot signing/database secret rotation được rehearsal.
 
+## PM9 Deployment And Release Gate
+
+- [x] Versioned manifest, ownership, limitation và draft release records tồn tại.
+- [x] Static validator giữ placeholder/open critical gate ở trạng thái blocker.
+- [x] Pilot mode từ chối CSV, development defaults, weak/missing secret và
+  unverified release identity.
+- [x] Closed Compose rehearsal có explicit execution/host approval và default
+  fixed `stop` command, không có volume deletion; real rehearsal cleanup chưa
+  chạy.
+- [ ] Candidate commit/tag không còn placeholder và release record ở trạng thái
+  final.
+- [ ] Intended hoặc approved pilot-equivalent host được xác nhận.
+- [ ] Clean full-stack deployment rehearsal được thực hiện trên host đó.
+- [ ] Approved data restore/seed, schema revision và release identity được xác
+  minh.
+- [ ] Authentication/RBAC, exact four-job catalog, notifications và analytics
+  deployment smoke được thực hiện.
+- [ ] Application rollback về PM8 và PM9 redeploy được rehearsal.
+
+## PM9 Load And Failure Gate
+
+- [x] Bounded step-load profile 4/8/12/16/20 req/s có explicit opt-in,
+  allow-listed report và automatic safety-stop tests.
+- [x] Synthetic disk warning/critical/dedup/recovery state-machine tests chạy mà
+  không fill real disk.
+- [x] Temporary-file/checksum/last-good artifact helpers và non-empty attachment
+  archive helpers được test bằng temporary fixtures.
+- [x] Local disposable `_test` boundary đã chạy một valid `pg_dump` và một
+  invalid-database `pg_dump`; đây không phải intended-host/service-account gate.
+- [x] PostgreSQL-marked suite trên disposable PostgreSQL 16 `_test` đạt
+  `73 passed, 239 deselected`.
+- [x] Ba real PostgreSQL connection-termination tests đạt cho job completion,
+  outbox delivery và ticket+outbox transaction atomicity.
+- [ ] 4-user/3 req/s/900-second soak chạy đủ trên approved host.
+- [ ] Mutation-bearing workload chạy với stable idempotency, invariants và
+  fixture-specific cleanup actions được xác minh.
+- [ ] First observed degradation point được đo, hoặc ghi rõ không quan sát trong
+  bounded profile.
+- [ ] Exact live worker termination trong scheduled job, outbox delivery và
+  controlled transaction được rehearsal.
+- [ ] Controlled real backup failure được phát hiện mà không ảnh hưởng last-good.
+- [ ] Disk alert được rehearsal qua approved operational path; synthetic helper
+  không tự đóng gate.
+- [ ] Paired PostgreSQL metadata và representative non-empty attachment bytes
+  được restore/download/checksum-validate.
+
+## PM9 Human And Security Gate
+
+- [ ] Cả chín ownership/contact roles được assign bằng role và approved internal
+  channel.
+- [ ] Support hours, incident communication và escalation path được xác nhận.
+- [ ] Mỗi critical known limitation có owner, acceptance, timestamp, evidence và
+  review trigger.
+- [ ] Pilot-grade signing/database secrets được provision mà không ghi vào Git.
+- [ ] Real signing/database secret rotation và bounded rollback window được
+  rehearsal.
+
 ## Decision
 
 `GO` chỉ khi mọi gate bắt buộc có current-revision evidence và không có unresolved
-integrity/dead-letter/backup issue. Nếu một gate chưa chạy, kết quả là `NO-GO /
-NOT YET VERIFIED`, không suy luận từ PM7 historical results.
+integrity/dead-letter/backup issue. Nếu một critical gate chưa chạy, kết quả là
+`NO-GO / NOT YET VERIFIED`, không suy luận từ PM7/PM8 historical results.
 
 ### PM8 Local Validation Decision - 2026-07-26
 
@@ -71,6 +133,27 @@ attachment-byte restore, and intended pilot-host rehearsal. Real pilot secret
 rotation also remains unexecuted. See the PM8 release note for exact
 measurements. Closing commit/tag did not change the overall decision.
 
+### PM9 Implementation-Session Decision - 2026-07-26
+
+```text
+NO-GO / NOT YET VERIFIED
+```
+
+PM9 tooling và focused synthetic/local tests không thay thế intended-host
+evidence. Deployment, release/rollback, soak, mutation, degradation, exact
+live worker-process termination, intended-host/service-account `pg_dump`
+failure, durable disk-alert path, real pilot secret rotation và paired
+PostgreSQL dump + representative attachment recovery vẫn chưa chạy. Local
+valid/invalid-database `pg_dump`, connection-termination và authorized
+attachment archive boundaries đã pass nhưng không đóng các broader gates.
+Ownership, incident path, support coverage và limitation acceptance đều còn
+placeholder.
+
+Static contract validation trả expected blockers và cùng quyết định trên. Xem
+[PM9 release note](releases/product_milestone_9.md),
+[pilot deployment](pilot_deployment.md), [load results](pilot_load_results.md)
+và [ownership](operational_ownership.md).
+
 ## Explicit Remaining Boundary
 
 HA, automated PITR, managed secrets, centralized observability, distributed
@@ -78,4 +161,5 @@ throttling, object storage, malware scanning, external notifications,
 multi-tenancy, SSO/MFA, Kubernetes và cloud deployment nằm ngoài completed
 boundary.
 
-PM9 chưa bắt đầu.
+PM9 là internal-pilot rehearsal milestone, không thêm business domain hoặc thay
+đổi bốn-job worker architecture.

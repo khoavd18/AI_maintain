@@ -76,3 +76,71 @@ Nếu dump/checksum/restore/revision/count/integrity/smoke thất bại:
 - kiểm tra disk, PostgreSQL version, quyền và migration;
 - chạy lại bằng output/database restore mới sau khi sửa nguyên nhân;
 - không cập nhật `last validated backup` thủ công.
+
+## PM9 Scheduled Publication Boundary
+
+PM9 bổ sung `src.reliability.backup_schedule` để một approved OS-level schedule
+gọi đúng một bounded backup command. Module không phải scheduler và không thêm
+job thứ năm.
+
+```powershell
+$env:PM9_ALLOW_SCHEDULED_BACKUP = "true"
+python -m src.reliability.backup_schedule `
+  --backup-root "<approved-outside-repository-root>" `
+  --target-label "pilot" `
+  --retention-keep-count 7 `
+  --docker-container "<approved-postgresql-container>"
+```
+
+Khi command thật sự chạy, publication path được thiết kế để:
+
+- ghi output của `pg_dump` vào partial artifact rồi `os.replace`;
+- tạo và verify SHA-256 metadata;
+- giữ last-good khi writer/checksum fail;
+- không ghi credential/path vào summary;
+- luôn báo `restore_validated=false` trước separate restore drill.
+
+Current command validate/record keep-count nhưng không tự prune archive cũ.
+Operator phải review last-good selection và organizational retention policy
+trước deletion. Exact schedule, service account, backup root và pruning chưa
+được cấu hình trên intended host. Xem
+[pilot backup schedule](pilot_backup_schedule.md).
+
+## PM9 Paired Attachment Recovery
+
+Một database backup có active attachment metadata chỉ được coi là recovery
+candidate khi có paired filesystem archive cùng rehearsal point. PM9 bounded
+helpers:
+
+- archive generated relative keys dưới contained root;
+- reject traversal, symlink, duplicate/invalid entry và bounds violation;
+- checksum từng non-empty fixture;
+- inspect missing, mismatch, orphan metadata/file;
+- restore vào empty isolated destination.
+
+Sau restore database kết thúc `_restore`, chạy aggregate assessment và authorized
+download. Expected invalid/missing/mismatch/orphan đều bằng 0. Raw bytes,
+storage keys và absolute paths không vào release note.
+
+Checkpoint PostgreSQL-marked selection đạt `73 passed, 239 deselected` trên
+disposable PostgreSQL 16 `_test`. Test generated non-empty PDF đã upload qua
+authorized API, archive/restore bytes, download `200` cho Administrator và
+`403` cho Helpdesk. Test dùng original `_test` metadata; nó không dump/restore
+PostgreSQL và không đóng representative paired drill. PM8 empty-metadata
+assessment cũng không đóng gate này. Xem
+[attachment recovery](pilot_attachment_recovery.md).
+
+## PM9 Failure Evidence
+
+Controlled-writer tests cover write failure/checksum mismatch, removal của
+partial test artifact và last-good preservation. Local disposable `_test`
+evidence cũng đã chạy valid `pg_dump` rồi invalid-database `pg_dump` mà không
+thay last-good hoặc để lại partial. Chưa có controlled failure dưới intended
+service account, scheduled execution hoặc PM9 separate restore trên intended
+host.
+
+Backup/restore decision PM9 hiện là:
+
+```text
+NO-GO / NOT YET VERIFIED
+```

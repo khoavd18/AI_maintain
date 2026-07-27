@@ -80,9 +80,12 @@ current checkpoint evidence.
 - Local attachment bytes cần backup riêng và chưa có malware scanning.
 - Operating limits chỉ áp dụng đúng test environment/profile đã ghi; không ngoại
   suy sang production.
-- Soak, load-to-first-failure, mutation-bearing load, exact live mutation kill,
-  disk-warning drill, real pilot-secret rotation và representative non-empty
-  attachment restore chưa chạy.
+- Soak, load-to-first-failure, mutation-bearing load, live worker-process kill,
+  durable disk-warning path, real pilot-secret rotation và paired PostgreSQL
+  dump + representative non-empty attachment recovery chưa chạy.
+- PM9 connection-termination tests và authorized attachment API/archive test đã
+  pass trên disposable PostgreSQL 16 `_test`; chúng chỉ là boundary evidence và
+  không đóng hai broader process-kill/paired-restore gates trên.
 
 Xem [load test plan](load_test_plan.md), [failure recovery](failure_recovery.md),
 [backup/restore](backup_restore.md) và

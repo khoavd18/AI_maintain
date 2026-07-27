@@ -2,7 +2,11 @@
 
 Nền tảng decision-support cho bảo trì thiết bị, kết hợp auditable asset lifecycle, ticket/SLA, preventive planning, standalone work orders, spare-parts stock control, Vietnamese batch analytics, explainable risk scoring và RAG retrieval trên SOP/checklist.
 
-> Trạng thái: nền tảng internal-pilot với PostgreSQL transactions, durable background worker, in-app operations và PM8 reliability validation tooling. Repository chưa production-ready và không thay thế CMMS/S-Maintain.
+> Trạng thái: PM9 internal-pilot deployment/recovery rehearsal candidate trên nền
+> PM1–PM8. Tooling đã có nhưng intended-host, owners, incident path, real secrets,
+> representative recovery và workload gates chưa được xác minh. Quyết định:
+> `NO-GO / NOT YET VERIFIED`. Repository không production-ready và không thay
+> thế CMMS/S-Maintain.
 
 ## Bài Toán
 
@@ -74,8 +78,16 @@ Chi tiết và tiêu chí thành công: [docs/mvp_scope.md](docs/mvp_scope.md).
 - Next.js authenticated frontend có ticket/work-order/inventory workflows, notification inbox và Administrator job operations page;
 - Qdrant-based SOP/checklist retrieval với metadata filters và relevance gate;
 - deterministic Maintenance Copilot response có sources, safety notice và safe fallback.
+- versioned PM9 pilot manifest/environment contract, closed Compose rehearsal,
+  release/ownership/limitation records, opt-in step-load safety, operator-driven
+  backup publication, synthetic disk-capacity và bounded attachment-recovery
+  helpers.
 
-Các production concerns như SSO/MFA, distributed rate limiting, high-availability worker, external notification delivery, centralized observability, managed secret storage và deployment hardening chưa thuộc internal pilot hiện tại.
+PM9 tooling không có nghĩa các host-dependent gate đã pass. SSO/MFA, distributed
+rate limiting, HA/failover, automated PITR, external notification delivery,
+centralized observability/on-call, managed secrets, object storage, malware
+scanning, multi-tenancy, Kubernetes và cloud deployment vẫn ngoài completed
+boundary.
 
 ## Canonical Architecture
 
@@ -764,9 +776,46 @@ Equivalent Make targets: `services-up`, `postgres-up`, `migrate-db`,
 `evaluate-operational-alerts`, `job-status`, `reliability-load`,
 `backup-restore-drill`, `attachment-integrity`, `worker-docker-up`,
 `worker-docker-down`, `create-test-db`, `test`, `test-postgres`, `lint`,
-`frontend-lint`, `frontend-test` và `frontend-build`.
+`pilot-contract-validate`, `pilot-decision-validate`,
+`pilot-release-validate`, `pilot-rehearsal-plan`,
+`pilot-rehearsal-execute`, `pilot-rehearsal-cleanup`,
+`pilot-backup-schedule`, `pilot-step-load`, `frontend-lint`,
+`frontend-test` và `frontend-build`.
 
 Demo 10–12 phút: [docs/demo_script.md](docs/demo_script.md).
+
+## PM9 Pilot Rehearsal
+
+Development quickstart ở trên không phải pilot deployment. PM9 dùng
+[separate pilot Compose](docker-compose.pilot.yml), versioned
+[manifest](deployment/pilot_manifest.json) và protected environment được tạo từ
+[`.env.pilot.example`](.env.pilot.example).
+
+Plan-only:
+
+```powershell
+python -m src.reliability.deployment_rehearsal `
+  --environment-file "<protected-pilot-env>"
+```
+
+Execution cần approved host, `PM9_ALLOW_DEPLOYMENT_REHEARSAL=true`,
+`PILOT_HOST_APPROVED=true` trong protected env và evidence directory ngoài
+repository. Opt-in `--authenticated-post-start` validator đã được implement và
+unit-test cho approved-data reads, auth/RBAC, exact four-job state,
+notifications và batch analytics; nó chưa chạy trên live PM9 stack. Make target
+chỉ thêm flag khi set `PILOT_AUTHENTICATED_POST_START=true`, nên default vẫn
+fail với các post-start gate là `not_executed`.
+
+Current developer workstation chưa được xác nhận là intended pilot host; full
+deployment, live authenticated smoke, soak/mutation/capacity,
+release/rollback, real secret rotation và paired PostgreSQL/attachment recovery
+chưa chạy.
+
+Không copy local `.env` development làm pilot config. Không commit populated
+environment, backup, attachment bytes, raw report, log hoặc `.next`. Xem
+[pilot deployment](docs/pilot_deployment.md),
+[pilot environment](docs/pilot_environment.md) và
+[internal-pilot checklist](docs/internal_pilot_checklist.md).
 
 ## PostgreSQL Operations
 
@@ -844,8 +893,59 @@ API/worker reconnect, protected redrive, alert raise/recovery, isolated
 backup/restore và restored health smoke đạt trên disposable `_test` stack.
 Kết luận vẫn là `NO-GO / NOT YET VERIFIED` do owner/contact/acceptance, real
 pilot secrets, soak/capacity, representative attachment restore và intended
-pilot-host rehearsal còn mở. PM9 chưa bắt đầu. Xem
+pilot-host rehearsal còn mở. Đây là historical PM8 evidence. Xem
 [PM8 release note](docs/releases/product_milestone_8.md).
+
+Product Milestone 9 implementation session ngày 2026-07-26 bổ sung pilot
+deployment/environment contract, separate Compose rehearsal, draft release/
+ownership/limitation records, opt-in step-load safety, operator-driven
+checksummed backup-artifact publication tooling, opt-in authenticated post-start
+validation, injected disk-capacity và attachment archive/restore helpers.
+
+Deployment/manifest reconciliation đạt `22 passed`; Ruff, Compose config, Make
+dry-runs và `git diff --check` đều pass.
+
+Checkpoint PostgreSQL trên một disposable local PostgreSQL 16 database kết thúc
+`_test` đạt `73 passed, 239 deselected`. Ba test dùng
+`pg_terminate_backend` thật đã xác nhận job completion lease recovery, outbox
+delivery recovery với đúng một notification, và ticket + outbox rollback cùng
+transaction. Đây là connection-termination boundary evidence, không phải live
+worker-process kill. Một generated non-empty PDF được upload qua authorized API,
+trả `201`, archive/restore bytes, download `200` với matching bytes cho
+Administrator và `403` cho Helpdesk; test này dùng original `_test` metadata và
+không restore PostgreSQL dump cùng metadata/bytes.
+
+Authenticated post-start tooling đã được focused unit-test với mocked HTTP
+transport (`16 passed`) nhưng chưa contact live stack. Không có PM9 full
+deployment trên intended host, live authenticated deployed workflow, soak,
+mutation load, capacity/degradation, live worker-process kill, real secret
+rotation, durable disk alert hay paired PostgreSQL dump + attachment restore.
+Local disposable `_test` drill đã chạy một valid `pg_dump` và một
+invalid-database failure mà không publish partial hoặc thay last-good index; đây
+không phải intended-host/service-account evidence. Owner/incident/acceptance
+records vẫn là placeholder; candidate commit/tag và rollback rehearsal vẫn
+unverified.
+
+Final local verification trên settled worktree đạt `374 passed` cho full backend
+với cả `73` PostgreSQL-marked tests trên fresh disposable PostgreSQL 16 `_test`;
+container được xóa ngay sau run. PM9-focused run riêng đạt `103 passed, 3
+skipped` khi không inject database, còn ba test bị skip đều pass trong full
+database-enabled run. Full frontend đạt `112 passed` trên 17 files, ESLint pass
+và Next.js production build tạo 32 pages rồi `.next` được xóa. Ruff check toàn
+repository pass; 19 PM9 Python files pass focused format check. Alembic có một
+head `20260726_0008`, current/check pass và fresh `_test` database migrate sạch
+từ base đến head. Pilot Compose config pass; contract/release validators vẫn
+fail closed với exact `NO-GO / NOT YET VERIFIED`.
+
+Quyết định:
+
+```text
+NO-GO / NOT YET VERIFIED
+```
+
+Xem [PM9 release note](docs/releases/product_milestone_9.md) và
+[PM9 load results](docs/pilot_load_results.md). PM8 measurements không được
+đổi nhãn thành PM9 evidence.
 
 ## Limitations
 
@@ -854,8 +954,9 @@ pilot-host rehearsal còn mở. PM9 chưa bắt đầu. Xem
 - Synthetic chronology chỉ mô phỏng quy trình đơn giản và chưa được đối chiếu với quy tắc lịch bảo trì thực tế của một cơ sở cụ thể.
 - API phục vụ PostgreSQL transactions cùng processed CSV analytics; PM7 worker
   chỉ là internal-pilot PostgreSQL polling process. PM8 đã chạy bounded local
-  baseline/stress, nhưng chưa có HA, soak, capacity-to-failure, pilot-host
-  rehearsal hoặc production cache invalidation strategy.
+  baseline/stress; PM9 có safety tooling nhưng chưa chạy soak,
+  mutation/capacity-to-degradation hoặc intended-host rehearsal. Không có HA
+  hay production cache invalidation strategy.
 - Closed scheduler chỉ hỗ trợ bốn existing operations; chưa có distributed queue partitioning, autoscaling hoặc production missed-run/on-call operations.
 - Notification chỉ nằm trong in-app inbox; chưa có email/SMS/push, user preferences, acknowledgement hoặc external delivery monitoring.
 - Health/metrics và structured logs chưa có centralized collection, alert routing hoặc production observability platform.
@@ -884,6 +985,11 @@ pilot-host rehearsal còn mở. PM9 chưa bắt đầu. Xem
   distributed login throttling, managed secret/JWKS, centralized observability
   hoặc external security review.
 - Refresh cookie cần HTTPS và `Secure=true` ngoài local; `.env.example` chỉ là development configuration.
+- Pilot chỉ có một API, một worker và một PostgreSQL instance; không có automatic
+  failover hoặc automated PITR.
+- Operational/release/rollback/backup/security/support owners, incident path và
+  support coverage chưa được assign.
+- Tất cả critical known limitations còn `pending`; không có customer-facing SLA.
 
 ## Earlier MVP Cleanup
 
@@ -902,7 +1008,7 @@ src/ticket_management/ Ticket lifecycle, priority, SLA, queues, communication v�
 src/maintenance_management/ Preventive recurrence, work-order state machine, routes và CLI
 src/inventory_management/ Spare-part master, stock-control service, routes và seed CLI
 src/operations/       Closed jobs/events, worker, notification/operator API và CLI
-src/reliability/      Bounded load, backup/restore và attachment assessment tooling
+src/reliability/      Bounded load/deployment/backup/disk/attachment rehearsal tooling
 src/features/         Canonical daily feature pipeline
 src/models/           Canonical anomaly pipeline
 src/risk/             Canonical risk pipeline
@@ -941,6 +1047,16 @@ docs/                 Scope, architecture, process, contracts và demo docs
 - [Secret rotation](docs/secret_rotation.md)
 - [Internal-pilot go/no-go checklist](docs/internal_pilot_checklist.md)
 - [Product Milestone 8 release](docs/releases/product_milestone_8.md)
+- [PM9 pilot deployment](docs/pilot_deployment.md)
+- [PM9 pilot environment](docs/pilot_environment.md)
+- [PM9 release and rollback rehearsal](docs/pilot_release_rehearsal.md)
+- [PM9 load results](docs/pilot_load_results.md)
+- [PM9 backup schedule](docs/pilot_backup_schedule.md)
+- [PM9 secret rotation](docs/pilot_secret_rotation.md)
+- [PM9 attachment recovery](docs/pilot_attachment_recovery.md)
+- [PM9 operational ownership](docs/operational_ownership.md)
+- [PM9 known-limitations acceptance](docs/known_limitations_acceptance.md)
+- [Product Milestone 9 release](docs/releases/product_milestone_9.md)
 - [Demo script](docs/demo_script.md)
 - [Interview notes](docs/interview_notes.md)
 - [Troubleshooting](docs/troubleshooting.md)

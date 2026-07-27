@@ -125,3 +125,67 @@ PM7 không thay đổi attachment hoặc RAG boundary:
 
 Xem [secret rotation](secret_rotation.md). Đây vẫn là environment-provided secret
 model, không phải managed secrets platform.
+
+## PM9 Deployment Security
+
+PM9 thêm versioned, secret-free deployment/release contract; nó không thay
+authentication/RBAC model.
+
+- Pilot mode bắt buộc PostgreSQL storage và verified release
+  identifier/commit/tag/revision.
+- Development database credential/default placeholder, weak/missing signing
+  secret và CSV mode bị từ chối.
+- Protected dotenv được parse không expand command; duplicate/invalid names bị
+  từ chối.
+- Rehearsal subprocess nhận secret qua environment; redacted evidence không chứa
+  value.
+- Deployment command surface chỉ có fixed Compose operations, không nhận shell,
+  SQL, Python, module hoặc workflow payload.
+- Execute từ chối dirty Git worktree và Compose project name đã có container,
+  nên release identity không thể che một build context chưa checkpoint và
+  failure không được cleanup project do invocation khác sở hữu.
+- Raw evidence/load reports/backups/restores phải nằm ngoài repository.
+- Health/OpenAPI chỉ thêm application version và release identity không bí mật;
+  không trả database URL, token hoặc storage path.
+- Frontend `NEXT_PUBLIC_*` vẫn là public build configuration.
+
+Pilot host phải dùng HTTPS, `AUTH_COOKIE_SECURE=true`, explicit CORS/trusted
+hosts và approved network/TLS boundary. Current workstation chưa phải
+intended-host evidence.
+
+Authenticated post-start không chỉ nhận `200` từ refresh/logout. Nó yêu cầu access
+token, refresh cookie và CSRF cookie đều rotate; old access/refresh session phải
+trả `401`; sau logout cả current access và refresh replay cũng phải trả `401`.
+Evidence chỉ ghi aggregate boolean/count, không ghi token, cookie, username hoặc
+credential.
+
+## PM9 Rotation Evidence
+
+PM8 synthetic tests xác nhận current key ký token mới và đúng một previous key
+verify trong grace period. PM9 focused tests xác nhận missing/placeholder pilot
+secret và report redaction. Không có approved pilot key/database credential,
+real rotation, active-session measurement hoặc rollback-window rehearsal.
+
+Vì vậy secret gate vẫn:
+
+```text
+NO-GO / NOT YET VERIFIED
+```
+
+Procedure đầy đủ tại [PM9 secret rotation](pilot_secret_rotation.md). Không mark
+`passed` từ synthetic keys.
+
+## PM9 Attachment And Evidence Risks
+
+Attachment archive/restore helpers giữ containment/checksum và không expose
+path. Chúng không thêm malware scanner, object storage hoặc distributed
+transaction. Generated non-empty PDF upload, byte archive/restore, Administrator
+download `200` và Helpdesk `403` đã pass trên disposable PostgreSQL 16 `_test`.
+Test dùng original database metadata; paired PostgreSQL dump +
+database/filesystem restore chưa chạy.
+
+Ownership record cũng đang placeholder: security contact, incident coordinator
+và support coverage chưa được assign. Technical controls không thay thế
+organizational custody và approved incident channel. Xem
+[operational ownership](operational_ownership.md) và
+[known limitations](known_limitations_acceptance.md).
