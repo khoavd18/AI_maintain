@@ -5,8 +5,8 @@
   "release": {
     "release_id": "product-milestone-9",
     "commit_resolution": "exact_tag_target",
-    "tag_recommendation": "product-milestone-9",
-    "tag_status": "pending_checkpoint",
+    "tag_recommendation": "product-milestone-9-pilot-ready-by-design",
+    "tag_status": "pending_design_readiness_checkpoint",
     "alembic_revision": "20260726_0008"
   },
   "versions": {

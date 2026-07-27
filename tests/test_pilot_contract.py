@@ -9,6 +9,7 @@ from typing import Any
 from src.reliability.pilot_contract import (
     CONDITIONAL_GO,
     CRITICAL_GATES,
+    EXTERNAL_PILOT_NO_GO,
     GO,
     NO_GO,
     evaluate_pilot_decision,
@@ -22,6 +23,7 @@ from src.reliability.pilot_contract import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEPLOYMENT_ROOT = REPOSITORY_ROOT / "deployment"
+DESIGN_READINESS_TAG = "product-milestone-9-pilot-ready-by-design"
 
 
 def _load(name: str) -> dict[str, Any]:
@@ -224,11 +226,75 @@ def test_checked_in_placeholders_keep_release_no_go_and_hash_is_bound() -> None:
         repository_root=REPOSITORY_ROOT,
     )
 
-    assert report.decision == NO_GO
+    assert report.decision == EXTERNAL_PILOT_NO_GO
     assert "ownership_placeholder" in report.codes
     assert "critical_limitation_unaccepted" in report.codes
     assert "critical_gate_open" in report.codes
     assert release["release"]["deployment_manifest_sha256"] == manifest_sha256(manifest)
+
+
+def test_checked_in_three_gate_model_keeps_organizational_authority_external() -> None:
+    manifest = _load("pilot_manifest.json")
+    ownership = _load("operational_ownership.json")
+    limitations = _load("known_limitations.json")
+    release = _load("pilot_release_record.json")
+
+    technical = ownership["technical_stewardship"]
+    assert technical["role_label"] == "Solo project developer"
+    assert technical["organizational_authority"] is False
+    assert set(technical["responsibilities"]) == {
+        "release_preparation_owner",
+        "rollback_procedure_owner",
+        "backup_drill_operator",
+        "database_recovery_drill_operator",
+        "development_application_support",
+        "security_implementation_contact",
+    }
+    assert {assignment["status"] for assignment in ownership["assignments"].values()} == {
+        "blocked_external_dependency"
+    }
+
+    assert limitations["engineering_acknowledgement"]["status"] == (
+        "DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED"
+    )
+    assert limitations["organizational_acceptance"]["status"] == ("BLOCKED_EXTERNAL_DEPENDENCY")
+    assert all(
+        row["engineering_status"] == "DOCUMENTED_NOT_ORGANIZATIONALLY_ACCEPTED"
+        and row["organizational_acceptance_status"] == "BLOCKED_EXTERNAL_DEPENDENCY"
+        and row["acceptance_status"] == "pending"
+        for row in limitations["limitations"]
+    )
+
+    assert release["implementation_status"] == "COMPLETE"
+    assert release["decision_gates"]["engineering_readiness"]["status"] == "PASS"
+    assert release["decision_gates"]["local_rehearsal"]["status"] == "PARTIAL"
+    assert release["decision_gates"]["real_company_pilot"]["display_status"] == (
+        "BLOCKED — EXTERNAL DEPENDENCY"
+    )
+    assert release["overall_external_pilot_decision"] == EXTERNAL_PILOT_NO_GO
+    assert release["final_decision"] == EXTERNAL_PILOT_NO_GO
+    assert release["release"]["git_tag_recommendation"] == DESIGN_READINESS_TAG
+    assert release["release"]["deployment_manifest_sha256"] == manifest_sha256(manifest)
+    assert evaluate_pilot_decision(release, ownership, limitations) == NO_GO
+
+
+def test_external_pilot_decision_requires_the_truthful_three_gate_model() -> None:
+    manifest = _load("pilot_manifest.json")
+    ownership = _load("operational_ownership.json")
+    limitations = _load("known_limitations.json")
+    release = _load("pilot_release_record.json")
+    release["decision_gates"]["engineering_readiness"]["status"] = "FAIL"
+
+    report = validate_pilot_contract(
+        manifest,
+        ownership,
+        limitations,
+        release,
+        repository_root=REPOSITORY_ROOT,
+    )
+
+    assert report.decision == NO_GO
+    assert "declared_decision_mismatch" in report.codes
 
 
 def test_manifest_detects_missing_service_duplicate_port_job_and_path_escape() -> None:
@@ -418,7 +484,7 @@ def test_complete_evidence_is_go_and_result_is_deterministic() -> None:
     kwargs = {
         "environment": _ready_environment(),
         "actual_commit": "a" * 40,
-        "actual_tag": "product-milestone-9",
+        "actual_tag": DESIGN_READINESS_TAG,
         "actual_tag_target_commit": "a" * 40,
         "actual_migration_revision": "20260726_0008",
         "service_probe": lambda _service: True,
@@ -593,7 +659,7 @@ def test_condition_owner_must_match_an_assigned_operational_role() -> None:
         record,
         environment=_ready_environment(),
         actual_commit="a" * 40,
-        actual_tag="product-milestone-9",
+        actual_tag=DESIGN_READINESS_TAG,
         actual_tag_target_commit="a" * 40,
         actual_migration_revision="20260726_0008",
         service_probe=lambda _service: True,
@@ -660,7 +726,7 @@ def test_non_string_limitation_statuses_fail_closed_without_type_error() -> None
             record,
             environment=_ready_environment(),
             actual_commit="a" * 40,
-            actual_tag="product-milestone-9",
+            actual_tag=DESIGN_READINESS_TAG,
             actual_tag_target_commit="a" * 40,
             actual_migration_revision="20260726_0008",
             service_probe=lambda _service: True,
@@ -739,7 +805,7 @@ def test_closed_protected_risk_cannot_be_skipped_in_open_risk_register() -> None
         record,
         environment=_ready_environment(),
         actual_commit="a" * 40,
-        actual_tag="product-milestone-9",
+        actual_tag=DESIGN_READINESS_TAG,
         actual_tag_target_commit="a" * 40,
         actual_migration_revision="20260726_0008",
         service_probe=lambda _service: True,
@@ -813,7 +879,7 @@ def test_placeholder_risk_limitation_and_condition_ids_fail_closed() -> None:
         record,
         environment=_ready_environment(),
         actual_commit="a" * 40,
-        actual_tag="product-milestone-9",
+        actual_tag=DESIGN_READINESS_TAG,
         actual_tag_target_commit="a" * 40,
         actual_migration_revision="20260726_0008",
         service_probe=lambda _service: True,
@@ -848,7 +914,7 @@ def test_release_record_requires_evidence_and_matching_rollback_metadata() -> No
         record,
         environment=_ready_environment(),
         actual_commit="a" * 40,
-        actual_tag="product-milestone-9",
+        actual_tag=DESIGN_READINESS_TAG,
         actual_tag_target_commit="a" * 40,
         actual_migration_revision="20260726_0008",
         service_probe=lambda _service: True,

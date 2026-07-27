@@ -27,7 +27,8 @@ from src.release import APPLICATION_VERSION, CANONICAL_SCHEMA_REVISION
 GO = "GO"
 CONDITIONAL_GO = "CONDITIONAL GO"
 NO_GO = "NO-GO / NOT YET VERIFIED"
-ALLOWED_DECISIONS = frozenset({GO, CONDITIONAL_GO, NO_GO})
+EXTERNAL_PILOT_NO_GO = "NO-GO / WAITING FOR PILOT SPONSOR"
+ALLOWED_DECISIONS = frozenset({GO, CONDITIONAL_GO, NO_GO, EXTERNAL_PILOT_NO_GO})
 
 SUPPORTED_JOBS = frozenset(
     {
@@ -348,15 +349,19 @@ def validate_pilot_contract(
         limitation_document,
     )
     preliminary = NO_GO if _has_blocker(findings) else semantic_decision
+    external_pilot_blocked = _has_external_pilot_blocked_classification(release_document)
+    expected_declared = (
+        EXTERNAL_PILOT_NO_GO if preliminary == NO_GO and external_pilot_blocked else preliminary
+    )
     declared = release_document.get("final_decision")
     if declared not in ALLOWED_DECISIONS:
         _add(
             findings,
             "invalid_final_decision",
             "release_record",
-            "Quyết định phải dùng đúng một giá trị GO, CONDITIONAL GO hoặc NO-GO.",
+            "Quyết định phải dùng đúng một giá trị trong danh sách cho phép.",
         )
-    elif declared != preliminary:
+    elif declared != expected_declared:
         _add(
             findings,
             "declared_decision_mismatch",
@@ -365,8 +370,32 @@ def validate_pilot_contract(
         )
 
     ordered = _ordered_findings(findings)
-    decision = NO_GO if _has_blocker(ordered) else semantic_decision
+    decision = (
+        EXTERNAL_PILOT_NO_GO
+        if _has_blocker(ordered) and external_pilot_blocked
+        else NO_GO
+        if _has_blocker(ordered)
+        else semantic_decision
+    )
     return ValidationReport(decision, digest, ordered)
+
+
+def _has_external_pilot_blocked_classification(record: Mapping[str, Any]) -> bool:
+    """Recognize the truthful PM9 design-ready/external-dependency decision model."""
+
+    gates = _mapping(record.get("decision_gates"))
+    engineering = _mapping(gates.get("engineering_readiness"))
+    local = _mapping(gates.get("local_rehearsal"))
+    real_company = _mapping(gates.get("real_company_pilot"))
+    return (
+        record.get("implementation_status") == "COMPLETE"
+        and engineering.get("status") == "PASS"
+        and local.get("status") in {"PASS", "PARTIAL", "FAIL"}
+        and real_company.get("status") == "BLOCKED_EXTERNAL_DEPENDENCY"
+        and real_company.get("display_status") == "BLOCKED \u2014 EXTERNAL DEPENDENCY"
+        and record.get("overall_external_pilot_decision") == EXTERNAL_PILOT_NO_GO
+        and record.get("final_decision") == EXTERNAL_PILOT_NO_GO
+    )
 
 
 def evaluate_pilot_decision(

@@ -21,6 +21,8 @@ from src.reliability.deployment_rehearsal import (
 )
 from src.reliability.post_start_validation import PostStartValidationError
 
+DESIGN_READINESS_TAG = "product-milestone-9-pilot-ready-by-design"
+
 
 def _environment(*, approved: bool = False) -> dict[str, str]:
     repository_root = Path(__file__).resolve().parents[1]
@@ -29,7 +31,7 @@ def _environment(*, approved: bool = False) -> dict[str, str]:
         {
             "RELEASE_IDENTIFIER": "product-milestone-9",
             "RELEASE_GIT_COMMIT": "a" * 40,
-            "RELEASE_GIT_TAG": "product-milestone-9",
+            "RELEASE_GIT_TAG": DESIGN_READINESS_TAG,
             "RELEASE_ALEMBIC_REVISION": "20260726_0008",
             "PILOT_HOST_IDENTIFIER": "synthetic-pilot-host",
             "PILOT_HOST_APPROVED": str(approved).lower(),
@@ -109,7 +111,7 @@ def _git_runner(
         return subprocess.CompletedProcess(
             command,
             0,
-            stdout="product-milestone-9\n",
+            stdout=f"{DESIGN_READINESS_TAG}\n",
         )
     raise AssertionError("Plan mode must not execute Compose.")
 
@@ -282,7 +284,7 @@ def test_execute_rejects_dirty_release_content_before_compose(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="product-milestone-9\n",
+                stdout=f"{DESIGN_READINESS_TAG}\n",
             )
         if selected[:2] == ("git", "status"):
             return subprocess.CompletedProcess(
@@ -396,7 +398,7 @@ def test_existing_project_collision_is_refused_without_cleanup(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="product-milestone-9\n",
+                stdout=f"{DESIGN_READINESS_TAG}\n",
             )
         if selected[:2] == ("git", "status"):
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -453,7 +455,7 @@ def test_leave_running_still_cleans_up_after_partial_startup_failure(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="product-milestone-9\n",
+                stdout=f"{DESIGN_READINESS_TAG}\n",
             )
         calls.append(selected)
         if "build" in selected:
@@ -509,7 +511,7 @@ def test_leave_running_does_not_strand_stack_when_post_start_is_omitted(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="product-milestone-9\n",
+                stdout=f"{DESIGN_READINESS_TAG}\n",
             )
         if selected[:2] == ("git", "status"):
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -613,7 +615,7 @@ def test_authenticated_post_start_execution_guard_is_checked_before_compose(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="product-milestone-9\n",
+                stdout=f"{DESIGN_READINESS_TAG}\n",
             )
         raise AssertionError("Post-start preflight must precede Compose.")
 
@@ -663,7 +665,7 @@ def test_authenticated_post_start_can_complete_the_closed_deployment_sequence(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="product-milestone-9\n",
+                stdout=f"{DESIGN_READINESS_TAG}\n",
             )
         calls.append(selected)
         stdout = values["RELEASE_ALEMBIC_REVISION"] + " (head)\n" if "current" in selected else ""
@@ -761,7 +763,7 @@ def test_post_start_runtime_preflight_failure_is_wrapped_and_cleaned_when_left_r
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="product-milestone-9\n",
+                stdout=f"{DESIGN_READINESS_TAG}\n",
             )
         if selected[:2] == ("git", "status"):
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -842,7 +844,7 @@ def test_successful_validation_with_failed_cleanup_is_failed_and_cli_exits_two(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="product-milestone-9\n",
+                stdout=f"{DESIGN_READINESS_TAG}\n",
             )
         if selected[:2] == ("git", "status"):
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")

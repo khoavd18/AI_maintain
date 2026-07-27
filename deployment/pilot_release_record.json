@@ -1,14 +1,61 @@
 {
   "schema_version": "1.0",
   "record_kind": "internal_pilot_release_record",
-  "record_status": "draft",
+  "record_status": "design_complete_external_verification_blocked",
+  "implementation_status": "COMPLETE",
+  "readiness_classification": {
+    "pilot_ready_by_design": true,
+    "pilot_verified_in_practice": false,
+    "production_readiness_claim": false
+  },
+  "decision_gates": {
+    "engineering_readiness": {
+      "status": "PASS",
+      "basis": "Architecture, deployment contracts, validation tooling, recovery procedures, operational templates, tests, and release procedures are present and locally verified within the recorded scope."
+    },
+    "local_rehearsal": {
+      "status": "PARTIAL",
+      "executed_evidence": [
+        "deterministic backend and frontend regression suites",
+        "static deployment and contract validation",
+        "isolated PostgreSQL tests and connection-termination drills",
+        "synthetic disk, secret-rotation, backup-publication, and attachment archive drills"
+      ],
+      "not_executed": [
+        "live PM9 Compose deployment on this workstation",
+        "live authenticated deployed-stack smoke",
+        "900-second soak",
+        "mutation-bearing load",
+        "capacity-to-degradation load",
+        "live worker-process kill",
+        "paired PostgreSQL and attachment restore"
+      ]
+    },
+    "real_company_pilot": {
+      "status": "BLOCKED_EXTERNAL_DEPENDENCY",
+      "display_status": "BLOCKED — EXTERNAL DEPENDENCY",
+      "missing_dependencies": [
+        "sponsoring organization",
+        "approved pilot or pilot-equivalent host",
+        "company operational and business owners",
+        "incident communication path and support coverage",
+        "pilot-grade secrets",
+        "representative company data",
+        "real pilot users",
+        "organizational limitation acceptance",
+        "authorization for intended-host load and recovery drills"
+      ]
+    }
+  },
+  "overall_external_pilot_decision": "NO-GO / WAITING FOR PILOT SPONSOR",
+  "external_dependency_statement": "No sponsoring organization, approved pilot host, operational team, business owner, real pilot users, or company data currently exists. These are external dependencies, not missing application features.",
   "generated_at_utc": null,
   "release": {
     "release_name": "product-milestone-9",
     "git_commit": "PENDING_PM9_CHECKPOINT",
-    "git_tag_recommendation": "product-milestone-9",
+    "git_tag_recommendation": "product-milestone-9-pilot-ready-by-design",
     "migration_revision": "20260726_0008",
-    "deployment_manifest_sha256": "68f7ad8cd51dd7da90a060675eba113c81c11418c91cddbccf8a8800fad14bcb"
+    "deployment_manifest_sha256": "59a533845e83197aefe3c3c7201f9173ae66a00f4afdfd571471a45957db6dad"
   },
   "application_versions": {
     "application": "0.1.0",
@@ -89,7 +136,8 @@
       "severity": "critical",
       "category": "recovery",
       "description": "Chưa có deployment và recovery rehearsal trên intended pilot host.",
-      "owner_role": "PENDING_ASSIGNMENT",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
       "status": "open"
     },
     {
@@ -97,7 +145,8 @@
       "severity": "critical",
       "category": "safety",
       "description": "Operational owners, incident path và support coverage chưa được xác nhận.",
-      "owner_role": "PENDING_ASSIGNMENT",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
       "status": "open"
     },
     {
@@ -105,7 +154,8 @@
       "severity": "critical",
       "category": "authorization",
       "description": "Pilot-grade secrets và real rotation rehearsal chưa có bằng chứng.",
-      "owner_role": "PENDING_ASSIGNMENT",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
       "status": "open"
     },
     {
@@ -113,7 +163,8 @@
       "severity": "critical",
       "category": "recovery",
       "description": "Soak, mutation-bearing và capacity-to-degradation profiles chưa được thực hiện.",
-      "owner_role": "PENDING_ASSIGNMENT",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
       "status": "open"
     },
     {
@@ -121,7 +172,8 @@
       "severity": "critical",
       "category": "data_loss",
       "description": "Backup/restore attachment không rỗng chưa được xác thực.",
-      "owner_role": "PENDING_ASSIGNMENT",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
       "status": "open"
     },
     {
@@ -129,23 +181,25 @@
       "severity": "critical",
       "category": "recovery",
       "description": "Release và rollback rehearsal trên intended environment chưa được xác thực.",
-      "owner_role": "PENDING_ASSIGNMENT",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
       "status": "open"
     }
   ],
   "ownership_status": {
-    "operational_owner": "unassigned",
-    "backup_owner": "unassigned",
-    "release_owner": "unassigned",
-    "rollback_owner": "unassigned",
-    "incident_coordinator": "unassigned",
-    "security_contact": "unassigned",
-    "database_recovery_contact": "unassigned",
-    "application_support_contact": "unassigned",
-    "pilot_business_owner": "unassigned"
+    "operational_owner": "blocked_external_dependency",
+    "backup_owner": "blocked_external_dependency",
+    "release_owner": "blocked_external_dependency",
+    "rollback_owner": "blocked_external_dependency",
+    "incident_coordinator": "blocked_external_dependency",
+    "security_contact": "blocked_external_dependency",
+    "database_recovery_contact": "blocked_external_dependency",
+    "application_support_contact": "blocked_external_dependency",
+    "pilot_business_owner": "blocked_external_dependency"
   },
-  "incident_contact_status": "unconfigured",
-  "known_limitations_acceptance_status": "pending",
+  "technical_stewardship_status": "acknowledged_for_project_engineering_only",
+  "incident_contact_status": "blocked_external_dependency",
+  "known_limitations_acceptance_status": "documented_not_organizationally_accepted",
   "rollback": {
     "target_release_id": "product-milestone-8",
     "target_git_tag": "product-milestone-8",
@@ -254,7 +308,7 @@
     }
   ],
   "conditions": [],
-  "final_decision": "NO-GO / NOT YET VERIFIED",
+  "final_decision": "NO-GO / WAITING FOR PILOT SPONSOR",
   "evidence_links": [
     "deployment/pilot_manifest.json",
     "deployment/operational_ownership.json",
