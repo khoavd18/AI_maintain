@@ -3,20 +3,14 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
 import sys
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
-
 from src.config.settings import get_settings
-from src.database.models import User
-from src.database.session import get_session_factory
 from src.operations.service import build_operations_service
 from src.security.audit import AuditContext
-from src.security.permissions import Role, permissions_for_role
-from src.security.service import CurrentUser
+from src.security.cli_context import load_cli_actor
 
 
 def main() -> None:
@@ -61,7 +55,7 @@ def main() -> None:
     service = build_operations_service()
 
     if args.command == "status":
-        actor = _load_actor(args.actor_username)
+        actor = load_cli_actor(args.actor_username)
         payload = {
             "jobs": service.list_jobs(actor=actor),
             "metrics": service.metrics(actor=actor),
@@ -70,7 +64,7 @@ def main() -> None:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
 
-    actor = _load_actor(args.actor_username)
+    actor = load_cli_actor(args.actor_username)
     context = AuditContext(
         actor_user_id=actor.id,
         actor_display_name=actor.display_name,
@@ -108,32 +102,6 @@ def main() -> None:
     else:
         result = service.evaluate_operational_alerts(actor=actor)
     print(json.dumps(result, ensure_ascii=False, indent=2))
-
-
-def _load_actor(username: str) -> CurrentUser:
-    settings = get_settings()
-    with get_session_factory(settings.database_url)() as session:
-        user = session.scalar(
-            select(User).where(User.username == username.strip().lower())
-        )
-        if user is None or not user.is_active:
-            raise SystemExit(f"Active user not found: {username}")
-        role = Role(user.role)
-        return CurrentUser(
-            id=user.id,
-            username=user.username,
-            email=user.email,
-            display_name=user.display_name,
-            role=role,
-            permissions=permissions_for_role(role),
-            technician_id=user.technician_id,
-            is_active=user.is_active,
-            version=user.version,
-            session_id=uuid4(),
-            created_at=user.created_at,
-            updated_at=user.updated_at,
-            last_login_at=user.last_login_at or datetime.now(timezone.utc),
-        )
 
 
 if __name__ == "__main__":

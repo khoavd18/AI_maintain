@@ -13,7 +13,8 @@ export default function ForbiddenPage() {
       <ShieldX className="mx-auto size-10 text-amber-600" aria-hidden="true" />
       <h1 className="mt-4 text-xl font-semibold">Không có quyền truy cập</h1>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Vai trò hiện tại không có permission cần thiết cho trang hoặc thao tác này. Quyền được kiểm tra lại tại FastAPI.
+        Vai trò hiện tại không được phép mở trang hoặc thực hiện thao tác này. Hãy quay lại
+        khu vực công việc của bạn hoặc liên hệ quản trị viên nếu cần hỗ trợ.
       </p>
       <Button asChild className="mt-5">
         <Link href={user ? defaultRouteFor(user) : "/login"}>Về khu vực được phép</Link>

@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.api.csv_repository import (
+from src.repositories.csv_writes import (
     CsvSchemaError,
     CsvWriteRepository,
     commit_csv_writes,
@@ -213,9 +213,7 @@ def _read_csv(path: Path, required_columns: set[str]) -> pd.DataFrame:
         raise CsvSchemaError(f"Không thể đọc nguồn dữ liệu {path.name}.") from exc
     missing = required_columns - set(frame.columns)
     if missing:
-        raise CsvSchemaError(
-            f"Nguồn {path.name} thiếu cột bắt buộc: {sorted(missing)}"
-        )
+        raise CsvSchemaError(f"Nguồn {path.name} thiếu cột bắt buộc: {sorted(missing)}")
     return frame
 
 

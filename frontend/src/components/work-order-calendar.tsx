@@ -23,7 +23,7 @@ export function WorkOrderCalendar() {
   const [assetId, setAssetId] = useState("all");
   const [technicianId, setTechnicianId] = useState("all");
   const schedule = useWorkOrderScheduleQuery({ date_from: dateFrom, date_to: dateTo, asset_id: assetId === "all" ? undefined : assetId, assigned_to_user_id: technicianId === "all" ? undefined : technicianId });
-  const assets = useAssetCatalogQuery({ lifecycle_status: "active", page_size: 200 });
+  const assets = useAssetCatalogQuery({ lifecycle_status: "active", page_size: 100 });
   const options = useMaintenanceOptionsQuery();
   const groups = useMemo(() => {
     const rows = [

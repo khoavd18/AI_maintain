@@ -33,10 +33,10 @@ describe("inventory overview", () => {
 
     renderWithQuery(<InventoryWorkspace view="overview" />);
 
-    expect(await screen.findByText("Mã vật tư active")).toBeInTheDocument();
+    expect(await screen.findByText("Mã phụ tùng đang dùng")).toBeInTheDocument();
     expect(screen.getByText("8")).toBeInTheDocument();
     expect(screen.getAllByText("Lọc dầu máy phát").length).toBeGreaterThan(0);
-    expect(screen.getByText(/không dùng làm định giá/)).toBeInTheDocument();
+    expect(screen.getByText(/Số lượng khả dụng bằng tồn thực tế/)).toBeInTheDocument();
   });
 
   it("renders the controlled receipt form without calculating a balance", async () => {
@@ -47,9 +47,9 @@ describe("inventory overview", () => {
 
     renderWithQuery(<InventoryActionForm view="receiving" />);
 
-    expect(await screen.findByRole("heading", { name: "Receipt" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Business reference")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ghi receipt" })).toBeDisabled();
+    expect(await screen.findByRole("heading", { level: 2, name: "Nhập kho" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Mã chứng từ")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Xác nhận nhập kho" })).toBeDisabled();
     expect(screen.queryByText(/on-hand mới/i)).not.toBeInTheDocument();
   });
 
@@ -71,18 +71,18 @@ describe("inventory overview", () => {
     });
     renderWithQuery(<InventoryActionForm view="receiving" />);
 
-    await screen.findByRole("heading", { name: "Receipt" });
+    await screen.findByRole("heading", { level: 2, name: "Nhập kho" });
     fireEvent.click(screen.getByLabelText("Loại nghiệp vụ"));
     fireEvent.click(
       await screen.findByRole("option", { name: "Số dư đầu kỳ" }),
     );
-    fireEvent.click(screen.getByLabelText("Spare part"));
+    fireEvent.click(screen.getByLabelText("Phụ tùng"));
     fireEvent.click(
       await screen.findByRole("option", {
         name: `${partFixture.part_number} · ${partFixture.name_vi}`,
       }),
     );
-    fireEvent.click(screen.getByLabelText("Stock location"));
+    fireEvent.click(screen.getByLabelText("Vị trí kho"));
     fireEvent.click(
       await screen.findByRole("option", {
         name: `${stockLocationFixture.code} · ${stockLocationFixture.name}`,
@@ -91,13 +91,13 @@ describe("inventory overview", () => {
     fireEvent.change(screen.getByLabelText(/Số lượng/), {
       target: { value: "3" },
     });
-    fireEvent.change(screen.getByLabelText("Business reference"), {
+    fireEvent.change(screen.getByLabelText("Mã chứng từ"), {
       target: { value: "OPENING-UI-001" },
     });
     fireEvent.change(screen.getByLabelText("Lý do"), {
       target: { value: "Khởi tạo tồn kho demo" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Ghi opening balance" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ghi số lượng đầu kỳ" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -112,6 +112,42 @@ describe("inventory overview", () => {
         }),
       ),
     );
+  });
+
+  it("confirms a reservation release with a controlled reason form", async () => {
+    const released = {
+      ...reservationFixture,
+      status: "released",
+      status_display: "Đã giải phóng",
+      remaining_quantity: 0,
+      version: 2,
+    };
+    const fetchMock = mockApi({
+      "/inventory/options": inventoryOptionsFixture,
+      "/inventory/reservations": page([reservationFixture]),
+      [`POST /stock-reservations/${inventoryIds.reservation}/release`]: released,
+    });
+
+    renderWithQuery(<InventoryWorkspace view="reservations" />);
+
+    expect((await screen.findAllByText(reservationFixture.reservation_number)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Giải phóng" })[0]);
+    const confirm = screen.getByRole("button", { name: "Xác nhận" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Lý do"), {
+      target: { value: "Không còn cần phụ tùng cho công việc" },
+    });
+    fireEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `/stock-reservations/${inventoryIds.reservation}/release`,
+        ),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(screen.getByText("Đã giải phóng số lượng đặt trước.")).toBeInTheDocument();
   });
 });
 
@@ -140,7 +176,7 @@ describe("work-order inventory workflow", () => {
     renderWithQuery(<WorkOrderPartsPanel workOrderId={inventoryIds.workOrder} />);
     expect(await screen.findByText("Vật tư cho công việc")).toBeInTheDocument();
     fireEvent.mouseDown(
-      screen.getByRole("tab", { name: /Giữ kho/ }),
+      screen.getByRole("tab", { name: /Đặt trước/ }),
       { button: 0, ctrlKey: false },
     );
     fireEvent.click(await screen.findByRole("button", { name: "Giải phóng" }));
@@ -184,7 +220,7 @@ describe("work-order inventory workflow", () => {
     renderWithQuery(<WorkOrderPartsPanel workOrderId={inventoryIds.workOrder} />);
     await screen.findByText("Vật tư cho công việc");
     fireEvent.mouseDown(
-      screen.getByRole("tab", { name: /Giữ kho/ }),
+      screen.getByRole("tab", { name: /Đặt trước/ }),
       { button: 0, ctrlKey: false },
     );
     fireEvent.click(await screen.findByRole("button", { name: "Thay thế" }));
@@ -232,7 +268,7 @@ describe("work-order inventory workflow", () => {
     );
     expect(await screen.findByText("Vật tư cho công việc")).toBeInTheDocument();
     fireEvent.mouseDown(
-      screen.getByRole("tab", { name: /Xuất dùng/ }),
+      screen.getByRole("tab", { name: /Đã xuất/ }),
       { button: 0, ctrlKey: false },
     );
     fireEvent.change(
@@ -270,7 +306,7 @@ describe("work-order inventory workflow", () => {
     expect(await screen.findByText("Vật tư cho công việc")).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Thao tác" })).not.toBeInTheDocument();
     fireEvent.mouseDown(
-      screen.getByRole("tab", { name: /Giữ kho/ }),
+      screen.getByRole("tab", { name: /Đặt trước/ }),
       { button: 0, ctrlKey: false },
     );
     expect(
@@ -321,4 +357,19 @@ const managerUser: UserResponse = {
     permissions.inventoryRead,
   ],
   technician_id: null,
+};
+
+const inventoryOptionsFixture = {
+  part_lifecycle_statuses: [],
+  stock_location_statuses: [],
+  stock_location_types: [],
+  movement_types: [],
+  requirement_statuses: [],
+  reservation_statuses: [
+    { code: "active", display_name: "Đang đặt trước" },
+    { code: "released", display_name: "Đã giải phóng" },
+  ],
+  stock_states: [],
+  attachment_categories: [],
+  compatible_asset_types: [],
 };

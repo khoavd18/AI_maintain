@@ -57,7 +57,7 @@ docker compose up -d qdrant
 python -m src.rag.index_documents
 ```
 
-Các route analytics vẫn dùng được khi Qdrant dừng; chỉ retrieval của Copilot chuyển sang safe fallback.
+Các route analytics vẫn dùng được khi Qdrant dừng; chỉ retrieval của Copilot chuyển sang safe fallback. Grounded generation là cấu hình backend. Khi enabled, UI không gửi provider/model/key mà chỉ hiển thị provenance/evidence fields do FastAPI đã validate.
 
 Terminal 2:
 
@@ -74,6 +74,32 @@ npm run dev
 ```
 
 Mở `http://localhost:3000`.
+
+## Kiểm tra giao diện bằng Playwright
+
+Suite Playwright nhỏ này chỉ chạy với frontend/API loopback đang hoạt động. Trước
+khi mở trình duyệt hoặc đăng nhập, global setup so khớp fingerprint từ
+`/health/live` với PostgreSQL URL do người chạy cung cấp và từ chối mọi database
+không kết thúc bằng `_test`. Suite không ghi storage state, screenshot, video,
+trace hoặc HAR; mỗi phiên đăng nhập được đăng xuất qua UI khi test kết thúc.
+
+Để lấy bằng chứng gần với runtime bàn giao, chạy `npm run build` rồi
+`npm run start` trước suite; `npm run dev` chỉ phù hợp khi phát triển tương tác.
+
+```powershell
+cd frontend
+npm run test:e2e:install
+$env:PLAYWRIGHT_TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@127.0.0.1:25432/<database>_test"
+$env:PLAYWRIGHT_DEMO_PASSWORD = "<demo-password>"
+npm run test:e2e:desktop
+npm run test:e2e:mobile
+```
+
+Mặc định suite dùng `http://127.0.0.1:3000`, `http://127.0.0.1:8000` và các
+username `manager.demo`, `technician.demo`, `storekeeper.demo`. Có thể ghi đè
+bằng `PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_API_URL` và các cặp
+`PLAYWRIGHT_<ROLE>_USERNAME` / `PLAYWRIGHT_<ROLE>_PASSWORD`. Chỉ loopback origin
+không chứa credential được chấp nhận; secret chỉ tồn tại trong process test.
 
 ## Routes đã kết nối
 
@@ -212,15 +238,17 @@ Frontend tải lại asset/ticket từ FastAPI và chỉ gửi các field backen
 Response được Zod validate trước khi hiển thị. UI tách:
 
 - dữ liệu thiết bị thực tế và analytics explanation;
-- hướng dẫn được truy xuất từ SOP/checklist;
-- toàn bộ sources với title, document type, version, asset type và metadata mở rộng;
+- retrieval status và generated `llm_grounded` so với `deterministic_fallback`;
+- evidence strength (không phải xác suất) và citation-validation status;
+- hướng dẫn được truy xuất/tạo có căn cứ từ SOP/checklist;
+- toàn bộ sources với `S#` citation alias, title, document type, version, asset type và metadata mở rộng;
 - safety notice và giới hạn khuyến nghị.
 
 Answer/source content được render thành text và list an toàn, không dùng `dangerouslySetInnerHTML`, không hiển thị chunk ID hoặc vector score. Enter gửi, Shift+Enter xuống dòng, giới hạn câu hỏi là 1.000 ký tự và duplicate submit bị khóa khi request đang chạy.
 
 History tối đa tám lượt chỉ tồn tại trong React state của page hiện tại. Reload hoặc rời page sẽ xóa history; không có persistence ở browser, FastAPI hoặc database. Mỗi lượt giữ response, sources và safety notice riêng.
 
-Các response `empty`, `low_relevance`, `unsupported_asset_type`, `unrelated`, `missing_asset_context` và `unavailable` là confirmed safe fallback, không phải fabricated answer. Timeout/network/503 giữ nguyên câu hỏi để retry; invalid asset hiển thị lỗi riêng. Khi Qdrant unavailable, các route Overview, Assets, Tickets và Anomalies vẫn hoạt động.
+Các response `empty`, `low_relevance`, `unsupported_asset_type`, `unrelated`, `missing_asset_context`, `asset_context_mismatch`, `prompt_injection`, `unsafe_context`, `insufficient_evidence` và `unavailable` là confirmed safe fallback, không phải fabricated answer. Provider timeout/unavailable/invalid output/citation dùng deterministic fallback và có thể retry khi phù hợp. Browser dành 45 giây cho Copilot, dài hơn default backend LLM timeout 30 giây. Timeout/network/503 giữ nguyên câu hỏi; invalid asset hiển thị lỗi riêng. Khi Qdrant/LLM unavailable, các route Overview, Assets, Tickets và Anomalies vẫn hoạt động.
 
 ## Transaction Và Reset Demo
 
@@ -253,6 +281,7 @@ Tất cả production routes, gồm `/copilot`, độc lập với `src/lib/mock
 
 ```powershell
 npm run lint
+npm run typecheck
 npm test
 $env:NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:8000"
 npm run build

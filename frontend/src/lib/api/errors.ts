@@ -11,6 +11,7 @@ export type ApiErrorCode =
   | "invalid_response"
   | "business_rule"
   | "conflict"
+  | "rate_limited"
   | "write_unavailable"
   | "server";
 

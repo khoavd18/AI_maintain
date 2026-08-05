@@ -62,9 +62,7 @@ def workflow(tmp_path: Path) -> dict[str, Any]:
         ]
     ).to_csv(asset_path, index=False)
     pd.DataFrame(columns=sorted(TICKET_REQUIRED_COLUMNS)).to_csv(ticket_path, index=False)
-    pd.DataFrame(columns=sorted(MAINTENANCE_LOG_REQUIRED_COLUMNS)).to_csv(
-        log_path, index=False
-    )
+    pd.DataFrame(columns=sorted(MAINTENANCE_LOG_REQUIRED_COLUMNS)).to_csv(log_path, index=False)
 
     service = ProcessedDataService(
         asset_path=asset_path,
@@ -177,9 +175,7 @@ def test_maintenance_log_creation_preserves_ticket_relationship(
     assets = pd.read_csv(workflow["asset_path"])
     asset = assets[assets["asset_id"] == "GENERATOR_002"].iloc[0]
     assert asset["last_maintenance_date"] == date.today().isoformat()
-    assert asset["next_maintenance_date"] == (
-        date.today() + timedelta(days=30)
-    ).isoformat()
+    assert asset["next_maintenance_date"] == (date.today() + timedelta(days=30)).isoformat()
 
 
 def test_follow_up_result_keeps_ticket_in_progress(workflow: dict[str, Any]) -> None:
@@ -231,9 +227,7 @@ def test_maintenance_log_rejects_invalid_chronology(workflow: dict[str, Any]) ->
 
 def test_repository_rejects_duplicate_id_without_changing_file(tmp_path: Path) -> None:
     path = tmp_path / "tickets.csv"
-    pd.DataFrame([{"ticket_id": "TCK-000001", "asset_id": "A_001"}]).to_csv(
-        path, index=False
-    )
+    pd.DataFrame([{"ticket_id": "TCK-000001", "asset_id": "A_001"}]).to_csv(path, index=False)
     repository = CsvWriteRepository(
         path,
         id_column="ticket_id",
@@ -252,9 +246,7 @@ def test_failed_atomic_replace_leaves_original_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = tmp_path / "tickets.csv"
-    pd.DataFrame([{"ticket_id": "TCK-000001", "asset_id": "A_001"}]).to_csv(
-        path, index=False
-    )
+    pd.DataFrame([{"ticket_id": "TCK-000001", "asset_id": "A_001"}]).to_csv(path, index=False)
     repository = CsvWriteRepository(
         path,
         id_column="ticket_id",
@@ -265,7 +257,7 @@ def test_failed_atomic_replace_leaves_original_file(
     def fail_replace(source: Path, destination: Path) -> None:
         raise OSError("simulated replace failure")
 
-    monkeypatch.setattr("src.api.csv_repository.os.replace", fail_replace)
+    monkeypatch.setattr("src.repositories.csv_writes.os.replace", fail_replace)
     with pytest.raises(CsvWriteError, match="file gốc không bị thay đổi"):
         repository.append({"ticket_id": "TCK-000002", "asset_id": "A_002"})
 
@@ -291,7 +283,7 @@ def test_failed_second_file_replace_rolls_back_log_and_asset(
             raise OSError("simulated second replace failure")
         real_replace(source, destination)
 
-    monkeypatch.setattr("src.api.csv_repository.os.replace", fail_second_replace)
+    monkeypatch.setattr("src.repositories.csv_writes.os.replace", fail_second_replace)
     response = client.post(
         "/maintenance/logs",
         json=_maintenance_payload(ticket["ticket_id"]),

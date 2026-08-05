@@ -1,3 +1,14 @@
+import type {
+  AssetDetailsResponse,
+  AssetOverviewRecord,
+  AssetProfile,
+  MaintenanceLogRecord,
+  PreventiveRecord,
+  RecurringIssueRecord,
+  RiskRecord,
+  TicketRecord,
+} from "@/lib/api/schemas";
+
 export const healthFixture = {
   status: "ok",
   raw_data_available: true,
@@ -29,7 +40,7 @@ export const kpiFixture = {
   high_critical_risk_asset_count: 1,
 };
 
-export const assetsFixture = [
+export const assetsFixture: AssetOverviewRecord[] = [
   {
     asset_id: "GENERATOR_002",
     asset_name: "Máy phát điện dự phòng 002",
@@ -92,7 +103,7 @@ export const locationFixture = {
   version: 1,
 };
 
-export const assetProfileFixture = {
+export const assetProfileFixture: AssetProfile = {
   ...assetsFixture[0],
   asset_type_code: "generator",
   asset_category: "power_system",
@@ -130,7 +141,7 @@ export const assetProfileFixture = {
   qr_lookup_token: "22222222-2222-4222-8222-222222222222",
 };
 
-export const hvacProfileFixture = {
+export const hvacProfileFixture: AssetProfile = {
   ...assetProfileFixture,
   ...assetsFixture[1],
   asset_type_code: "hvac",
@@ -239,7 +250,7 @@ export const assetHistoryFixture = {
   total_pages: 1,
 };
 
-export const ticketsFixture = [
+export const ticketsFixture: TicketRecord[] = [
   {
     ticket_id: "TCK-000041",
     asset_id: "GENERATOR_002",
@@ -268,7 +279,7 @@ export const ticketsFixture = [
   },
 ];
 
-export const riskFixture = {
+export const riskFixture: RiskRecord = {
   asset_id: "GENERATOR_002",
   date: "2026-04-30",
   asset_name: "Máy phát điện dự phòng 002",
@@ -313,7 +324,7 @@ export const anomalyFixture = {
   anomalous_metrics: "energy_kwh, runtime_hours",
 };
 
-export const preventiveFixture = [
+export const preventiveFixture: PreventiveRecord[] = [
   {
     asset_id: "GENERATOR_002",
     as_of_date: "2026-04-30",
@@ -336,7 +347,7 @@ export const preventiveFixture = [
   },
 ];
 
-export const recurringFixture = {
+export const recurringFixture: RecurringIssueRecord = {
   asset_id: "HVAC_001",
   failure_category: "Lỗi làm lạnh",
   occurrence_count: 4,
@@ -348,7 +359,7 @@ export const recurringFixture = {
   recurrence_threshold: 3,
 };
 
-export const logFixture = {
+export const logFixture: MaintenanceLogRecord = {
   log_id: "LOG-000001",
   ticket_id: null,
   asset_id: "GENERATOR_002",
@@ -364,7 +375,7 @@ export const logFixture = {
   next_maintenance_date: "2025-11-22",
 };
 
-export const assetDetailsFixture = {
+export const assetDetailsFixture: AssetDetailsResponse = {
   asset_profile: {
     asset_id: assetsFixture[0].asset_id,
     asset_name: assetsFixture[0].asset_name,
@@ -378,7 +389,7 @@ export const assetDetailsFixture = {
     next_maintenance_date: assetsFixture[0].next_maintenance_date,
   },
   latest_risk: riskFixture,
-  risk_contributing_factors: riskFixture.contributing_factors,
+  risk_contributing_factors: riskFixture.contributing_factors ?? null,
   recommended_action: riskFixture.recommended_action,
   preventive_maintenance: preventiveFixture[0],
   risk_history: [riskFixture],
@@ -416,6 +427,7 @@ export const copilotResponseFixture = {
       effective_date: "2026-01-15",
       source: "data/documents/sop_generator.md",
       score: 0.91,
+      citation_ids: ["S1"],
     },
   ],
   retrieved_chunks: [
@@ -435,12 +447,40 @@ export const copilotResponseFixture = {
       text: "Đo điện áp ắc quy.",
       content: "Đo điện áp ắc quy.",
       chunk_index: 0,
+      citation_id: "S1",
     },
   ],
   retrieval_status: "success" as const,
   relevance_status: "relevant" as const,
   safety_notice: "Ngắt nguồn và tuân thủ lockout/tagout trước khi kiểm tra.",
   filters_applied: { asset_type: "Máy phát điện dự phòng", failure_category: "Lỗi điện" },
+  response_mode: "llm_grounded" as const,
+  fallback_reason: null,
+  structured_answer: {
+    summary: "GENERATOR_002 cần được kiểm tra theo SOP đã truy xuất.",
+    summary_source_ids: ["S1"],
+    possible_causes: [],
+    recommended_checks: [
+      { text: "Đo điện áp ắc quy theo SOP.", source_ids: ["S1"] },
+    ],
+    safety_warnings: [
+      { text: "Cô lập thiết bị trước khi kiểm tra.", source_ids: ["S1"] },
+    ],
+    escalation_required: false,
+    source_ids: ["S1"],
+    confidence: "medium" as const,
+    insufficient_evidence: false,
+  },
+  llm_provider: "ollama",
+  llm_model: "demo-model",
+  evidence_status: "sufficient" as const,
+  citation_validation: {
+    valid: true,
+    cited_source_ids: ["S1"],
+    invalid_source_ids: [],
+    coverage_complete: true,
+  },
+  context_warnings: [],
 };
 
 export const copilotUnavailableFixture = {
@@ -455,4 +495,11 @@ export const copilotUnavailableFixture = {
   retrieved_chunks: [],
   retrieval_status: "unavailable" as const,
   relevance_status: "not_relevant" as const,
+  response_mode: "deterministic_fallback" as const,
+  fallback_reason: "unavailable",
+  structured_answer: null,
+  llm_provider: null,
+  llm_model: null,
+  evidence_status: "insufficient" as const,
+  citation_validation: null,
 };

@@ -13,6 +13,29 @@ Analytics vẫn **batch-first**. CSV không còn là mutable runtime source of t
 
 Qdrant chỉ lưu vector chunks cho RAG retrieval. PM7 tạo nền tảng vận hành cho internal pilot, chưa phải production-ready architecture.
 
+## Modular monolith decomposition
+
+The public `src/api/routes.py` import remains a compatibility facade. The
+system/readiness, analytics, and Copilot endpoint families now live in focused
+routers under `src/api/routers/`, while the facade preserves the existing
+dependency override and function import seams used by tests and internal
+callers. `src/api/composition.py` is the outer composition root for the
+concrete Copilot graph.
+
+RAG does not import `src.api.services`. It consumes the narrow
+`AssetContextProvider` port in `src/rag/adapters/asset_context.py`; the API
+composition root supplies `ProcessedDataAssetContextAdapter`. The adapter
+exposes only bounded read context and recent ticket enrichment, so RAG remains
+independent of FastAPI transport and transactional mutation code.
+
+Frontend feature entrypoints live under `frontend/src/features/` for inventory,
+work-order parts, ticket detail, and SLA administration. The old component
+paths remain re-export facades. Inventory catalogue read operations also have a
+dedicated application collaborator at
+`src/inventory_management/application/catalogue_service.py`; stock-changing
+operations remain in the canonical service so their transaction boundaries are
+not fragmented.
+
 ## System Map
 
 ```mermaid
@@ -66,6 +89,9 @@ flowchart LR
     Embeddings --> Qdrant[(Qdrant)]
     Qdrant --> Copilot[RAG retrieval + relevance gate]
     Service --> Copilot
+    Copilot --> LLM[Optional provider-neutral LLM]
+    LLM --> Guard[Schema + citation validation]
+    Guard --> Copilot
     Copilot --> API
 
     CsvAdapter[Explicit CSV compatibility adapter]
@@ -485,18 +511,18 @@ Ghi ticket hoặc log không tự chạy pipeline. Analytics chỉ được làm
 
 Formula và definitions không thay đổi trong milestone này. Xem [Analytics pipeline](analytics.md).
 
-## RAG Boundary
+## RAG And LLM Boundary
 
-RAG workflow không thay đổi:
+- Documents được chunk deterministically; multilingual E5 embeddings dùng đúng `passage:`/`query:` prefix.
+- Qdrant chỉ lưu/filter chunks và không tham gia PostgreSQL transaction. Dense E5 retrieval kết hợp BM25 payload index trong memory, normalized fusion và multilingual cross-encoder reranking; metadata prior bị cap để không lấn át relevance.
+- Copilot từ chối out-of-domain question, explicit prompt injection, unsupported asset và selected-asset/question type mismatch trước retrieval/generation.
+- Relevance, distinct-document, source deduplication và context-size gates chạy trước provider call. Retrieved text được serialize như untrusted data trong user message, không bao giờ trở thành system instruction.
+- `src/llm/` sở hữu provider protocol, Ollama/OpenAI-compatible adapters, prompt construction, strict Pydantic parser và citation validator. Provider không có tools, SQL, shell hoặc business mutation capability.
+- Mỗi chunk trong prompt có response-local ID `S1..Sn`. Summary, possible causes, recommended checks và source-derived safety warnings đều phải cite ID hợp lệ. Unknown citation, malformed output, non-Vietnamese output hoặc provider failure chuyển sang deterministic fallback.
+- `LLM_ENABLED=false` là default compatibility/security mode. API response thêm provenance/evidence fields nhưng giữ `answer`, `asset_context`, `sources`, `retrieved_chunks`, retrieval/relevance status và safety notice.
+- Qdrant không lưu asset, ticket, maintenance log hoặc inventory ledger. Asset facts đến từ canonical services/latest batch analytics và chỉ dùng làm bounded decision-support context.
 
-- documents được chunk deterministically;
-- local sentence-transformers tạo embeddings;
-- Qdrant lưu và filter chunks;
-- relevance gate loại retrieval không đủ liên quan;
-- deterministic composer kết hợp retrieved guidance với structured asset/ticket context từ PostgreSQL và latest batch analytics.
-
-Qdrant không lưu asset, ticket hoặc maintenance log và không tham gia database transaction.
-Inventory data cũng không được đưa vào Qdrant.
+Chi tiết: [RAG/LLM design](RAG_LLM_DESIGN.md) và [evaluation](RAG_LLM_EVALUATION.md).
 
 ## Runtime Modes
 

@@ -55,7 +55,7 @@
     "git_commit": "PENDING_PM9_CHECKPOINT",
     "git_tag_recommendation": "product-milestone-9-pilot-ready-by-design",
     "migration_revision": "20260726_0008",
-    "deployment_manifest_sha256": "59a533845e83197aefe3c3c7201f9173ae66a00f4afdfd571471a45957db6dad"
+    "deployment_manifest_sha256": "06bdd63dc28313ca32e5edd862fe019d421460e832dd3c6ccfda7d2d8583e9dc"
   },
   "application_versions": {
     "application": "0.1.0",
@@ -64,7 +64,7 @@
     "node": "22.20.0",
     "postgresql": "16",
     "qdrant": "1.10.1",
-    "nextjs": "16.2.10"
+    "nextjs": "^16.2.12"
   },
   "database_version": "16",
   "enabled_jobs": [],

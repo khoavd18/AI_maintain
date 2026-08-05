@@ -32,9 +32,12 @@ Human facility managers and technicians remain responsible for prioritization, s
   allow-listed catalog, minimum business context, owner-isolated reads, and
   existing RBAC. Do not add email, SMS, push, webhooks, or external delivery.
 - Keep FastAPI as the serving boundary. Streamlit must consume FastAPI and must not read raw or processed CSV files directly.
+- Keep `src/api/routes.py` as the compatibility facade for the focused routers under `src/api/routers/`; preserve its dependency override and public import seams.
+- Keep feature-specific Next.js code under `frontend/src/features/`. The legacy files under `frontend/src/components/` for inventory, work-order parts, ticket detail, and SLA administration are compatibility re-exports; preserve their imports while extracting internals.
 - Select storage in the service/repository factory, never in route functions. Do not silently fall back from unavailable PostgreSQL to mutable CSV storage.
 - Keep the CSV repository only as an explicit compatibility adapter for isolated tests and demo fixtures.
 - Use Qdrant only for RAG document retrieval.
+- Keep RAG application code dependent on the narrow `AssetContextProvider` port in `src/rag/adapters/`; select the concrete adapter in the outer application composition root. Do not import `src.api.services` from `src/rag/copilot.py`.
 - Do not add real-time ingestion, streaming, or event-processing infrastructure.
 
 ## Preventive Maintenance And Work Orders
@@ -57,6 +60,7 @@ Human facility managers and technicians remain responsible for prioritization, s
 ## Spare Parts And Inventory
 
 - Keep `src/inventory_management/service.py` as the only inventory business boundary and `src/repositories/postgres_inventory.py` as the PostgreSQL implementation. Routes and frontends must never manipulate inventory models or balances directly.
+- Keep `src/inventory_management/routes` as the inventory route package and preserve `src.inventory_management.routes` as its facade; do not move inventory business rules into route modules.
 - Keep parts, assets, tickets, work orders, maintenance logs, requirements, reservations, issues, consumptions, returns, and movements as distinct concepts. Historical `MaintenanceLog.parts_replaced` text is not an inventory ledger.
 - Preserve `available = on_hand - reserved`. Clients may request named actions but must never submit calculated balances, stock states, or reorder suggestions.
 - Keep `InventoryMovement`, `StockReservationEvent`, `WorkOrderPartIssue`, `WorkOrderPartConsumption`, and `WorkOrderPartReturn` append-only. Corrections use a new authorized movement; do not update or delete history.

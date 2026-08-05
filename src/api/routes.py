@@ -24,15 +24,7 @@ from src.asset_management.service import (
     AssetDomainNotFoundError,
 )
 from src.asset_management.storage import AttachmentStorageError, AttachmentValidationError
-
-from src.api.csv_repository import (
-    CsvRepositoryError,
-    CsvWriteError,
-    DuplicateRecordError,
-    RecordNotFoundError,
-)
 from src.api.schemas import (
-    AnomalyRecord,
     AssetArchiveRequest,
     AssetAttachmentRecord,
     AssetCatalogPage,
@@ -47,10 +39,6 @@ from src.api.schemas import (
     AssetRecord,
     AssetRestoreRequest,
     AssetUpdateRequest,
-    CopilotAskRequest,
-    CopilotAskResponse,
-    HealthResponse,
-    MaintenanceKpiResponse,
     MaintenanceLogCreateRequest,
     MaintenanceLogRecord,
     LifecycleTransitionRequest,
@@ -58,10 +46,6 @@ from src.api.schemas import (
     LocationRecord,
     LocationUpdateRequest,
     OperationalStatusRequest,
-    PreventiveMaintenanceRecord,
-    RecurringIssueRecord,
-    RiskRecord,
-    SummaryResponse,
     TicketCreateRequest,
     TicketRecord,
     TicketUpdateRequest,
@@ -72,11 +56,28 @@ from src.api.services import (
     ProcessedDataNotFoundError,
     ProcessedDataService,
     TicketNotFoundError,
-    get_processed_data_service,
 )
-from src.rag.copilot import MaintenanceCopilot, get_copilot_service
-from src.rag.embeddings import EmbeddingDependencyError
-from src.rag.vector_store import VectorStoreError
+from src.api.routers.analytics import (
+    asset_anomaly_history,
+    asset_risk_history,
+    list_asset_anomalies,
+    list_asset_risks,
+    maintenance_kpis,
+    preventive_maintenance,
+    recurring_issues,
+    router as analytics_router,
+    summary,
+    top_asset_risks,
+)
+from src.api.routers.copilot import (
+    _copilot_rate_limiter,
+    _copilot_service,
+    ask_copilot,
+    router as copilot_router,
+)
+from src.api.routers.dependencies import get_service
+from src.api.routers.system import health, rag_readiness, router as system_router
+from src.rag.vector_store import QdrantVectorStore
 from src.repositories.contracts import (
     DuplicateIdentifierError,
     IntegrityViolationError,
@@ -86,23 +87,26 @@ from src.repositories.contracts import (
     StorageUnavailableError,
     UnsupportedStorageOperationError,
 )
+from src.repositories.csv_writes import (
+    CsvRepositoryError,
+    CsvWriteError,
+    DuplicateRecordError,
+    RecordNotFoundError,
+)
 from src.security.dependencies import audit_context, require_permission
 from src.security.permissions import Permission, Role
 from src.security.service import CurrentUser
 
 router = APIRouter()
+router.include_router(system_router)
+router.include_router(analytics_router)
+router.include_router(copilot_router)
 
 
-def _service() -> ProcessedDataService:
-    return get_processed_data_service()
-
-
-def _copilot_service() -> MaintenanceCopilot:
-    return get_copilot_service()
+_service = get_service
 
 
 ServiceDependency = Annotated[ProcessedDataService, Depends(_service)]
-CopilotDependency = Annotated[MaintenanceCopilot, Depends(_copilot_service)]
 AssetsReadDependency = Annotated[CurrentUser, Depends(require_permission(Permission.ASSETS_READ))]
 AssetsCreateDependency = Annotated[
     CurrentUser, Depends(require_permission(Permission.ASSETS_CREATE))
@@ -153,105 +157,6 @@ LogsReadDependency = Annotated[
 LogsCreateDependency = Annotated[
     CurrentUser, Depends(require_permission(Permission.MAINTENANCE_LOGS_CREATE))
 ]
-AnalyticsReadDependency = Annotated[
-    CurrentUser, Depends(require_permission(Permission.ANALYTICS_READ))
-]
-CopilotUseDependency = Annotated[CurrentUser, Depends(require_permission(Permission.COPILOT_USE))]
-
-
-@router.get("/health", response_model=HealthResponse, tags=["system"])
-def health(service: ServiceDependency) -> dict[str, object]:
-    """Return API health."""
-
-    return service.get_health()
-
-
-@router.get("/summary", response_model=SummaryResponse, tags=["maintenance"])
-def summary(
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-) -> dict[str, object]:
-    """Return latest maintenance summary metrics."""
-
-    return _handle_service_errors(service.get_summary)
-
-
-@router.get("/assets/risk", response_model=list[RiskRecord], tags=["risk"])
-def list_asset_risks(
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-    risk_level: str | None = None,
-    asset_type: str | None = None,
-    location: str | None = None,
-    date: str | None = None,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 50,
-) -> list[dict[str, object]]:
-    """List risk records filtered by Vietnamese business values."""
-
-    return _handle_service_errors(
-        service.list_risks,
-        risk_level=risk_level,
-        asset_type=asset_type,
-        location=location,
-        date=date,
-        limit=limit,
-    )
-
-
-@router.get("/assets/risk/top", response_model=list[RiskRecord], tags=["risk"])
-def top_asset_risks(
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 10,
-    date: str | None = None,
-) -> list[dict[str, object]]:
-    """Return top risky assets for a date, defaulting to the latest date."""
-
-    return _handle_service_errors(service.list_top_risks, limit=limit, date=date)
-
-
-@router.get("/assets/risk/{asset_id}", response_model=list[RiskRecord], tags=["risk"])
-def asset_risk_history(
-    asset_id: str,
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-) -> list[dict[str, object]]:
-    """Return risk history for one asset."""
-
-    return _handle_service_errors(service.get_asset_risk_history, asset_id=asset_id)
-
-
-@router.get("/assets/anomalies", response_model=list[AnomalyRecord], tags=["anomalies"])
-def list_asset_anomalies(
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-    asset_type: str | None = None,
-    anomaly_type: str | None = None,
-    date: str | None = None,
-    only_anomalies: bool = True,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
-) -> list[dict[str, object]]:
-    """List anomaly records filtered by Vietnamese business values."""
-
-    return _handle_service_errors(
-        service.list_anomalies,
-        asset_type=asset_type,
-        anomaly_type=anomaly_type,
-        date=date,
-        only_anomalies=only_anomalies,
-        limit=limit,
-    )
-
-
-@router.get("/assets/anomalies/{asset_id}", response_model=list[AnomalyRecord], tags=["anomalies"])
-def asset_anomaly_history(
-    asset_id: str,
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-) -> list[dict[str, object]]:
-    """Return anomaly history for one asset."""
-
-    return _handle_service_errors(service.get_asset_anomaly_history, asset_id=asset_id)
 
 
 @router.get("/assets/options", response_model=AssetOptionsResponse, tags=["asset-management"])
@@ -756,64 +661,6 @@ def asset_master_record(
     return _handle_service_errors(service.get_asset, asset_id=asset_id)
 
 
-@router.get(
-    "/maintenance/preventive",
-    response_model=list[PreventiveMaintenanceRecord],
-    tags=["maintenance"],
-)
-def preventive_maintenance(
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-    maintenance_status: str | None = None,
-    asset_type: str | None = None,
-    criticality: str | None = None,
-) -> list[dict[str, object]]:
-    """List current preventive maintenance status rows."""
-
-    return _handle_service_errors(
-        service.list_preventive_maintenance,
-        maintenance_status=maintenance_status,
-        asset_type=asset_type,
-        criticality=criticality,
-    )
-
-
-@router.get(
-    "/maintenance/recurring-issues",
-    response_model=list[RecurringIssueRecord],
-    tags=["maintenance"],
-)
-def recurring_issues(
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-    asset_id: str | None = None,
-    failure_category: str | None = None,
-    recurrence_flag: bool | None = None,
-) -> list[dict[str, object]]:
-    """List deterministic recurring ticket groups."""
-
-    return _handle_service_errors(
-        service.list_recurring_issues,
-        asset_id=asset_id,
-        failure_category=failure_category,
-        recurrence_flag=recurrence_flag,
-    )
-
-
-@router.get(
-    "/maintenance/kpis",
-    response_model=MaintenanceKpiResponse,
-    tags=["maintenance"],
-)
-def maintenance_kpis(
-    service: ServiceDependency,
-    _actor: AnalyticsReadDependency,
-) -> dict[str, object]:
-    """Return the current descriptive maintenance KPI snapshot."""
-
-    return _handle_service_errors(service.get_maintenance_kpis)
-
-
 @router.get("/tickets", response_model=list[TicketRecord], tags=["maintenance"])
 def tickets(
     service: ServiceDependency,
@@ -934,45 +781,6 @@ def create_maintenance_log(
         **request.model_dump(),
         audit_context=audit_context(actor, http_request),
     )
-
-
-@router.post("/copilot/ask", response_model=CopilotAskResponse, tags=["copilot"])
-def ask_copilot(
-    request: CopilotAskRequest,
-    copilot: CopilotDependency,
-    _actor: CopilotUseDependency,
-) -> dict[str, object]:
-    """Ask the deterministic RAG Maintenance Copilot."""
-
-    try:
-        optional_filters = {
-            key: value
-            for key, value in {
-                "document_type": request.document_type,
-                "failure_category": request.failure_category,
-            }.items()
-            if value is not None
-        }
-        return copilot.ask(
-            question=request.question,
-            asset_id=request.asset_id,
-            top_k=request.top_k,
-            **optional_filters,
-        ).to_dict()
-    except AssetNotFoundError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Không tìm thấy thiết bị: {request.asset_id or 'không xác định'}.",
-        ) from exc
-    except ProcessedDataNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except (EmbeddingDependencyError, VectorStoreError) as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Maintenance Copilot tạm thời không truy cập được kho tài liệu.",
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _authorize_ticket_update(
@@ -1124,6 +932,7 @@ def _handle_asset_errors(function, *args, **kwargs):
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+
     except (
         AttachmentStorageError,
         StorageUnavailableError,
@@ -1134,3 +943,24 @@ def _handle_asset_errors(function, *args, **kwargs):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
+
+
+__all__ = [
+    "_copilot_rate_limiter",
+    "_copilot_service",
+    "_service",
+    "ask_copilot",
+    "asset_anomaly_history",
+    "asset_risk_history",
+    "health",
+    "list_asset_anomalies",
+    "list_asset_risks",
+    "maintenance_kpis",
+    "preventive_maintenance",
+    "rag_readiness",
+    "recurring_issues",
+    "router",
+    "summary",
+    "top_asset_risks",
+    "QdrantVectorStore",
+]

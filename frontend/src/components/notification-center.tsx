@@ -25,6 +25,44 @@ import { permissions, type Permission } from "@/lib/auth";
 import { formatTimestamp } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
+const notificationTermReplacements = [
+  ["Batch analytics", "Đợt phân tích dữ liệu"],
+  ["batch analytics", "đợt phân tích dữ liệu"],
+  ["Maintenance log", "Bản ghi bảo trì"],
+  ["maintenance log", "bản ghi bảo trì"],
+  ["Preventive plan", "Kế hoạch bảo trì"],
+  ["preventive plan", "kế hoạch bảo trì"],
+  ["Inventory position", "Tồn kho"],
+  ["inventory position", "tồn kho"],
+  ["Spare part", "Phụ tùng"],
+  ["spare part", "phụ tùng"],
+  ["Work order", "Lệnh công việc"],
+  ["work order", "lệnh công việc"],
+  ["Ticket", "Phiếu sự cố"],
+  ["ticket", "phiếu sự cố"],
+  ["Asset", "Thiết bị"],
+  ["asset", "thiết bị"],
+  ["Occurrence", "Kỳ bảo trì"],
+  ["occurrence", "kỳ bảo trì"],
+  ["Evidence", "Tài liệu minh chứng"],
+  ["evidence", "tài liệu minh chứng"],
+  ["Movement", "Biến động kho"],
+  ["movement", "biến động kho"],
+  ["Analytics", "Phân tích dữ liệu"],
+  ["analytics", "phân tích dữ liệu"],
+  ["Escalation", "Chuyển cấp xử lý"],
+  ["escalation", "chuyển cấp xử lý"],
+  ["SLA", "thời hạn xử lý cam kết"],
+  ["runbook", "hướng dẫn vận hành"],
+] as const;
+
+export function presentNotificationText(value: string) {
+  return notificationTermReplacements.reduce(
+    (text, [source, replacement]) => text.replaceAll(source, replacement),
+    value,
+  );
+}
+
 export function NotificationCenter() {
   const auth = useAuth();
   const enabled = auth.can(permissions.notificationsRead);
@@ -128,11 +166,11 @@ function NotificationRow({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold">{notification.title}</p>
+            <p className="text-sm font-semibold">{presentNotificationText(notification.title)}</p>
             <SeverityBadge severity={notification.severity} />
           </div>
           <p className="mt-1 text-sm leading-5 text-muted-foreground">
-            {notification.body}
+            {presentNotificationText(notification.body)}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             {formatTimestamp(notification.created_at)}

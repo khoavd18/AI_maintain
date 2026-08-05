@@ -63,6 +63,7 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
   const assets = useAssetsQuery({ limit: 1000 });
   const mutation = useTicketIntakeMutation();
   const submitting = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState<TicketIntakeRequest>({
     ...emptyForm,
     asset_id: initialAssetId,
@@ -100,6 +101,11 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
     const parsed = ticketIntakeRequestSchema.safeParse(request);
     if (!parsed.success) {
       setFieldErrors(zodFieldErrors(parsed.error.issues));
+      window.setTimeout(() => {
+        formRef.current
+          ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+          ?.focus();
+      }, 0);
       return;
     }
     submitting.current = true;
@@ -115,6 +121,7 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
       <form
+        ref={formRef}
         onSubmit={submit}
         className="space-y-5 rounded-lg border bg-white p-4 sm:p-5"
       >
@@ -122,7 +129,7 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
           <h2 id="ticket-context-heading" className="text-sm font-semibold">
             Thiết bị và vấn đề
           </h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4">
             <Field
               id="ticket-asset"
               label="Thiết bị"
@@ -134,7 +141,7 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
                   setForm({ ...form, asset_id: asset_id === "none" ? "" : asset_id })
                 }
               >
-                <SelectTrigger id="ticket-asset" className="w-full">
+                <SelectTrigger id="ticket-asset" className="w-full" aria-invalid={Boolean(fieldErrors.asset_id)} aria-describedby={fieldErrors.asset_id ? "ticket-asset-error" : undefined}>
                   <SelectValue placeholder="Chọn thiết bị" />
                 </SelectTrigger>
                 <SelectContent>
@@ -142,33 +149,6 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
                   {assets.data.map((asset) => (
                     <SelectItem key={asset.asset_id} value={asset.asset_id}>
                       {asset.asset_id} · {asset.asset_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field
-              id="ticket-failure-category"
-              label="Nhóm lỗi vận hành"
-              error={fieldErrors.failure_category}
-            >
-              <Select
-                value={form.failure_category}
-                onValueChange={(failure_category) =>
-                  setForm({
-                    ...form,
-                    failure_category:
-                      failure_category as TicketIntakeRequest["failure_category"],
-                  })
-                }
-              >
-                <SelectTrigger id="ticket-failure-category" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {options.data.failure_categories.map((item) => (
-                    <SelectItem key={item.code} value={item.code}>
-                      {item.display_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -184,6 +164,8 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
               <Textarea
                 id="ticket-description"
                 rows={5}
+                aria-invalid={Boolean(fieldErrors.issue_description)}
+                aria-describedby={fieldErrors.issue_description ? "ticket-description-error" : undefined}
                 value={form.issue_description}
                 onChange={(event) =>
                   setForm({ ...form, issue_description: event.target.value })
@@ -196,71 +178,20 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
 
         <section aria-labelledby="ticket-classification-heading" className="border-t pt-5">
           <h2 id="ticket-classification-heading" className="text-sm font-semibold">
-            Phân loại và ưu tiên
+            Mức độ ưu tiên
           </h2>
+          <p className="mt-1 text-xs text-muted-foreground">Chọn mức ảnh hưởng và độ khẩn cấp; hệ thống sẽ xác định mức ưu tiên.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Field id="ticket-category" label="Category" error={fieldErrors.category_id}>
-              <Select
-                value={form.category_id ?? "none"}
-                onValueChange={(category_id) =>
-                  setForm({
-                    ...form,
-                    category_id: category_id === "none" ? null : category_id,
-                    subcategory_id: null,
-                  })
-                }
-              >
-                <SelectTrigger id="ticket-category" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Chưa phân loại</SelectItem>
-                  {options.data.categories.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field
-              id="ticket-subcategory"
-              label="Subcategory"
-              error={fieldErrors.subcategory_id}
-            >
-              <Select
-                value={form.subcategory_id ?? "none"}
-                onValueChange={(subcategory_id) =>
-                  setForm({
-                    ...form,
-                    subcategory_id:
-                      subcategory_id === "none" ? null : subcategory_id,
-                  })
-                }
-              >
-                <SelectTrigger id="ticket-subcategory" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Chưa chọn</SelectItem>
-                  {categorySubcategories.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
             <ClassificationSelect
               id="ticket-impact"
-              label="Impact"
+              label="Mức ảnh hưởng"
               value={form.impact}
               options={options.data.impacts}
               onChange={(impact) => setForm({ ...form, impact })}
             />
             <ClassificationSelect
               id="ticket-urgency"
-              label="Urgency"
+              label="Độ khẩn cấp"
               value={form.urgency}
               options={options.data.urgencies}
               onChange={(urgency) => setForm({ ...form, urgency })}
@@ -269,7 +200,7 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
           <div className="mt-4 flex items-center justify-between rounded-lg border bg-muted/40 p-3">
             <div>
               <p className="text-xs text-muted-foreground">
-                Priority do backend tính từ impact × urgency
+                Mức ưu tiên được hệ thống tính
               </p>
               <p className="mt-1 text-sm font-medium">
                 {priority.isPending
@@ -288,96 +219,71 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
           </div>
         </section>
 
-        <section aria-labelledby="ticket-routing-heading" className="border-t pt-5">
-          <h2 id="ticket-routing-heading" className="text-sm font-semibold">
-            Tiếp nhận và phân công
-          </h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <ReferenceSelect
-              id="ticket-source"
-              label="Nguồn tiếp nhận"
-              value={form.intake_source_id}
-              items={options.data.intake_sources}
-              onChange={(intake_source_id) =>
-                setForm({ ...form, intake_source_id })
-              }
-            />
-            <ReferenceSelect
-              id="ticket-group"
-              label="Support group"
-              value={form.support_group_id}
-              items={options.data.support_groups}
-              onChange={(support_group_id) =>
-                setForm({ ...form, support_group_id })
-              }
-            />
-            {canAssign && (
-              <Field id="ticket-assignee" label="Người được phân công">
+        <details className="group border-t pt-5">
+          <summary className="w-fit cursor-pointer rounded-md text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Thông tin bổ sung
+          </summary>
+          <p className="mt-1 text-xs text-muted-foreground">Phân loại chi tiết, điều phối và thông tin người báo có thể bổ sung khi cần.</p>
+
+          <section aria-labelledby="ticket-detail-classification-heading" className="mt-5">
+            <h2 id="ticket-detail-classification-heading" className="text-sm font-semibold">Phân loại chi tiết</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <Field id="ticket-failure-category" label="Nhóm lỗi vận hành" error={fieldErrors.failure_category}>
                 <Select
-                  value={form.assigned_user_id ?? "none"}
-                  onValueChange={(assigned_user_id) =>
+                  value={form.failure_category}
+                  onValueChange={(failure_category) =>
                     setForm({
                       ...form,
-                      assigned_user_id:
-                        assigned_user_id === "none" ? null : assigned_user_id,
+                      failure_category: failure_category as TicketIntakeRequest["failure_category"],
                     })
                   }
                 >
-                  <SelectTrigger id="ticket-assignee" className="w-full">
+                  <SelectTrigger id="ticket-failure-category" className="w-full" aria-invalid={Boolean(fieldErrors.failure_category)}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Chưa phân công</SelectItem>
-                    {options.data.assignees.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
+                    {options.data.failure_categories.map((item) => (
+                      <SelectItem key={item.code} value={item.code}>
                         {item.display_name}
-                        {item.technician_id ? ` · ${item.technician_id}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field>
-            )}
-            <Field id="ticket-manager-note" label="Ghi chú quản lý">
-              <Textarea
-                id="ticket-manager-note"
-                rows={3}
-                value={form.manager_note ?? ""}
-                onChange={(event) =>
-                  setForm({ ...form, manager_note: event.target.value })
-                }
-              />
-            </Field>
-          </div>
-        </section>
+              <Field id="ticket-category" label="Nhóm sự cố" error={fieldErrors.category_id}>
+                <Select value={form.category_id ?? "none"} onValueChange={(category_id) => setForm({ ...form, category_id: category_id === "none" ? null : category_id, subcategory_id: null })}>
+                  <SelectTrigger id="ticket-category" className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="none">Chưa phân loại</SelectItem>{options.data.categories.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+              <Field id="ticket-subcategory" label="Phân loại cụ thể" error={fieldErrors.subcategory_id}>
+                <Select value={form.subcategory_id ?? "none"} onValueChange={(subcategory_id) => setForm({ ...form, subcategory_id: subcategory_id === "none" ? null : subcategory_id })}>
+                  <SelectTrigger id="ticket-subcategory" className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="none">Chưa chọn</SelectItem>{categorySubcategories.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+            </div>
+          </section>
 
-        <section aria-labelledby="ticket-reporter-heading" className="border-t pt-5">
-          <h2 id="ticket-reporter-heading" className="text-sm font-semibold">
-            Người báo sự cố
-          </h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <TextInput
-              id="ticket-reporter-name"
-              label="Họ tên"
-              value={form.reporter_name}
-              onChange={(reporter_name) => setForm({ ...form, reporter_name })}
-            />
-            <TextInput
-              id="ticket-reporter-email"
-              label="Email"
-              type="email"
-              value={form.reporter_email}
-              error={fieldErrors.reporter_email}
-              onChange={(reporter_email) => setForm({ ...form, reporter_email })}
-            />
-            <TextInput
-              id="ticket-reporter-phone"
-              label="Điện thoại"
-              value={form.reporter_phone}
-              onChange={(reporter_phone) => setForm({ ...form, reporter_phone })}
-            />
-          </div>
-        </section>
+          <section aria-labelledby="ticket-routing-heading" className="mt-5 border-t pt-5">
+            <h2 id="ticket-routing-heading" className="text-sm font-semibold">Tiếp nhận và phân công</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <ReferenceSelect id="ticket-source" label="Nguồn tiếp nhận" value={form.intake_source_id} items={options.data.intake_sources} onChange={(intake_source_id) => setForm({ ...form, intake_source_id })} />
+              <ReferenceSelect id="ticket-group" label="Nhóm xử lý" value={form.support_group_id} items={options.data.support_groups} onChange={(support_group_id) => setForm({ ...form, support_group_id })} />
+              {canAssign && <Field id="ticket-assignee" label="Người được phân công"><Select value={form.assigned_user_id ?? "none"} onValueChange={(assigned_user_id) => setForm({ ...form, assigned_user_id: assigned_user_id === "none" ? null : assigned_user_id })}><SelectTrigger id="ticket-assignee" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Chưa phân công</SelectItem>{options.data.assignees.map((item) => <SelectItem key={item.id} value={item.id}>{item.display_name}</SelectItem>)}</SelectContent></Select></Field>}
+              <Field id="ticket-manager-note" label="Ghi chú quản lý"><Textarea id="ticket-manager-note" rows={3} value={form.manager_note ?? ""} onChange={(event) => setForm({ ...form, manager_note: event.target.value })} /></Field>
+            </div>
+          </section>
+
+          <section aria-labelledby="ticket-reporter-heading" className="mt-5 border-t pt-5">
+            <h2 id="ticket-reporter-heading" className="text-sm font-semibold">Người báo sự cố</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <TextInput id="ticket-reporter-name" label="Họ tên" value={form.reporter_name} onChange={(reporter_name) => setForm({ ...form, reporter_name })} />
+              <TextInput id="ticket-reporter-email" label="Email" type="email" value={form.reporter_email} error={fieldErrors.reporter_email} onChange={(reporter_email) => setForm({ ...form, reporter_email })} />
+              <TextInput id="ticket-reporter-phone" label="Điện thoại" value={form.reporter_phone} onChange={(reporter_phone) => setForm({ ...form, reporter_phone })} />
+            </div>
+          </section>
+        </details>
 
         {mutation.isError && (
           <div
@@ -394,7 +300,7 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
             ) : (
               <TicketPlus aria-hidden="true" />
             )}
-            {mutation.isPending ? "Đang tạo..." : "Tạo ticket"}
+            {mutation.isPending ? "Đang lưu..." : "Lưu phiếu sự cố"}
           </Button>
         </div>
       </form>
@@ -403,10 +309,10 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
         <section className="rounded-lg border bg-white p-4">
           <h2 className="text-sm font-semibold">Quy tắc vận hành</h2>
           <dl className="mt-3 space-y-3 text-sm">
-            <Fact label="Trạng thái ban đầu" value={canAssign ? "Open hoặc Assigned" : "Open"} />
-            <Fact label="Priority" value="Backend impact × urgency matrix" />
-            <Fact label="SLA" value="Snapshot policy tại thời điểm tạo" />
-            <Fact label="Risk/KPI" value="Cập nhật ở analytics batch kế tiếp" />
+            <Fact label="Trạng thái ban đầu" value={canAssign ? "Mới hoặc đã phân công" : "Mới"} />
+            <Fact label="Mức ưu tiên" value="Tính từ ảnh hưởng và độ khẩn cấp" />
+            <Fact label="Thời hạn xử lý" value="Được giữ cố định khi tạo phiếu" />
+            <Fact label="Chỉ số phân tích" value="Cập nhật ở đợt tiếp theo" />
           </dl>
         </section>
         {mutation.data && (
@@ -416,14 +322,13 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
           >
             <p className="flex items-center gap-2 text-sm font-semibold">
               <CheckCircle2 className="size-4" aria-hidden="true" />
-              Đã tạo {mutation.data.ticket_id}
+              Đã lưu phiếu sự cố
             </p>
             <p className="mt-2 text-xs leading-5">
-              Priority {mutation.data.priority_display}; SLA policy{" "}
-              {mutation.data.sla?.policy_code ?? "chưa áp dụng"}.
+              Mức ưu tiên: {mutation.data.priority_display}. Mã phiếu: {mutation.data.ticket_id}.
             </p>
             <Button asChild size="sm" className="mt-3">
-              <Link href={`/tickets/${mutation.data.ticket_id}`}>Mở ticket</Link>
+              <Link href={`/tickets/${mutation.data.ticket_id}`}>Xem phiếu sự cố</Link>
             </Button>
           </section>
         )}
@@ -462,7 +367,7 @@ function Field({
       <Label htmlFor={id}>{label}</Label>
       {children}
       {error && (
-        <p role="alert" className="text-xs text-destructive">
+        <p id={`${id}-error`} role="alert" className="text-xs text-destructive">
           {error}
         </p>
       )}

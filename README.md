@@ -137,7 +137,12 @@ flowchart LR
 
     Seed --> RAG[RAG indexing/retrieval]
     RAG --> Qdrant[(Qdrant)]
-    Qdrant --> API
+    Qdrant --> Grounding[Score/filter/context gate]
+    Grounding --> LLM[Ollama or OpenAI-compatible LLM]
+    LLM --> Validate[Schema + citation validation]
+    Validate --> API
+    Grounding -->|disabled/error/insufficient| Fallback[Deterministic safe fallback]
+    Fallback --> API
 ```
 
 Canonical analytics implementations:
@@ -495,6 +500,13 @@ Streamlit được giữ làm **legacy development client** theo strategy B. App
 
 ## Next.js Frontend
 
+Feature ownership is organized under `frontend/src/features/`. Inventory,
+work-order parts, ticket detail, and SLA administration have feature entrypoints
+there; the historical component paths remain thin compatibility facades so
+existing imports and tests continue to work. Route pages import the feature
+entrypoints directly. The UI, API calls, query keys, permissions, and mutation
+behavior are unchanged.
+
 `frontend/` cung cấp authenticated operational frontend. Product Milestone 7 bổ sung:
 
 - notification bell với unread count và quick actions trong authenticated shell;
@@ -537,17 +549,20 @@ Mặc định `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000`. Next.js có logi
 
 ## RAG Maintenance Copilot
 
-Current RAG workflow:
+Current grounded RAG + LLM workflow:
 
 1. Đọc `data/raw/documents.csv`.
-2. Chuẩn hóa legacy CSV fields thành `document_id`, `document_type`, `content`, `failure_category`, `version` và `effective_date`.
-3. Chunk nội dung theo section marker và giữ đầy đủ source metadata cùng `chunk_index`.
-4. Tạo local sentence-transformers embeddings với E5-style prefixes.
-5. Thay thế toàn bộ Qdrant collection `maintenance_knowledge` và upsert stable chunk IDs.
-6. Retrieve top-k chunks với `asset_type` filter; `document_type` và `failure_category` là optional filters.
-7. Loại chunk dưới relevance threshold và chỉ compose answer khi còn nguồn đủ liên quan.
-8. Kết hợp retrieved guidance với structured asset/ticket facts từ PostgreSQL và latest batch analytics.
-9. Tạo deterministic Vietnamese response với năm phần: tình trạng, checklist, nguồn, an toàn và giới hạn.
+2. Validate mọi row và báo lỗi có cấu trúc cho field bắt buộc, date/version, duplicate ID, asset ngoài scope và instruction-like content; không silently drop row.
+3. Chunk theo section/procedure boundary, lặp lại heading ở continuation chunk và tạo BLAKE2b content-derived chunk ID.
+4. Tạo normalized 384-dimensional embeddings bằng `intfloat/multilingual-e5-small`, `passage:` cho chunk và `query:` cho câu hỏi.
+5. Upsert Qdrant bằng UUIDv5 point ID. Default không xóa collection/chunk; `--replace` xóa đúng obsolete points và `--recreate` là destructive opt-in rõ ràng.
+6. Lấy candidate pool lớn từ dense Qdrant và in-memory BM25, deduplicate theo chunk ID, rồi fuse normalized scores.
+7. Rerank fused candidates bằng multilingual cross-encoder. Final score = `0.55 * retrieval + 0.40 * reranker + 0.05 * bounded metadata prior`; metadata không thể lấn át relevance.
+8. Áp filters `asset_type`, `document_type`, `failure_category`, `version`, `language`, relevance/no-answer gate và final top-k.
+9. Từ chối asset mismatch, câu hỏi ngoài maintenance scope, prompt injection, shell/SQL/tool directive và yêu cầu tự động thay đổi business state; chỉ cho phép nhánh xã giao hẹp gồm chào hỏi, danh tính, khả năng và cảm ơn/tạm biệt.
+10. Kết hợp retrieved guidance với allow-listed asset facts; retrieved text luôn là untrusted data, không phải system instruction.
+11. Khi `LLM_ENABLED=true`, gọi Ollama hoặc OpenAI-compatible bằng strict JSON Schema rồi parse lại bằng Pydantic tại application boundary. Câu xã giao không chạy retrieval; câu kỹ thuật vẫn bắt buộc evidence gate và citation.
+12. Đối chiếu citation ở từng summary/cause/check/safety claim với đúng local source ID và lexical-support guard; lỗi validation chuyển sang deterministic grounded fallback.
 
 Document coverage hiện tại:
 
@@ -557,16 +572,16 @@ Document coverage hiện tại:
 | Pump | Checklist kiểm tra định kỳ máy bơm | Rung hoặc tiếng ồn bất thường |
 | Generator | Checklist kiểm tra định kỳ máy phát | Không khởi động |
 
-Default source set có 6 documents và tạo 30 chunks với cấu hình `max_chars=800`, `overlap=80`. `python -m src.rag.index_documents` luôn rebuild collection, vì vậy chạy lại cùng input không tạo duplicate và tài liệu bị xóa/đổi không để stale chunk active.
+Default source set có 6 documents. Số chunk phụ thuộc section boundary với cấu hình `RAG_CHUNK_SIZE=800`, `RAG_CHUNK_OVERLAP=80`. `python -m src.rag.index_documents` là idempotent, non-destructive upsert; dùng `--replace` khi muốn đồng bộ canonical set và loại obsolete chunks sau khi validation/upsert thành công.
 
 Relevance threshold là retrieval gate, không phải xác suất đúng:
 
 - deterministic `HashEmbeddingProvider` trong unit tests: `0.15`;
 - local `SentenceTransformerEmbeddingProvider`: `0.55`.
 
-Khi kết quả rỗng, dưới threshold, câu hỏi ngoài phạm vi hoặc Qdrant unavailable, Copilot trả safe fallback và không tạo checklist từ unrelated chunks. API health và ba dashboard workflow còn lại không phụ thuộc Qdrant.
+Khi kết quả rỗng, dưới threshold, câu hỏi ngoài phạm vi, context không khớp hoặc Qdrant unavailable, Copilot trả safe fallback và không tạo checklist từ unrelated chunks. `/health/rag` kiểm tra riêng Qdrant collection/dimension; liveness và các transactional workflow khác không bị biến thành phụ thuộc RAG.
 
-Copilot không sử dụng paid API và hiện không có generative LLM. Đây không phải automatic diagnostic system. Anomaly/Risk Score không chứng minh failure; manager/technician phải xác minh thiết bị và ưu tiên manual nhà sản xuất cùng quy trình an toàn tòa nhà.
+Generative LLM là opt-in và không có model mặc định. Ollama là lựa chọn local/demo; OpenAI-compatible dùng base URL/model/key hoàn toàn từ environment. LLM không có tools và không thể mutate ticket, work order, inventory hoặc database. Đây không phải automatic diagnostic system. Anomaly/Risk Score không chứng minh failure; manager/technician phải xác minh thiết bị và ưu tiên manual nhà sản xuất cùng quy trình an toàn tòa nhà. Thiết kế chi tiết: [RAG/LLM design](docs/RAG_LLM_DESIGN.md).
 
 Ví dụ câu hỏi trong phạm vi:
 
@@ -583,8 +598,9 @@ Dependency groups:
 
 | Nhóm | Vai trò |
 |---|---|
-| Core | FastAPI, Streamlit, batch analytics, SQLAlchemy, psycopg, Alembic và Qdrant client |
+| Core | FastAPI, batch analytics, SQLAlchemy, psycopg, Alembic và Qdrant client |
 | `rag` | `sentence-transformers` cho multilingual E5 embeddings |
+| `dashboard` | Streamlit legacy development/status UI; excluded from API/worker images |
 | `dev` | pytest và Ruff |
 | `postgres` | Compatibility extra rỗng; PostgreSQL dependencies nay thuộc Core |
 
@@ -612,6 +628,8 @@ Các biến hữu ích:
 | `AUTH_COOKIE_SECURE` | `false` ở local | Bắt buộc `true` ngoài dev/test và cần HTTPS |
 | `AUTH_COOKIE_SAMESITE` | `lax` | Explicit refresh/CSRF cookie policy |
 | `LOGIN_RATE_LIMIT_ATTEMPTS` | `5` | Basic per-process failed-login threshold |
+| `COPILOT_RATE_LIMIT_REQUESTS` | `20` | Per-user Copilot requests trong một process/window |
+| `COPILOT_RATE_LIMIT_WINDOW_SECONDS` | `60` | Copilot limiter window; distributed gateway limit vẫn cần trước scale-out |
 | `STORAGE_BACKEND` | `postgresql` | Normal runtime; `csv` chỉ explicit fixture mode |
 | `DATABASE_URL` | local PostgreSQL URL | Transactional source of truth |
 | `DATABASE_CONNECT_TIMEOUT_SECONDS` | `5` | Startup connection timeout |
@@ -640,7 +658,30 @@ Các biến hữu ích:
 | `QDRANT_URL` | `http://localhost:6333` | RAG indexing/retrieval |
 | `QDRANT_HTTP_PORT` | `6333` | Local Docker host port cho Qdrant REST |
 | `QDRANT_COLLECTION` | `maintenance_knowledge` | Qdrant collection |
-| `EMBEDDING_MODEL_NAME` | `intfloat/multilingual-e5-small` | Local embeddings |
+| `QDRANT_API_KEY` | rỗng | Optional secret for protected Qdrant; never put credentials in URL |
+| `QDRANT_TIMEOUT_SECONDS` | `5` | Bounded Qdrant request timeout |
+| `EMBEDDING_MODEL_NAME` | `intfloat/multilingual-e5-small` | Multilingual E5 embeddings |
+| `EMBEDDING_DEVICE` / `RAG_RERANKER_DEVICE` | `auto` | `auto`, `cpu`, `cuda[:index]`, or `mps`; explicit accelerator falls back safely to CPU |
+| `EMBEDDING_BATCH_SIZE` / `EMBEDDING_DIMENSIONS` | `32` / `384` | Batched normalized embedding contract |
+| `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP` | `800` / `80` | Structure-aware chunking controls |
+| `RAG_DENSE_CANDIDATES` / `RAG_SPARSE_CANDIDATES` | `20` / `20` | Pre-fusion candidate pools |
+| `RAG_FUSED_CANDIDATES` / `RAG_FINAL_TOP_K` | `20` / `5` | Pre-rerank and final result bounds |
+| `RAG_RELEVANCE_THRESHOLD` | `0.55` | Evidence gate, not diagnostic probability |
+| `RAG_DENSE_WEIGHT` / `RAG_SPARSE_WEIGHT` | `0.50` / `0.50` | Normalized retrieval fusion |
+| `RAG_RETRIEVAL_WEIGHT` / `RAG_RERANKER_WEIGHT` / `RAG_METADATA_WEIGHT` | `0.55` / `0.40` / `0.05` | Final score weights; metadata is validated at maximum `0.10` |
+| `RAG_RERANKER_MODEL` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Multilingual cross-encoder |
+| `RAG_SPARSE_MAX_CHUNKS` | `10000` | Hard bound for small-corpus in-memory BM25 |
+| `LLM_ENABLED` | `true` trong local Docker (`false` ở bare Settings) | Local Docker luôn cấu hình LLM; false vẫn giữ deterministic fallback khi operator chủ động tắt |
+| `LLM_PROVIDER` | `ollama` | `ollama` hoặc `openai_compatible` |
+| `LLM_MODEL` | `qwen2.5-coder:7b` trong local Docker | Pilot/provider khác vẫn phải cấu hình model được phê duyệt |
+| `LLM_BASE_URL` | `http://host.docker.internal:11434` trong local Docker | Provider API root; Ollama chạy trên host và API chạy trong container |
+| `LLM_API_KEY` | rỗng | Secret injection cho provider cần Bearer key; không log hoặc trả qua API |
+| `LLM_TIMEOUT_SECONDS` | `30` | Bounded outbound generation timeout |
+| `LLM_TEMPERATURE` | `0.0` | Low-variance grounded generation |
+| `LLM_MAX_TOKENS` | `1200` | Output bound |
+| `LLM_MAX_RETRIES` | `1` | Retry chỉ cho transient side-effect-free generation failures |
+| `LLM_MAX_CONTEXT_CHARS` | `12000` | Prompt retrieval-context bound |
+| `LLM_MIN_RELEVANT_DOCUMENTS` | `1` | Minimum distinct relevant documents before generation |
 
 Các PostgreSQL values trong `.env.example` là replacement placeholders, không
 phải local hay production credentials. `TOKEN_SIGNING_SECRET` cố ý để rỗng;
@@ -651,7 +692,7 @@ Linux/macOS:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev,rag,postgres]"
+python -m pip install -e ".[dashboard,dev,rag,postgres]"
 ```
 
 Windows PowerShell:
@@ -659,8 +700,67 @@ Windows PowerShell:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev,rag,postgres]"
+python -m pip install -e ".[dashboard,dev,rag,postgres]"
 ```
+
+### Ollama local generation
+
+Install Ollama from its official distribution, start the service, and download the local Docker model (or override it with an operator-approved model):
+
+```powershell
+ollama serve
+ollama pull qwen2.5-coder:7b
+```
+
+Configure `.env`:
+
+```dotenv
+LLM_ENABLED=true
+LLM_PROVIDER=ollama
+LLM_MODEL=qwen2.5-coder:7b
+LLM_BASE_URL=http://host.docker.internal:11434
+LLM_API_KEY=
+```
+
+Then verify the provider boundary inside the API container with `docker compose exec api python -m src.llm.smoke`.
+
+### OpenAI-compatible generation
+
+Use an operator-approved Chat Completions implementation that supports strict `response_format` JSON Schema:
+
+```dotenv
+LLM_ENABLED=true
+LLM_PROVIDER=openai_compatible
+LLM_MODEL=<PROVIDER_MODEL_ID>
+LLM_BASE_URL=https://<PROVIDER_API_ORIGIN>/v1
+LLM_API_KEY=<INJECT_FROM_SECRET_SOURCE>
+```
+
+Do not commit the populated `.env`. The provider key is represented by `SecretStr`, used only in the outbound Authorization header, and excluded from application responses/log messages.
+
+### Docker full-stack path
+
+The development Compose file now builds PostgreSQL, Qdrant, runs `alembic upgrade head`, then starts FastAPI and Next.js. The worker remains an explicit profile:
+
+The multi-stage Python image keeps migration/worker targets free of Torch and Streamlit. The API target installs Torch from the official CPU wheel index by default to avoid shipping unused CUDA runtimes. GPU deployments must be designed and built explicitly; setting an embedding device alone does not add CUDA libraries to the image.
+
+```powershell
+docker compose up --build
+docker compose --profile worker up --build
+```
+
+On a fresh database, seed/import and index remain explicit rather than startup side effects:
+
+```powershell
+docker compose exec api python -m src.ingestion.load_data
+docker compose exec api python -m src.security.cli seed-demo-users
+docker compose exec api python -m src.maintenance_management.cli seed-development
+docker compose exec api python -m src.ticket_management.cli seed-defaults
+docker compose exec api python -m src.inventory_management.cli seed-development
+docker compose exec api python -m src.rag.index_documents --replace
+```
+
+The demo-user command prompts for a password (or reads the documented protected environment variable); no default password is committed and startup never creates users.
 
 ## Windows PowerShell Quickstart
 
@@ -787,7 +887,7 @@ Equivalent Make targets: `services-up`, `postgres-up`, `migrate-db`,
 `generate-work-orders`, `seed-ticketing`, `escalation-dry-run`,
 `evaluate-escalations`, `export-analytics-snapshot`, `build-features`,
 `detect-anomalies`, `score-risk`, `build-preventive`, `build-recurring`,
-`build-kpis`, `index-documents`, `bootstrap-admin`, `seed-demo-users`,
+`build-kpis`, `index-documents`, `rag-query`, `llm-smoke`, `evaluate-rag`, `bootstrap-admin`, `seed-demo-users`,
 `run-api`, `run-dashboard`, `run-frontend`, `run-worker`, `worker-once`,
 `run-job`, `set-job-enabled`, `retry-job`, `retry-outbox`,
 `evaluate-operational-alerts`, `job-status`, `reliability-load`,
@@ -797,7 +897,7 @@ Equivalent Make targets: `services-up`, `postgres-up`, `migrate-db`,
 `pilot-release-validate`, `pilot-rehearsal-plan`,
 `pilot-rehearsal-execute`, `pilot-rehearsal-cleanup`,
 `pilot-backup-schedule`, `pilot-step-load`, `frontend-lint`,
-`frontend-test` và `frontend-build`.
+`frontend-typecheck`, `frontend-test` và `frontend-build`.
 
 Demo 10–12 phút: [docs/demo_script.md](docs/demo_script.md).
 
@@ -880,7 +980,27 @@ Tests từ chối database name không kết thúc `_test` và không mutate dev
 ```powershell
 python -m pytest
 python -m ruff check .
+npm --prefix frontend run lint
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+docker compose config --quiet
 ```
+
+RAG/LLM evaluation:
+
+```powershell
+# Reproducible local fixture without Qdrant/model downloads
+python -m evaluation.run_evaluation --mode deterministic --output reports/rag_evaluation.json
+
+# Configured semantic Qdrant retrieval
+python -m evaluation.run_evaluation --backend configured-qdrant --mode deterministic
+
+# Configured grounded LLM; requires LLM_ENABLED=true and provider availability
+python -m evaluation.run_evaluation --backend configured-qdrant --mode rag-llm
+```
+
+Implementation verification on 2026-07-28 started from a clean baseline of `308 passed, 73 skipped` backend and `112 passed` frontend tests. The new grounded-LLM focused matrix passed `40` tests, the Copilot rate-limit/API matrix passed `24`, the evaluation/PM9 manifest matrix passed `30`, both Compose files validated, and the deterministic evaluation ranked all six expected corpus documents at rank 1. These small synthetic results validate contracts and reproducibility only; they do not establish real-world model accuracy. Final full-suite counts are recorded in [Project audit](docs/PROJECT_AUDIT.md) after the handover verification run.
 
 Lần verify Milestone 4.5 ngày 2026-07-15: `122 passed`, Ruff và `git diff --check` đều đạt. Streamlit AppTest và live health smoke đạt; OpenAPI có đủ ba write methods. Manual `GENERATOR_002` workflow trên isolated CSV copies đã tạo/assign/resolve ticket, ghi log, qua full raw validation, mở Copilot checklist có nguồn và xác nhận risk/KPI không đổi trước batch tiếp theo. Còn một `StarletteDeprecationWarning` chỉ thuộc test client, được giải thích trong [troubleshooting](docs/troubleshooting.md). Các kết quả này xác nhận tính tái lập của portfolio demo, không chứng minh production readiness hoặc model accuracy.
 
@@ -991,9 +1111,9 @@ not PM10. PM8 measurements không được
 - Analytics snapshot cố ý project maintenance dates về fixed-interval legacy contract. Vì vậy preventive plan/work-order calendar là operational source cho scheduling, còn batch preventive KPI hiện vẫn phản ánh contract cũ.
 - Reopen một completed-but-unverified work order giữ append-only linked MaintenanceLog và không tạo log thứ hai; chưa có full record-amendment/countersign workflow.
 - Isolation Forest và risk formula chưa được đánh giá trên labeled failure outcomes.
-- Copilot có relevance threshold minh bạch nhưng chưa có labeled retrieval evaluation dataset hoặc hiệu chuẩn trên tài liệu thực tế.
+- Copilot có dataset/evaluation nhỏ cho 6 tài liệu synthetic, nhưng chưa có corpus/labeled judgments từ cơ sở thực tế hoặc human-rated unsupported-claim benchmark.
 - Sáu SOP/checklist là synthetic/illustrative và không thay thế tài liệu nhà sản xuất.
-- Deterministic composer là extractive decision support, không phải diagnosis hoặc generative reasoning.
+- Grounded LLM là opt-in, schema/citation controlled và luôn có deterministic fallback; không có semantic fact-checker độc lập, tool use hoặc diagnosis authority.
 - Next.js là authenticated internal-pilot workflow, chưa có production caching, accessibility audit hoặc browser-level regression suite; Streamlit chỉ còn legacy status client.
 - PostgreSQL workflow có transactions, foreign keys, sequences, optimistic
   conflict detection, append-only audit và bounded local load/recovery
@@ -1039,18 +1159,34 @@ src/features/         Canonical daily feature pipeline
 src/models/           Canonical anomaly pipeline
 src/risk/             Canonical risk pipeline
 src/rag/              Document retrieval và Copilot composition
+src/llm/              Provider, prompt, structured parsing và citation validation
 src/api/              Storage-neutral FastAPI services và routes
 src/dashboard/        Streamlit app và API client
+evaluation/           Small reproducible RAG/LLM dataset and runner
 tests/                Automated tests
 docs/                 Scope, architecture, process, contracts và demo docs
 ```
 
 ## Supporting Documentation
 
+- [Repository architecture map](ARCHITECTURE.md)
+- [Staged refactoring plan and current validation baseline](REFACTOR_PLAN.md)
 - [MVP scope](docs/mvp_scope.md)
 - [Business process](docs/business_process.md)
 - [Data contract](docs/data_contract.md)
 - [Canonical architecture](docs/architecture.md)
+- [Project audit](docs/PROJECT_AUDIT.md)
+- [RAG/LLM design](docs/RAG_LLM_DESIGN.md)
+- [RAG/LLM evaluation](docs/RAG_LLM_EVALUATION.md)
+- [RAG ingestion contract](docs/ingestion.md)
+- [Hybrid retrieval scoring](docs/retrieval.md)
+- [LLM and claim-level citations](docs/llm-and-citations.md)
+- [Copilot safety boundary](docs/safety.md)
+- [Evaluation quick reference](docs/evaluation.md)
+- [Executed runtime verification](docs/RUNTIME_VERIFICATION.md)
+- [Security review](docs/SECURITY_REVIEW.md)
+- [Graduation demo guide](docs/DEMO_GUIDE.md)
+- [Company handover](docs/COMPANY_HANDOVER.md)
 - [Analytics pipeline](docs/analytics.md)
 - [Ticket operations and SLA](docs/ticket_operations.md)
 - [Inventory business process](docs/inventory_business_process.md)

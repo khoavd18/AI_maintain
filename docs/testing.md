@@ -58,6 +58,7 @@ Tên file có thể được mở rộng theo repository; full suite là authori
 ## Frontend
 
 ```powershell
+npm --prefix frontend run typecheck
 npm --prefix frontend run test
 npm --prefix frontend run lint
 npm --prefix frontend run build
@@ -270,7 +271,7 @@ Final verification trên settled worktree ghi thêm:
   `NO-GO / WAITING FOR PILOT SPONSOR`; release-identity validation vẫn fail
   closed khi chưa có final local tag/observations;
 - deployment manifest semantic JSON SHA-256:
-  `59a533845e83197aefe3c3c7201f9173ae66a00f4afdfd571471a45957db6dad`.
+  `06bdd63dc28313ca32e5edd862fe019d421460e832dd3c6ccfda7d2d8583e9dc`.
 
 Design-readiness classification follow-up ngày 2026-07-27 chạy riêng và ghi:
 

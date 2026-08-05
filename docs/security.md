@@ -196,3 +196,29 @@ production support coverage và approved incident channel vẫn là
 organizational authority. Xem
 [operational ownership](operational_ownership.md) và
 [known limitations](known_limitations_acceptance.md).
+
+## Grounded LLM Security Boundary
+
+LLM generation là outbound, read-only decision support. Nó không có tool definitions, database session, shell, scheduler, ticket/work-order transition hoặc inventory command. `LLM_ENABLED=false` là default; enabling yêu cầu explicit provider/model/base URL và optional secret key.
+
+Controls được implement:
+
+- question dài tối đa 1.000 ký tự và Copilot có per-user, in-process request budget;
+- configured provider URL chỉ nhận HTTP(S) URL không chứa credential/query/fragment;
+- API key dùng `SecretStr`, chỉ đi vào outbound Bearer header, không xuất hiện trong API model hoặc exception message;
+- outbound call có timeout, response-size bound, redirect disabled và tối đa hai cấu hình retry (default một retry) chỉ cho side-effect-free transient failures;
+- explicit user prompt injection bị từ chối trước asset lookup/retrieval; retrieved chunks có override/exfiltration pattern bị loại;
+- system prompt xác định retrieved content là untrusted data và cấm secret/prompt disclosure;
+- source aliases chỉ được server cấp cho exact prompt context; claim-level citation validator từ chối ID ngoài allow-list;
+- malformed schema, invalid citation, English/non-maintenance output, timeout/unavailable/provider errors đều trả deterministic safe fallback;
+- logs chỉ ghi fixed fallback reason, không ghi question, retrieved content, raw provider response, URL hoặc key.
+
+Residual risk:
+
+- regex injection screening không chứng minh mọi indirect prompt injection sẽ bị phát hiện;
+- citation presence/coverage không chứng minh semantic entailment;
+- process-local rate limiting không được chia sẻ giữa nhiều API instances;
+- external provider data retention, residency and abuse monitoring depend on the operator-approved provider contract;
+- local Ollama/model supply chain, model file integrity and host access remain operator responsibilities.
+
+Không được gọi implementation này là security certification hoặc hallucination elimination. Xem [Security review](SECURITY_REVIEW.md).

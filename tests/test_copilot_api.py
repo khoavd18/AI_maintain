@@ -3,10 +3,11 @@
 from fastapi.testclient import TestClient
 
 from src.api.main import create_app
-from src.api.routes import _copilot_service
+from src.api.routes import _copilot_rate_limiter, _copilot_service
 from src.api.services import AssetNotFoundError
 from src.rag.copilot import SAFE_FALLBACK, CopilotAnswer, MaintenanceCopilot
 from src.rag.vector_store import QdrantUnavailableError
+from src.security.rate_limit import RequestRateLimiter
 from tests.auth_helpers import authorize_app
 
 
@@ -35,6 +36,38 @@ def test_copilot_ask_endpoint_shape() -> None:
     assert {"retrieval_status", "relevance_status", "safety_notice", "filters_applied"}.issubset(
         payload
     )
+
+
+def test_copilot_api_serializes_bounded_conversation_response() -> None:
+    """Social LLM responses must pass the public response contract."""
+
+    app = create_app()
+    app.dependency_overrides[_copilot_service] = lambda: ConversationCopilot()
+    authorize_app(app)
+    client = TestClient(app)
+
+    response = client.post("/copilot/ask", json={"question": "xin chào"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": "Xin chào! Tôi là Trợ lý bảo trì AI.",
+        "asset_context": None,
+        "sources": [],
+        "retrieved_chunks": [],
+        "retrieval_status": "conversation",
+        "relevance_status": "not_applicable",
+        "safety_notice": "",
+        "filters_applied": {},
+        "response_mode": "llm_conversation",
+        "fallback_reason": None,
+        "structured_answer": None,
+        "llm_provider": "ollama",
+        "llm_model": "test-model",
+        "evidence_status": "not_applicable",
+        "citation_validation": None,
+        "context_warnings": [],
+        "confidence": "not_applicable",
+    }
 
 
 def test_copilot_api_returns_safe_fallback_when_qdrant_is_unavailable() -> None:
@@ -89,6 +122,23 @@ def test_copilot_api_handles_invalid_asset_and_question_length() -> None:
     assert oversized.status_code == 422
 
 
+def test_copilot_api_rate_limits_each_authenticated_user() -> None:
+    app = create_app()
+    limiter = RequestRateLimiter(max_requests=1, window_seconds=60)
+    app.dependency_overrides[_copilot_service] = lambda: FakeCopilot()
+    app.dependency_overrides[_copilot_rate_limiter] = lambda: limiter
+    authorize_app(app)
+    client = TestClient(app)
+
+    first = client.post("/copilot/ask", json={"question": "Cần kiểm tra gì?"})
+    limited = client.post("/copilot/ask", json={"question": "Cần kiểm tra gì?"})
+
+    assert first.status_code == 200
+    assert limited.status_code == 429
+    assert limited.headers["Retry-After"] == "60"
+    assert "quá nhiều" in limited.json()["detail"]
+
+
 class FakeCopilot:
     """Small fake copilot for route tests."""
 
@@ -119,6 +169,26 @@ class FakeCopilot:
                     "score": 0.9,
                 }
             ],
+        )
+
+
+class ConversationCopilot:
+    """Return the exact bounded conversation shape used by the live Copilot."""
+
+    def ask(self, question: str, **_: object) -> CopilotAnswer:
+        return CopilotAnswer(
+            answer="Xin chào! Tôi là Trợ lý bảo trì AI.",
+            asset_context=None,
+            sources=[],
+            retrieved_chunks=[],
+            retrieval_status="conversation",
+            relevance_status="not_applicable",
+            safety_notice="",
+            response_mode="llm_conversation",
+            llm_provider="ollama",
+            llm_model="test-model",
+            evidence_status="not_applicable",
+            confidence="not_applicable",
         )
 
 

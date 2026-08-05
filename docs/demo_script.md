@@ -9,7 +9,7 @@ Kịch bản dùng PostgreSQL làm transactional source of truth cho asset, tick
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev,rag,postgres]"
+python -m pip install -e ".[dashboard,dev,rag,postgres]"
 Copy-Item .env.example .env
 ```
 

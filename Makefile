@@ -1,4 +1,4 @@
-.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job retry-outbox evaluate-operational-alerts job-status reliability-load backup-restore-drill attachment-integrity pilot-contract-validate pilot-decision-validate pilot-release-validate pilot-rehearsal-plan pilot-rehearsal-execute pilot-rehearsal-cleanup pilot-backup-schedule pilot-step-load frontend-lint frontend-test frontend-build
+.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query llm-smoke evaluate-rag graduation-smoke bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job retry-outbox evaluate-operational-alerts job-status reliability-load backup-restore-drill attachment-integrity pilot-contract-validate pilot-decision-validate pilot-release-validate pilot-rehearsal-plan pilot-rehearsal-execute pilot-rehearsal-cleanup pilot-backup-schedule pilot-step-load frontend-lint frontend-typecheck frontend-test frontend-build
 
 PYTHON ?= python
 ANALYTICS_INPUT_DIR ?= data/analytics_input
@@ -12,7 +12,7 @@ PILOT_LOAD_PASSWORD_ENV ?= PM9_LOAD_PASSWORD
 PILOT_AUTHENTICATED_POST_START ?= false
 
 install:
-	$(PYTHON) -m pip install -e ".[dev,rag,postgres]"
+	$(PYTHON) -m pip install -e ".[dashboard,dev,rag,postgres]"
 
 test:
 	$(PYTHON) -m pytest
@@ -122,6 +122,15 @@ index-documents:
 rag-query:
 	$(PYTHON) -m src.rag.query "$(QUESTION)" $(if $(ASSET_ID),--asset-id $(ASSET_ID),)
 
+llm-smoke:
+	$(PYTHON) -m src.llm.smoke
+
+evaluate-rag:
+	$(PYTHON) -m evaluation.run_evaluation --mode deterministic
+
+graduation-smoke:
+	$(PYTHON) -m src.reliability.graduation_demo_smoke
+
 bootstrap-admin:
 	$(PYTHON) -m src.security.cli create-admin --username "$(USERNAME)" --display-name "$(DISPLAY_NAME)" $(if $(EMAIL),--email "$(EMAIL)",)
 
@@ -196,6 +205,9 @@ pilot-step-load:
 
 frontend-lint:
 	npm --prefix frontend run lint
+
+frontend-typecheck:
+	npm --prefix frontend run typecheck
 
 frontend-test:
 	npm --prefix frontend run test

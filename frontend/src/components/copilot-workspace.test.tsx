@@ -23,13 +23,15 @@ describe("live Copilot workspace", () => {
   it("supports standalone mode and asset/ticket context from stable IDs", async () => {
     mockContextApi();
     const standalone = renderWithQuery(<CopilotWorkspace />);
-    expect(await screen.findByText("Chọn thiết bị để thêm asset context vào câu hỏi.")).toBeInTheDocument();
+    expect(await screen.findByText(/Bạn vẫn có thể hỏi chung/)).toBeInTheDocument();
     expect(screen.getByLabelText("Thiết bị")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sự cố liên quan (không bắt buộc)")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Gửi câu hỏi" })).toBeDisabled();
     standalone.unmount();
 
     mockContextApi();
     renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" initialTicketId="TCK-000041" />);
-    expect(await screen.findByText("Máy phát điện dự phòng 002")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Máy phát điện dự phòng 002", level: 3 })).toBeInTheDocument();
     expect(screen.getByText("Thiết bị đã quá hạn bảo trì 159 ngày.")).toBeInTheDocument();
     expect(screen.getByText(ticketsFixture[0].issue_description)).toBeInTheDocument();
     expect(screen.getByText("Lỗi điện")).toBeInTheDocument();
@@ -38,36 +40,136 @@ describe("live Copilot workspace", () => {
   it("submits the exact context, renders checklist, sources and safety, then clears the question", async () => {
     const fetchMock = mockContextApi(copilotResponseFixture);
     renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" initialTicketId="TCK-000041" />);
-    const textarea = await screen.findByLabelText("Câu hỏi cho Copilot");
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
 
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
 
-    expect(await screen.findByText("Đã tìm thấy tài liệu liên quan")).toBeInTheDocument();
-    expect(screen.getByText("Checklist hoặc bước kiểm tra được tìm thấy")).toBeInTheDocument();
+    expect(await screen.findByText("Câu trả lời có nguồn tham khảo")).toBeInTheDocument();
+    expect(screen.getByText("Bằng chứng tốt")).toBeInTheDocument();
+    expect(screen.getByText("Trích dẫn [S1]")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tóm tắt" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cảnh báo an toàn" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Các bước nên kiểm tra" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Khi nào cần chuyển chuyên gia" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nguồn tham khảo" })).toBeInTheDocument();
     expect(screen.getByText("SOP kiểm tra máy phát điện dự phòng")).toBeInTheDocument();
     expect(screen.getByText(/lockout\/tagout/)).toBeInTheDocument();
+    expect(screen.getByText("Cô lập thiết bị trước khi kiểm tra.")).toBeInTheDocument();
+    expect(screen.getByText(/tình trạng hiện tại/)).toBeInTheDocument();
     expect(screen.queryByText("SOP-GEN-001-0")).not.toBeInTheDocument();
+    expect(screen.queryByText("SOP-GEN-001")).not.toBeInTheDocument();
+    expect(screen.queryByText(/data\/documents\/sop_generator\.md/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ollama/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/demo-model/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/risk context/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Qdrant|LLM|Provider|chunk|retrieval/i)).not.toBeInTheDocument();
     expect(screen.queryByText("91%")).not.toBeInTheDocument();
     expect(textarea).toHaveValue("");
 
+    const summaryHeading = screen.getByRole("heading", { name: "Tóm tắt" });
+    const safetyHeading = screen.getByRole("heading", { name: "Cảnh báo an toàn" });
+    const checksHeading = screen.getByRole("heading", { name: "Các bước nên kiểm tra" });
+    const sourcesHeading = screen.getByRole("heading", { name: "Nguồn tham khảo" });
+    expect(summaryHeading.compareDocumentPosition(safetyHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(safetyHeading.compareDocumentPosition(checksHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(checksHeading.compareDocumentPosition(sourcesHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Phạm vi tài liệu"));
+    expect(screen.getByText("15/01/2026")).toBeInTheDocument();
+
     const postCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
     expect(JSON.parse(String(postCall?.[1]?.body))).toEqual({
-      question: "Vì sao GENERATOR_002 đang có mức rủi ro hiện tại và cần kiểm tra gì?",
+      question: "Vì sao thiết bị này đang có mức rủi ro hiện tại và cần kiểm tra gì?",
       asset_id: "GENERATOR_002",
       top_k: 5,
       failure_category: "Lỗi điện",
+    });
+
+    fireEvent.change(textarea, { target: { value: "Cảnh báo trước áp dụng thế nào?" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(2);
+    });
+    const followUpCall = fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")[1];
+    expect(JSON.parse(String(followUpCall?.[1]?.body))).toMatchObject({
+      question: "Cảnh báo trước áp dụng thế nào?",
+      conversation_context: {
+        resolved_asset_type: "Máy phát điện dự phòng",
+        resolved_failure_category: "Lỗi điện",
+        previous_source_ids: ["S1"],
+        previous_answer_summary: "GENERATOR_002 cần được kiểm tra theo SOP đã truy xuất.",
+      },
     });
   });
 
   it("renders a confirmed unavailable fallback without treating it as a transport error", async () => {
     mockContextApi(copilotUnavailableFixture);
     renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
-    const textarea = await screen.findByLabelText("Câu hỏi cho Copilot");
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
     fireEvent.keyDown(textarea, { key: "Enter" });
 
-    expect(await screen.findByText("RAG tạm thời chưa sẵn sàng")).toBeInTheDocument();
+    expect(await screen.findByText("Chưa thể tra cứu tài liệu")).toBeInTheDocument();
+    expect(screen.getByText("Câu trả lời dự phòng")).toBeInTheDocument();
+    expect(screen.getByText("Không đủ bằng chứng")).toBeInTheDocument();
+    expect(screen.queryByText(/RAG|Qdrant|collection|retrieval/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Thử lại câu hỏi này" })).toBeEnabled();
     expect(screen.queryByText("Chưa nhận được phản hồi từ Copilot")).not.toBeInTheDocument();
+  });
+
+  it("renders an asset mismatch as a safe confirmation state", async () => {
+    mockContextApi({
+      ...copilotUnavailableFixture,
+      answer: "### Tóm tắt tình trạng thiết bị\nLoại thiết bị trong câu hỏi không khớp thiết bị đã chọn.",
+      retrieval_status: "asset_context_mismatch",
+      fallback_reason: "asset_context_mismatch",
+    });
+    renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+    fireEvent.change(textarea, { target: { value: "Máy bơm nước bị rung cần kiểm tra gì?" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect(await screen.findByText("Cần xác nhận lại thiết bị")).toBeInTheDocument();
+    expect(screen.getByText(/Hãy kiểm tra lại lựa chọn/)).toBeInTheDocument();
+    expect(screen.getByText("Câu trả lời dự phòng")).toBeInTheDocument();
+    expect(screen.queryByText("Trích dẫn [S1]")).not.toBeInTheDocument();
+  });
+
+  it("explains insufficient evidence without exposing retrieval internals", async () => {
+    mockContextApi({
+      ...copilotUnavailableFixture,
+      answer: "### Tóm tắt tình trạng thiết bị\nBằng chứng truy xuất chưa đạt ngưỡng.",
+      retrieval_status: "insufficient_evidence",
+      fallback_reason: "insufficient_evidence",
+    });
+    renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect(await screen.findByText("Không đủ tài liệu để kết luận")).toBeInTheDocument();
+    expect(screen.getByText(/Cần kỹ sư chuyên môn kiểm tra tại hiện trường/)).toBeInTheDocument();
+    expect(screen.getByText("Câu trả lời dự phòng")).toBeInTheDocument();
+    expect(screen.getByText("Không đủ bằng chứng")).toBeInTheDocument();
+    expect(screen.queryByText(/truy xuất|ngưỡng|retrieval|chunk/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a deterministic fallback when LLM generation times out", async () => {
+    mockContextApi({
+      ...copilotResponseFixture,
+      response_mode: "deterministic_fallback",
+      fallback_reason: "llm_timeout",
+      structured_answer: null,
+      llm_provider: null,
+      llm_model: null,
+      evidence_status: "limited",
+      citation_validation: null,
+    });
+    renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect(await screen.findByText("Câu trả lời dự phòng")).toBeInTheDocument();
+    expect(screen.getByText("Bằng chứng hạn chế")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Thử lại câu hỏi này" })).toBeEnabled();
   });
 
   it("submits a standalone question and shows an unrelated safe fallback", async () => {
@@ -77,12 +179,37 @@ describe("live Copilot workspace", () => {
       retrieval_status: "unrelated",
     });
     renderWithQuery(<CopilotWorkspace />);
-    const textarea = await screen.findByLabelText("Câu hỏi cho Copilot");
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
     fireEvent.change(textarea, { target: { value: "Hôm nay thời tiết thế nào?" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
 
     expect(await screen.findByText("Câu hỏi nằm ngoài phạm vi bảo trì")).toBeInTheDocument();
     expect(screen.queryByText("SOP kiểm tra máy phát điện dự phòng")).not.toBeInTheDocument();
+  });
+
+  it("renders a bounded LLM conversation without maintenance evidence warnings", async () => {
+    mockContextApi({
+      ...copilotUnavailableFixture,
+      answer: "Xin chào! Tôi là Trợ lý bảo trì AI.",
+      retrieval_status: "conversation",
+      relevance_status: "not_applicable",
+      response_mode: "llm_conversation",
+      fallback_reason: null,
+      llm_provider: "ollama",
+      llm_model: "qwen2.5-coder:7b",
+      evidence_status: "not_applicable",
+      confidence: "not_applicable",
+      safety_notice: "",
+    });
+    renderWithQuery(<CopilotWorkspace />);
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+    fireEvent.change(textarea, { target: { value: "xin chào" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect(await screen.findByText("Xin chào! Tôi là Trợ lý bảo trì AI.")).toBeInTheDocument();
+    expect(screen.getByText("Hội thoại bằng LLM")).toBeInTheDocument();
+    expect(screen.getByText("Không cần tài liệu")).toBeInTheDocument();
+    expect(screen.queryByText("Cảnh báo an toàn")).not.toBeInTheDocument();
   });
 
   it("shows unsupported equipment as a safe fallback rather than a crash", async () => {
@@ -92,22 +219,23 @@ describe("live Copilot workspace", () => {
       retrieval_status: "unsupported_asset_type",
     });
     renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
-    const textarea = await screen.findByLabelText("Câu hỏi cho Copilot");
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
     fireEvent.change(textarea, { target: { value: "Checklist cho thang máy là gì?" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
 
-    expect(await screen.findByText("Loại thiết bị chưa được hỗ trợ")).toBeInTheDocument();
+    expect(await screen.findByText("Chưa có hướng dẫn cho loại thiết bị này")).toBeInTheDocument();
     expect(screen.queryByText("Chưa nhận được phản hồi từ Copilot")).not.toBeInTheDocument();
   });
 
   it("preserves the question on HTTP failure and validates an empty question", async () => {
     mockContextApi({ body: { detail: "Qdrant unavailable" }, status: 503 });
     renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
-    const textarea = await screen.findByLabelText("Câu hỏi cho Copilot");
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
     const originalQuestion = (textarea as HTMLTextAreaElement).value;
     fireEvent.keyDown(textarea, { key: "Enter" });
 
-    expect(await screen.findByText("Chưa nhận được phản hồi từ Copilot")).toBeInTheDocument();
+    expect(await screen.findByText("Chưa nhận được câu trả lời")).toBeInTheDocument();
+    expect(screen.queryByText(/Qdrant unavailable/i)).not.toBeInTheDocument();
     expect(textarea).toHaveValue(originalQuestion);
 
     fireEvent.change(textarea, { target: { value: "   " } });
@@ -119,7 +247,7 @@ describe("live Copilot workspace", () => {
     let resolveCopilot!: (value: unknown) => void;
     const fetchMock = mockContextApi(() => new Promise((resolve) => { resolveCopilot = resolve; }));
     renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
-    const textarea = await screen.findByLabelText("Câu hỏi cho Copilot");
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
 
     fireEvent.keyDown(textarea, { key: "Enter" });
     fireEvent.keyDown(textarea, { key: "Enter" });
@@ -127,7 +255,7 @@ describe("live Copilot workspace", () => {
       expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
     });
     resolveCopilot(copilotResponseFixture);
-    expect(await screen.findByText("Đã tìm thấy tài liệu liên quan")).toBeInTheDocument();
+    expect(await screen.findByText("Câu trả lời có nguồn tham khảo")).toBeInTheDocument();
   });
 
   it("renders backend text as text rather than executable HTML", async () => {
@@ -136,7 +264,7 @@ describe("live Copilot workspace", () => {
       answer: "### Tóm tắt tình trạng thiết bị\n<img src=x onerror=alert(1)> Nội dung cần kiểm tra.",
     });
     const view = renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
-    const textarea = await screen.findByLabelText("Câu hỏi cho Copilot");
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
     fireEvent.keyDown(textarea, { key: "Enter" });
 
     expect(await screen.findByText(/<img src=x onerror=alert\(1\)>/)).toBeInTheDocument();

@@ -1,11 +1,16 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { MaintenancePlanWorkspace } from "@/components/maintenance-plan-workspace";
+import { MaintenancePlanCreateForm, MaintenancePlanWorkspace } from "@/components/maintenance-plan-workspace";
 import { WorkOrderDetail } from "@/components/work-order-detail";
 import { permissions } from "@/lib/auth";
 import type { UserResponse } from "@/lib/api/schemas";
+import { assetCatalogFixture } from "@/test/fixtures";
 import { mockApi, renderWithQuery } from "@/test/test-utils";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 const workOrderId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const technicianId = "33333333-3333-4333-8333-333333333333";
@@ -24,8 +29,36 @@ describe("maintenance planning workspace", () => {
     renderWithQuery(<MaintenancePlanWorkspace />);
     expect((await screen.findAllByText("PM-GENERATOR-001")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Mỗi 1 tháng").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Dry run" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Tạo plan/ })).toHaveAttribute("href", "/maintenance/plans/new");
+    expect(screen.getByRole("button", { name: "Xem trước" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Tạo kế hoạch/ })).toHaveAttribute("href", "/maintenance/plans/new");
+  });
+
+  it("keeps the main schedule visible and collapses advanced defaults", async () => {
+    mockApi({
+      "/assets/catalog": assetCatalogFixture,
+      "/checklist-templates": {
+        items: [],
+        page: 1,
+        page_size: 200,
+        total: 0,
+        total_pages: 0,
+      },
+      "/maintenance/options": maintenanceOptions,
+    });
+    renderWithQuery(<MaintenancePlanCreateForm />);
+
+    expect(await screen.findByLabelText("Mã kế hoạch")).toBeVisible();
+    expect(screen.getByLabelText("Chu kỳ")).toBeVisible();
+    expect(screen.getByLabelText("Ngày bắt đầu")).toBeVisible();
+
+    const summary = screen.getByText("Thiết lập nâng cao").closest("summary");
+    expect(summary).not.toBeNull();
+    expect(screen.getByLabelText("Tạo trước hạn (ngày)")).not.toBeVisible();
+    fireEvent.click(summary!);
+    expect(screen.getByLabelText("Tạo trước hạn (ngày)")).toBeVisible();
+    expect(screen.getByLabelText("Tạo trước hạn (ngày)")).toHaveValue(7);
+    expect(screen.getByLabelText("Múi giờ")).toHaveValue("Asia/Ho_Chi_Minh");
+    expect(screen.getByLabelText("Kỹ thuật viên mặc định")).toBeVisible();
   });
 });
 

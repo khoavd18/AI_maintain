@@ -6,6 +6,7 @@ import {
   ArchiveRestore,
   Boxes,
   CircleOff,
+  Loader2,
   PackageCheck,
   Play,
   RefreshCw,
@@ -22,6 +23,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -30,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   EmptyState,
   ErrorState,
@@ -47,6 +50,52 @@ import { permissions } from "@/lib/auth";
 import { formatTimestamp } from "@/lib/formatters";
 import { formatInventoryCost, formatQuantity } from "@/lib/inventory";
 
+type PartLifecycleAction = "activate" | "deactivate" | "archive" | "restore";
+
+const lifecycleCopy = {
+  activate: {
+    actionLabel: "Kích hoạt",
+    title: "Kích hoạt mã phụ tùng?",
+    description:
+      "Mã phụ tùng sẽ trở lại trạng thái đang hoạt động và có thể được chọn cho nghiệp vụ kho mới.",
+    confirmLabel: "Xác nhận kích hoạt",
+    successMessage: "Đã kích hoạt mã phụ tùng.",
+  },
+  deactivate: {
+    actionLabel: "Ngừng kích hoạt",
+    title: "Ngừng kích hoạt mã phụ tùng?",
+    description:
+      "Mã phụ tùng sẽ chuyển sang không hoạt động. Số dư và lịch sử giao dịch không thay đổi.",
+    confirmLabel: "Xác nhận ngừng kích hoạt",
+    successMessage: "Đã ngừng kích hoạt mã phụ tùng.",
+  },
+  archive: {
+    actionLabel: "Lưu trữ",
+    title: "Lưu trữ mã phụ tùng?",
+    description:
+      "Mã phụ tùng sẽ ngừng được dùng cho giao dịch kho mới. Số dư và toàn bộ lịch sử vẫn được giữ nguyên.",
+    confirmLabel: "Xác nhận lưu trữ",
+    successMessage: "Đã lưu trữ mã phụ tùng.",
+  },
+  restore: {
+    actionLabel: "Khôi phục",
+    title: "Khôi phục mã phụ tùng?",
+    description:
+      "Mã phụ tùng sẽ trở về trạng thái trước khi lưu trữ. Số dư và lịch sử giao dịch không thay đổi.",
+    confirmLabel: "Xác nhận khôi phục",
+    successMessage: "Đã khôi phục mã phụ tùng.",
+  },
+} satisfies Record<
+  PartLifecycleAction,
+  {
+    actionLabel: string;
+    title: string;
+    description: string;
+    confirmLabel: string;
+    successMessage: string;
+  }
+>;
+
 export function PartDetail({ partId }: { partId: string }) {
   const auth = useAuth();
   const part = useInventoryPartQuery(partId);
@@ -62,24 +111,33 @@ export function PartDetail({ partId }: { partId: string }) {
   });
   const lifecycle = usePartLifecycleMutation(partId);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedLifecycleAction, setSelectedLifecycleAction] =
+    useState<PartLifecycleAction | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState("");
   const error = part.error ?? balances.error ?? movements.error;
 
-  async function changeLifecycle(
-    action: "activate" | "deactivate" | "archive" | "restore",
+  function requestLifecycleChange(action: PartLifecycleAction) {
+    setSelectedLifecycleAction(action);
+    setLifecycleReason("");
+    setMessage(null);
+  }
+
+  async function confirmLifecycleChange(
+    event: React.FormEvent<HTMLFormElement>,
   ) {
-    if (!part.data) return;
-    let reason: string | null = null;
-    if (action === "archive") {
-      reason = window.prompt("Lý do archive mã vật tư:");
-      if (!reason) return;
-    }
+    event.preventDefault();
+    if (!part.data || !selectedLifecycleAction) return;
+    const reason = lifecycleReason.trim();
+    if (selectedLifecycleAction === "archive" && reason.length < 3) return;
     try {
       await lifecycle.mutateAsync({
-        action,
+        action: selectedLifecycleAction,
         expectedVersion: part.data.version,
-        reason,
+        reason: selectedLifecycleAction === "archive" ? reason : null,
       });
-      setMessage("Đã cập nhật lifecycle spare part.");
+      setMessage(lifecycleCopy[selectedLifecycleAction].successMessage);
+      setSelectedLifecycleAction(null);
+      setLifecycleReason("");
     } catch (mutationError) {
       setMessage(getApiErrorMessage(mutationError));
     }
@@ -152,6 +210,7 @@ export function PartDetail({ partId }: { partId: string }) {
               <InventoryStatusBadge
                 status={item.lifecycle_status}
                 label={item.lifecycle_status_display}
+                context="lifecycle"
               />
               <StockStateBadge
                 state={item.stock_state}
@@ -168,49 +227,156 @@ export function PartDetail({ partId }: { partId: string }) {
               {item.lifecycle_status === "active" && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={
+                    selectedLifecycleAction === "deactivate"
+                      ? "secondary"
+                      : "outline"
+                  }
                   disabled={lifecycle.isPending}
-                  onClick={() => void changeLifecycle("deactivate")}
+                  aria-controls="part-lifecycle-confirmation"
+                  aria-expanded={selectedLifecycleAction === "deactivate"}
+                  onClick={() => requestLifecycleChange("deactivate")}
                 >
                   <CircleOff aria-hidden="true" />
-                  Deactivate
+                  {lifecycleCopy.deactivate.actionLabel}
                 </Button>
               )}
               {item.lifecycle_status === "inactive" && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={
+                    selectedLifecycleAction === "activate"
+                      ? "secondary"
+                      : "outline"
+                  }
                   disabled={lifecycle.isPending}
-                  onClick={() => void changeLifecycle("activate")}
+                  aria-controls="part-lifecycle-confirmation"
+                  aria-expanded={selectedLifecycleAction === "activate"}
+                  onClick={() => requestLifecycleChange("activate")}
                 >
                   <Play aria-hidden="true" />
-                  Activate
+                  {lifecycleCopy.activate.actionLabel}
                 </Button>
               )}
               {item.lifecycle_status !== "archived" ? (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={
+                    selectedLifecycleAction === "archive"
+                      ? "secondary"
+                      : "outline"
+                  }
                   disabled={lifecycle.isPending}
-                  onClick={() => void changeLifecycle("archive")}
+                  aria-controls="part-lifecycle-confirmation"
+                  aria-expanded={selectedLifecycleAction === "archive"}
+                  onClick={() => requestLifecycleChange("archive")}
                 >
                   <Archive aria-hidden="true" />
-                  Archive
+                  {lifecycleCopy.archive.actionLabel}
                 </Button>
               ) : (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={
+                    selectedLifecycleAction === "restore"
+                      ? "secondary"
+                      : "outline"
+                  }
                   disabled={lifecycle.isPending}
-                  onClick={() => void changeLifecycle("restore")}
+                  aria-controls="part-lifecycle-confirmation"
+                  aria-expanded={selectedLifecycleAction === "restore"}
+                  onClick={() => requestLifecycleChange("restore")}
                 >
                   <ArchiveRestore aria-hidden="true" />
-                  Restore
+                  {lifecycleCopy.restore.actionLabel}
                 </Button>
               )}
             </div>
           )}
         </div>
+        {selectedLifecycleAction && (
+          <form
+            id="part-lifecycle-confirmation"
+            className="mt-5 rounded-lg border border-blue-200 bg-blue-50/70 p-4"
+            onSubmit={confirmLifecycleChange}
+            aria-labelledby="part-lifecycle-confirmation-title"
+          >
+            <div>
+              <h2
+                id="part-lifecycle-confirmation-title"
+                className="text-sm font-semibold text-blue-950"
+              >
+                {lifecycleCopy[selectedLifecycleAction].title}
+              </h2>
+              <p className="mt-1 text-sm leading-5 text-blue-900/80">
+                {lifecycleCopy[selectedLifecycleAction].description}
+              </p>
+            </div>
+
+            {selectedLifecycleAction === "archive" && (
+              <div className="mt-4 space-y-1.5">
+                <Label htmlFor="part-archive-reason">Lý do lưu trữ</Label>
+                <Textarea
+                  id="part-archive-reason"
+                  value={lifecycleReason}
+                  onChange={(event) => setLifecycleReason(event.target.value)}
+                  placeholder="Ví dụ: thay thế bằng mã phụ tùng mới"
+                  minLength={3}
+                  maxLength={1000}
+                  required
+                  disabled={lifecycle.isPending}
+                  aria-describedby="part-archive-reason-help"
+                  aria-invalid={
+                    lifecycleReason.length > 0 &&
+                    lifecycleReason.trim().length < 3
+                  }
+                  autoFocus
+                />
+                <p
+                  id="part-archive-reason-help"
+                  className="text-xs text-muted-foreground"
+                >
+                  Nhập ít nhất 3 ký tự để lưu cùng lịch sử thay đổi.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={lifecycle.isPending}
+                onClick={() => {
+                  setSelectedLifecycleAction(null);
+                  setLifecycleReason("");
+                }}
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                variant={
+                  selectedLifecycleAction === "archive"
+                    ? "destructive"
+                    : "default"
+                }
+                disabled={
+                  lifecycle.isPending ||
+                  (selectedLifecycleAction === "archive" &&
+                    lifecycleReason.trim().length < 3)
+                }
+                autoFocus={selectedLifecycleAction !== "archive"}
+              >
+                {lifecycle.isPending && (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                )}
+                {lifecycle.isPending
+                  ? "Đang cập nhật…"
+                  : lifecycleCopy[selectedLifecycleAction].confirmLabel}
+              </Button>
+            </div>
+          </form>
+        )}
         <dl className="mt-5 grid gap-4 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4">
           <Detail label="Category" value={`${item.category_code} · ${item.category_name_vi}`} />
           <Detail label="UOM" value={`${item.unit_code} · ${item.unit_symbol}`} />
@@ -285,7 +451,7 @@ export function PartDetail({ partId }: { partId: string }) {
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
         <section className="rounded-lg border bg-white">
           <SectionTitle
-            title="Tồn theo stock location"
+            title="Tồn kho theo vị trí"
             description="Ngưỡng hiệu lực có thể khác part default theo từng kho."
           />
           {!balances.data?.items.length ? (

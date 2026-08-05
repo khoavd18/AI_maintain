@@ -50,8 +50,11 @@ import type {
   TicketStatusCode,
 } from "@/lib/api/ticketing-schemas";
 import { permissions } from "@/lib/auth";
-import { formatTimestamp } from "@/lib/formatters";
-import { cn } from "@/lib/utils";
+import {
+  priorityStatusCatalog,
+  resolveStatusPresentation,
+  ticketStatusCatalog,
+} from "@/lib/status-terminology";
 
 const queueOrder: TicketQueue[] = [
   "unassigned",
@@ -121,11 +124,17 @@ export function TicketInbox() {
     setPage(1);
   }
 
+  function resetFilters() {
+    setDraft(defaultFilters);
+    setFilters(defaultFilters);
+    setPage(1);
+  }
+
   if (options.isPending) return <LoadingSkeleton />;
   if (options.isError) {
     return (
       <ErrorState
-        title="Chưa tải được cấu hình queue"
+        title="Chưa tải được cấu hình nhóm xử lý"
         description={getApiErrorMessage(options.error)}
         action={<RetryButton onClick={() => void options.refetch()} />}
       />
@@ -144,37 +153,37 @@ export function TicketInbox() {
       {summary.data && (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <KpiCard
-            label="Ticket đang hoạt động"
+            label="Sự cố đang xử lý"
             value={String(summary.data.active_count)}
-            detail="Không gồm resolved/closed/cancelled"
+            detail="Cần tiếp tục theo dõi"
             icon={Inbox}
             tone="blue"
           />
           <KpiCard
             label="Đang chờ"
             value={String(summary.data.waiting_count)}
-            detail="SLA có thể tạm dừng theo policy"
+            detail="Đang chờ thông tin hoặc điều kiện"
             icon={Clock3}
             tone="orange"
           />
           <KpiCard
-            label="Critical"
+            label="Khẩn cấp"
             value={String(summary.data.critical_count)}
-            detail="Priority do backend tính"
+            detail="Cần ưu tiên điều phối"
             icon={AlertTriangle}
             tone="red"
           />
           <KpiCard
             label="Sắp đến hạn"
             value={String(summary.data.due_soon_count)}
-            detail="Derived từ SLA snapshot"
+            detail="Cần xử lý sớm"
             icon={Clock3}
             tone="amber"
           />
           <KpiCard
-            label="Vi phạm SLA"
+            label="Đã quá hạn"
             value={String(summary.data.breached_count)}
-            detail="Không phải cờ nhập thủ công"
+            detail="Cần điều phối ngay"
             icon={ShieldAlert}
             tone="red"
           />
@@ -182,29 +191,19 @@ export function TicketInbox() {
       )}
 
       <section className="rounded-lg border bg-white">
-        <div className="flex flex-col gap-4 border-b p-4 xl:flex-row">
-          <nav
-            aria-label="Ticket queues"
-            className="grid min-w-0 flex-1 gap-2 sm:grid-cols-3 xl:grid-cols-5"
-          >
-            {queueOrder.map((item) => (
-              <Button
-                key={item}
-                type="button"
-                variant={queue === item ? "secondary" : "ghost"}
-                className={cn("justify-start", queue === item && "ring-1 ring-border")}
-                aria-pressed={queue === item}
-                onClick={() => selectQueue(item)}
-              >
-                {queueLabels.get(item) ?? item}
-              </Button>
-            ))}
-          </nav>
+        <div className="flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="w-full space-y-1.5 sm:max-w-sm">
+            <Label htmlFor="ticket-queue">Nhóm cần xử lý</Label>
+            <Select value={queue} onValueChange={(value) => selectQueue(value as TicketQueue)}>
+              <SelectTrigger id="ticket-queue" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>{queueOrder.map((item) => <SelectItem key={item} value={item}>{queueLabels.get(item) ?? "Nhóm sự cố"}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
           {auth.can(permissions.ticketsCreate) && (
             <Button asChild className="shrink-0">
               <Link href="/tickets/new">
                 <Plus aria-hidden="true" />
-                Tiếp nhận ticket
+                Báo sự cố
               </Link>
             </Button>
           )}
@@ -212,8 +211,8 @@ export function TicketInbox() {
 
         <form
           onSubmit={applyFilters}
-          aria-label="Bộ lọc ticket"
-          className="grid gap-3 border-b bg-muted/20 p-4 md:grid-cols-2 xl:grid-cols-7"
+          aria-label="Bộ lọc sự cố"
+          className="grid gap-3 border-b bg-muted/20 p-4 md:grid-cols-2 xl:grid-cols-5"
         >
           <div className="space-y-1.5 md:col-span-2">
             <Label htmlFor="ticket-queue-search">Tìm kiếm</Label>
@@ -229,7 +228,7 @@ export function TicketInbox() {
                 onChange={(event) =>
                   setDraft({ ...draft, search: event.target.value })
                 }
-                placeholder="Ticket ID, asset hoặc mô tả"
+                placeholder="Mã phiếu, thiết bị hoặc mô tả"
               />
             </div>
           </div>
@@ -237,81 +236,83 @@ export function TicketInbox() {
             id="ticket-status-filter"
             label="Trạng thái"
             value={draft.status}
-            items={options.data.statuses}
+            items={options.data.statuses.map((item) => ({
+              ...item,
+              display_name: resolveStatusPresentation(
+                ticketStatusCatalog,
+                item.code,
+                item.display_name,
+              ).label,
+            }))}
             onChange={(status) => setDraft({ ...draft, status })}
           />
           <FilterSelect
             id="ticket-priority-filter"
-            label="Priority"
+            label="Mức ưu tiên"
             value={draft.priority}
-            items={options.data.priorities}
+            items={options.data.priorities.map((item) => ({
+              ...item,
+              display_name: resolveStatusPresentation(
+                priorityStatusCatalog,
+                item.code,
+                item.display_name,
+              ).label,
+            }))}
             onChange={(priority) => setDraft({ ...draft, priority })}
           />
-          <FilterSelect
-            id="ticket-category-filter"
-            label="Category"
-            value={draft.category_id}
-            items={options.data.categories.map((item) => ({
-              code: item.id,
-              display_name: item.name,
-            }))}
-            onChange={(category_id) => setDraft({ ...draft, category_id })}
-          />
-          <FilterSelect
-            id="ticket-group-filter"
-            label="Support group"
-            value={draft.support_group_id}
-            items={options.data.support_groups.map((item) => ({
-              code: item.id,
-              display_name: item.name,
-            }))}
-            onChange={(support_group_id) =>
-              setDraft({ ...draft, support_group_id })
-            }
-          />
           <div className="flex items-end">
-            <Button type="submit" variant="outline" className="w-full">
-              Áp dụng
+            <Button type="submit" className="w-full">
+              Lọc danh sách
             </Button>
           </div>
+          <details className="group md:col-span-2 xl:col-span-5">
+            <summary className="w-fit cursor-pointer rounded-md text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Bộ lọc thêm</summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:max-w-3xl">
+              <FilterSelect id="ticket-category-filter" label="Nhóm sự cố" value={draft.category_id} items={options.data.categories.map((item) => ({ code: item.id, display_name: item.name }))} onChange={(category_id) => setDraft({ ...draft, category_id })} />
+              <FilterSelect id="ticket-group-filter" label="Nhóm xử lý" value={draft.support_group_id} items={options.data.support_groups.map((item) => ({ code: item.id, display_name: item.name }))} onChange={(support_group_id) => setDraft({ ...draft, support_group_id })} />
+              <Button type="button" variant="ghost" className="w-fit" onClick={resetFilters}>Đặt lại bộ lọc</Button>
+            </div>
+          </details>
         </form>
 
         {tickets.isPending && <LoadingSkeleton />}
         {tickets.isError && (
           <ErrorState
-            title="Chưa tải được ticket queue"
+            title="Chưa tải được danh sách sự cố"
             description={getApiErrorMessage(tickets.error)}
             action={<RetryButton onClick={() => void tickets.refetch()} />}
           />
         )}
         {tickets.data && tickets.data.items.length === 0 && (
           <EmptyState
-            title="Queue chưa có ticket"
-            description="Điều chỉnh queue hoặc bộ lọc để xem các ticket khác."
+            title="Nhóm này chưa có sự cố"
+            description="Chọn nhóm khác hoặc điều chỉnh bộ lọc."
           />
         )}
         {tickets.data && tickets.data.items.length > 0 && (
           <>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+            <div>
+              <Table className="block lg:table">
+                <TableHeader className="hidden lg:table-header-group">
                   <TableRow>
-                    <TableHead>Ticket / asset</TableHead>
+                    <TableHead>Phiếu / thiết bị</TableHead>
                     <TableHead>Vấn đề</TableHead>
                     <TableHead>Trạng thái</TableHead>
-                    <TableHead>Priority</TableHead>
+                    <TableHead>Ưu tiên</TableHead>
                     <TableHead>Phân công</TableHead>
-                    <TableHead>Resolution SLA</TableHead>
-                    <TableHead>Cập nhật</TableHead>
+                    <TableHead>Hạn xử lý</TableHead>
                     <TableHead>
                       <span className="sr-only">Thao tác</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className="block space-y-3 p-3 lg:table-row-group lg:space-y-0 lg:p-0">
                   {tickets.data.items.map((ticket) => (
-                    <TableRow key={ticket.ticket_id}>
-                      <TableCell>
+                    <TableRow
+                      key={ticket.ticket_id}
+                      className="grid grid-cols-2 gap-4 rounded-lg border bg-card p-4 shadow-sm lg:table-row lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0 lg:shadow-none"
+                    >
+                      <TableCell className="col-span-2 block whitespace-normal p-0 lg:table-cell lg:p-2 lg:whitespace-nowrap">
                         <p className="font-mono text-xs font-semibold text-primary">
                           {ticket.ticket_id}
                         </p>
@@ -319,7 +320,8 @@ export function TicketInbox() {
                           {ticket.asset_id}
                         </p>
                       </TableCell>
-                      <TableCell className="max-w-sm">
+                      <TableCell className="col-span-2 block max-w-none whitespace-normal p-0 lg:table-cell lg:max-w-sm lg:p-2">
+                        <MobileFieldLabel>Mô tả sự cố</MobileFieldLabel>
                         <p className="line-clamp-2 font-medium">
                           {ticket.issue_description}
                         </p>
@@ -327,25 +329,29 @@ export function TicketInbox() {
                           {ticket.category_name ?? "Chưa phân loại"}
                         </p>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="block whitespace-normal p-0 lg:table-cell lg:p-2 lg:whitespace-nowrap">
+                        <MobileFieldLabel>Trạng thái</MobileFieldLabel>
                         <TicketOperationsStatusBadge
                           status={ticket.status}
                           label={ticket.status_display}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="block whitespace-normal p-0 lg:table-cell lg:p-2 lg:whitespace-nowrap">
+                        <MobileFieldLabel>Mức ưu tiên</MobileFieldLabel>
                         <TicketOperationsPriorityBadge
                           priority={ticket.priority}
                           label={ticket.priority_display}
                         />
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="col-span-2 block whitespace-normal p-0 text-sm sm:col-span-1 lg:table-cell lg:p-2 lg:whitespace-nowrap">
+                        <MobileFieldLabel>Phân công</MobileFieldLabel>
                         <p>{ticket.assigned_user_name ?? "Chưa phân công"}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {ticket.support_group_name ?? "Chưa có group"}
+                          {ticket.support_group_name ?? "Chưa có nhóm"}
                         </p>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="col-span-2 block whitespace-normal p-0 sm:col-span-1 lg:table-cell lg:p-2 lg:whitespace-nowrap">
+                        <MobileFieldLabel>Hạn xử lý</MobileFieldLabel>
                         {ticket.sla ? (
                           <div className="space-y-1.5">
                             <SlaStatusBadge
@@ -360,16 +366,13 @@ export function TicketInbox() {
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">
-                            Chưa có SLA
+                            Chưa có thời hạn
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatTimestamp(ticket.updated_at)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button asChild variant="ghost" size="sm">
-                          <Link href={`/tickets/${ticket.ticket_id}`}>Mở</Link>
+                      <TableCell className="col-span-2 block whitespace-normal p-0 text-right lg:table-cell lg:p-2 lg:whitespace-nowrap">
+                        <Button asChild variant="outline" size="sm" className="w-full lg:w-auto">
+                          <Link href={`/tickets/${ticket.ticket_id}`}>Xem phiếu</Link>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -379,7 +382,7 @@ export function TicketInbox() {
             </div>
             <div className="flex items-center justify-between gap-3 border-t p-4 text-sm">
               <span className="text-muted-foreground">
-                {tickets.data.total} ticket · trang {tickets.data.page}/{totalPages}
+                {tickets.data.total} phiếu · trang {tickets.data.page}/{totalPages}
               </span>
               <div className="flex gap-2">
                 <Button
@@ -443,6 +446,14 @@ function FilterSelect({
         </SelectContent>
       </Select>
     </div>
+  );
+}
+
+function MobileFieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mb-1 block text-xs font-medium text-muted-foreground lg:hidden">
+      {children}
+    </span>
   );
 }
 

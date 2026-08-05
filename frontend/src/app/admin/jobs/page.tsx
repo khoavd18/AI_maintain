@@ -5,12 +5,12 @@ export default function JobOperationsPage() {
   return (
     <>
       <PageHeader
-        title="Background jobs"
+        title="Tác vụ hệ thống"
         description="Theo dõi worker, execution, retry và transactional outbox cho các job được hỗ trợ."
         breadcrumbs={[
-          { label: "Trung tâm vận hành", href: "/" },
+          { label: "Tổng quan", href: "/" },
           { label: "Quản trị" },
-          { label: "Background jobs" },
+          { label: "Tác vụ hệ thống" },
         ]}
       />
       <JobOperationsWorkspace />

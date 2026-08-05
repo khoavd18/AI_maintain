@@ -8,35 +8,44 @@ export function SourceCard({ source }: { source: CopilotSource }) {
   return (
     <Card size="sm">
       <CardContent className="space-y-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-2">
-            <BookOpenText className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="font-medium leading-5">{source.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {source.doc_type}{source.asset_type ? ` · ${source.asset_type}` : ""}
-              </p>
-            </div>
+        <div className="flex min-w-0 items-start gap-2">
+          <BookOpenText className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+          <div className="min-w-0">
+            <h4 className="break-words font-medium leading-5">{source.title}</h4>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {source.doc_type}{source.asset_type ? ` · ${source.asset_type}` : ""}
+            </p>
           </div>
-          {source.version && <Badge variant="outline">v{source.version}</Badge>}
         </div>
-        {source.failure_category && (
-          <p className="text-xs leading-5 text-muted-foreground">Nhóm lỗi: {source.failure_category}</p>
+        {source.citation_ids.length > 0 && (
+          <div className="flex flex-wrap gap-1.5" aria-label="Trích dẫn được dùng trong câu trả lời">
+            {source.citation_ids.map((citationId) => (
+              <Badge key={citationId} variant="outline" className="max-w-full break-all">
+                Trích dẫn [{citationId}]
+              </Badge>
+            ))}
+          </div>
         )}
         <details className="group rounded-md border bg-muted/20 px-3 py-2 text-xs">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            Thông tin nguồn
+          <summary className="flex min-h-6 cursor-pointer list-none items-center justify-between gap-2 rounded-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            Phạm vi tài liệu
             <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
           </summary>
           <dl className="mt-2 grid gap-2 text-muted-foreground">
-            <SourceFact label="Mã tài liệu" value={source.document_id ?? source.doc_id} />
-            <SourceFact label="Ngày hiệu lực" value={source.effective_date ?? "Chưa khai báo"} />
-            <SourceFact label="Nguồn" value={source.source} />
+            {source.failure_category && <SourceFact label="Nhóm sự cố" value={source.failure_category} />}
+            {source.version && <SourceFact label="Phiên bản" value={source.version} />}
+            <SourceFact label="Ngày hiệu lực" value={formatDate(source.effective_date)} />
           </dl>
         </details>
       </CardContent>
     </Card>
   );
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) return "Chưa khai báo";
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
 }
 
 function SourceFact({ label, value }: { label: string; value: string }) {

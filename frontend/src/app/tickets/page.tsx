@@ -17,9 +17,9 @@ export default async function TicketsPage({
   return (
     <>
       <PageHeader
-        title="Phiếu sự cố"
-        description="Inbox vận hành theo queue, priority và SLA; mọi chuyển trạng thái đi qua action nghiệp vụ rõ ràng."
-        breadcrumbs={[{ label: "Tổng quan", href: "/" }, { label: "Phiếu sự cố" }]}
+        title="Sự cố"
+        description="Ưu tiên sự cố cần xử lý, theo dõi người phụ trách và thời hạn."
+        breadcrumbs={[{ label: "Tổng quan", href: "/" }, { label: "Sự cố" }]}
       />
       <TicketInbox />
     </>

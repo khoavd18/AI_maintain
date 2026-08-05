@@ -5,9 +5,9 @@ export default function WorkOrdersPage() {
   return (
     <>
       <PageHeader
-        title="Phiếu công việc"
-        description="Phân công, thực thi, ghi checklist, hoàn tất và xác minh công việc bảo trì."
-        breadcrumbs={[{ label: "Tổng quan", href: "/" }, { label: "Phiếu công việc" }]}
+        title="Lệnh công việc"
+        description="Theo dõi việc được giao, thời hạn và bước cần thực hiện tiếp theo."
+        breadcrumbs={[{ label: "Tổng quan", href: "/" }, { label: "Lệnh công việc" }]}
       />
       <WorkOrderWorkspace />
     </>

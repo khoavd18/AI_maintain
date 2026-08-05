@@ -38,7 +38,7 @@ export function AssetDetailView({ assetId }: { assetId: string }) {
         title={notFound ? `Không tìm thấy ${assetId}` : "Chưa tải được chi tiết thiết bị"}
         description={
           notFound
-            ? "Asset ID này không có trong danh mục hiện tại. Hãy quay lại danh sách thiết bị."
+            ? "Mã thiết bị này không có trong danh mục hiện tại. Hãy quay lại danh sách thiết bị."
             : getApiErrorMessage(error)
         }
         action={
@@ -61,7 +61,7 @@ export function AssetDetailView({ assetId }: { assetId: string }) {
     <>
       <PageHeader
         title={asset.name}
-        description={`Asset ID: ${asset.id}`}
+        description={`Mã thiết bị: ${asset.id}`}
         breadcrumbs={[
           { label: "Tổng quan", href: "/" },
           { label: "Thiết bị", href: "/assets" },
@@ -69,15 +69,15 @@ export function AssetDetailView({ assetId }: { assetId: string }) {
         ]}
         actions={
           <>
-            {auth.can(permissions.ticketsCreate) && ticketCreationAllowed && <Button type="button" onClick={() => setTicketFormOpen(true)}><TicketPlus aria-hidden="true" />Tạo ticket kiểm tra</Button>}
+            {auth.can(permissions.ticketsCreate) && ticketCreationAllowed && <Button type="button" onClick={() => setTicketFormOpen(true)}><TicketPlus aria-hidden="true" />Báo sự cố</Button>}
             {auth.can(permissions.copilotUse) && <Button asChild variant="outline">
-              <Link href={`/copilot?asset=${asset.id}`}><Bot aria-hidden="true" />Mở Copilot</Link>
+              <Link href={`/copilot?asset=${asset.id}`}><Bot aria-hidden="true" />Hỏi trợ lý bảo trì</Link>
             </Button>}
           </>
         }
       />
 
-      {analyticsStale && <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-950">Dữ liệu phân tích chưa được chạy lại. Risk Score và KPI vẫn thuộc batch gần nhất.</div>}
+      {analyticsStale && <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-950">Chỉ số ưu tiên chưa được cập nhật lại. Kết quả hiện tại vẫn thuộc đợt phân tích gần nhất.</div>}
 
       <Card className="overflow-visible">
         <CardContent className="space-y-5">
@@ -88,32 +88,40 @@ export function AssetDetailView({ assetId }: { assetId: string }) {
               <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Wrench className="size-4" aria-hidden="true" />Mức độ quan trọng: <strong className="text-foreground">{asset.criticality}</strong></p>
             </div>
 
-            <SummaryMetric label="Risk hiện tại">
-              {details?.latest_risk ? <div className="flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{details.latest_risk.final_risk_score.toFixed(2)}</span><RiskBadge level={details.latest_risk.risk_level} /></div> : <p className="text-sm text-muted-foreground">{detailsQuery.isPending ? "Đang tải batch..." : "Chưa có risk score"}</p>}
+            <SummaryMetric label="Chỉ số ưu tiên rủi ro">
+              {details?.latest_risk ? <div className="flex items-center gap-2"><span className="text-2xl font-semibold tabular-nums">{details.latest_risk.final_risk_score.toFixed(2)}</span><RiskBadge level={details.latest_risk.risk_level} /></div> : <p className="text-sm text-muted-foreground">{detailsQuery.isPending ? "Đang tải..." : "Chưa có chỉ số"}</p>}
             </SummaryMetric>
 
-            <SummaryMetric label="Bảo trì phòng ngừa">
-              {details?.preventive_maintenance ? <><MaintenanceBadge status={details.preventive_maintenance.maintenance_status_display} /><p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarClock className="size-3.5" aria-hidden="true" />{asset.overdueDays > 0 ? `${asset.overdueDays} ngày quá hạn` : asset.nextMaintenance}</p></> : <p className="text-sm text-muted-foreground">Chưa có latest preventive batch</p>}
+            <SummaryMetric label="Bảo trì định kỳ">
+              {details?.preventive_maintenance ? <><MaintenanceBadge status={details.preventive_maintenance.maintenance_status_display} /><p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarClock className="size-3.5" aria-hidden="true" />{asset.overdueDays > 0 ? `${asset.overdueDays} ngày quá hạn` : asset.nextMaintenance}</p></> : <p className="text-sm text-muted-foreground">Chưa có lịch trong đợt gần nhất</p>}
             </SummaryMetric>
 
-            <SummaryMetric label="Ticket đang mở"><p className="text-2xl font-semibold tabular-nums">{asset.unresolvedTickets}</p><p className="mt-1 text-xs text-muted-foreground">Trong các ticket gần đây</p></SummaryMetric>
+            <SummaryMetric label="Sự cố đang mở"><p className="text-2xl font-semibold tabular-nums">{asset.unresolvedTickets}</p><p className="mt-1 text-xs text-muted-foreground">Trong các phiếu gần đây</p></SummaryMetric>
           </div>
 
           <div className="grid gap-3 border-t pt-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
             <section aria-labelledby="observed-data" className="rounded-lg border border-orange-200 bg-orange-50 p-3">
-              <h2 id="observed-data" className="flex items-center gap-2 text-xs font-semibold uppercase text-orange-900"><Activity className="size-4" aria-hidden="true" />Dữ liệu và yếu tố đo được</h2>
+              <h2 id="observed-data" className="flex items-center gap-2 text-xs font-semibold uppercase text-orange-900"><Activity className="size-4" aria-hidden="true" />Điều cần chú ý</h2>
               <p className="mt-2 text-sm font-medium leading-6 text-orange-950">{asset.contributingFactors}</p>
             </section>
             <section aria-labelledby="decision-support" className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-              <h2 id="decision-support" className="text-xs font-semibold uppercase text-blue-900">Khuyến nghị hỗ trợ quyết định</h2>
+              <h2 id="decision-support" className="text-xs font-semibold uppercase text-blue-900">Hướng xử lý tham khảo</h2>
               <p className="mt-2 text-sm font-medium leading-6 text-blue-950">{asset.recommendedAction}</p>
             </section>
           </div>
         </CardContent>
       </Card>
 
-      <AssetManagementTabs profile={profile} onReload={() => void profileQuery.refetch()} />
-      {details ? <AssetDetailTabs asset={asset} details={details} /> : detailsQuery.isError ? <div className="mt-5 rounded-lg border bg-white"><ErrorState title="Analytics batch chưa sẵn sàng" description={getApiErrorMessage(detailsQuery.error)} action={<RetryButton onClick={() => void detailsQuery.refetch()} />} /></div> : <div className="mt-5"><LoadingSkeleton /></div>}
+      {details ? <AssetDetailTabs asset={asset} details={details} /> : detailsQuery.isError ? <div className="mt-5 rounded-lg border bg-white"><ErrorState title="Kết quả phân tích chưa sẵn sàng" description={getApiErrorMessage(detailsQuery.error)} action={<RetryButton onClick={() => void detailsQuery.refetch()} />} /></div> : <div className="mt-5"><LoadingSkeleton /></div>}
+      <details className="group mt-5 rounded-lg border bg-white" open={detailsQuery.isError}>
+        <summary className="cursor-pointer list-none rounded-lg px-4 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-5">
+          Thông tin kỹ thuật và quản lý
+          <span className="ml-2 text-xs font-normal text-muted-foreground">Hồ sơ, tệp đính kèm, mã QR và lịch sử</span>
+        </summary>
+        <div className="border-t px-4 pb-4 sm:px-5">
+          <AssetManagementTabs profile={profile} onReload={() => void profileQuery.refetch()} />
+        </div>
+      </details>
       {auth.can(permissions.ticketsCreate) && ticketCreationAllowed && <TicketCreateSheet
         asset={asset}
         latestAnomaly={details?.recent_anomalies[0]?.anomaly_reasons}

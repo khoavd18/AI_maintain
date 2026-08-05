@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -15,13 +15,13 @@ from src.config.settings import get_settings
 from src.database.models import (
     Asset,
     PartReorderConfiguration,
-    User,
     WorkOrder,
 )
 from src.database.session import get_session_factory
 from src.inventory_management.service import build_inventory_management_service
 from src.security.audit import AuditContext
-from src.security.permissions import Role, permissions_for_role
+from src.security.cli_context import load_cli_actor
+from src.security.permissions import Role
 from src.security.service import CurrentUser
 
 _SEED_OCCURRED_AT = datetime(2026, 7, 1, 1, 0, tzinfo=timezone.utc)
@@ -173,8 +173,8 @@ def main() -> None:
     if settings.app_environment not in {"development", "test"}:
         raise SystemExit("seed-development is allowed only in development/test.")
 
-    storekeeper = _load_actor(args.storekeeper_username)
-    engineer = _load_actor(args.engineer_username)
+    storekeeper = load_cli_actor(args.storekeeper_username)
+    engineer = load_cli_actor(args.engineer_username)
     if storekeeper.role not in {Role.STOREKEEPER, Role.ADMINISTRATOR}:
         raise SystemExit("--storekeeper-username must be Storekeeper or Administrator.")
     if engineer.role not in {Role.CHIEF_ENGINEER, Role.ADMINISTRATOR}:
@@ -215,9 +215,7 @@ def seed_development_inventory(
 
     categories = {
         item["code"]: item
-        for item in service.list_categories(
-            actor=storekeeper, include_inactive=True
-        )
+        for item in service.list_categories(actor=storekeeper, include_inactive=True)
     }
     for code, name_vi, name_en in CATEGORY_SPECS:
         if code not in categories:
@@ -234,8 +232,7 @@ def seed_development_inventory(
             report["created_categories"] += 1
 
     units = {
-        item["code"]: item
-        for item in service.list_units(actor=storekeeper, include_inactive=True)
+        item["code"]: item for item in service.list_units(actor=storekeeper, include_inactive=True)
     }
     for code, name_vi, name_en, symbol, precision in UNIT_SPECS:
         if code not in units:
@@ -254,9 +251,7 @@ def seed_development_inventory(
 
     locations = {
         item["code"]: item
-        for item in service.list_stock_locations(
-            actor=storekeeper, include_archived=True
-        )
+        for item in service.list_stock_locations(actor=storekeeper, include_archived=True)
     }
     for code, name, location_type in LOCATION_SPECS:
         if code not in locations:
@@ -408,11 +403,7 @@ def _seed_work_order_requirements(
         rows = session.execute(
             select(WorkOrder, Asset)
             .join(Asset, Asset.asset_id == WorkOrder.asset_id)
-            .where(
-                WorkOrder.status.in_(
-                    ["planned", "assigned", "in_progress", "on_hold"]
-                )
-            )
+            .where(WorkOrder.status.in_(["planned", "assigned", "in_progress", "on_hold"]))
             .order_by(WorkOrder.due_date, WorkOrder.work_order_number)
         ).all()
     created_requirements = 0
@@ -469,8 +460,7 @@ def _seed_work_order_requirements(
                     "expected_requirement_version": int(requirement["version"]),
                 },
                 idempotency_key=(
-                    f"pm6-seed-reserve-{work_order.work_order_number.lower()}-"
-                    f"{part_number.lower()}"
+                    f"pm6-seed-reserve-{work_order.work_order_number.lower()}-{part_number.lower()}"
                 ),
                 actor=engineer,
                 audit_context=audit_context,
@@ -486,33 +476,6 @@ def _seed_work_order_requirements(
         "created_reservations": created_reservations,
         "work_orders_skipped": skipped,
     }
-
-
-def _load_actor(username: str) -> CurrentUser:
-    settings = get_settings()
-    session_factory = get_session_factory(settings.database_url)
-    with session_factory() as session:
-        user = session.scalar(
-            select(User).where(User.username == username.strip().lower())
-        )
-        if user is None or not user.is_active:
-            raise SystemExit(f"Active user not found: {username}")
-        now = datetime.now(timezone.utc)
-        return CurrentUser(
-            id=user.id,
-            username=user.username,
-            email=user.email,
-            display_name=user.display_name,
-            role=Role(user.role),
-            permissions=permissions_for_role(user.role),
-            technician_id=user.technician_id,
-            is_active=user.is_active,
-            version=user.version,
-            session_id=uuid4(),
-            created_at=user.created_at,
-            updated_at=user.updated_at,
-            last_login_at=user.last_login_at or now,
-        )
 
 
 def _audit(actor: CurrentUser, request_id: str) -> AuditContext:

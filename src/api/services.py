@@ -9,6 +9,11 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
+from src.analytics.errors import (
+    AssetNotFoundError,
+    ProcessedDataNotFoundError,
+    TicketNotFoundError,
+)
 from src.asset_management.service import AssetManagementService
 from src.asset_management.storage import LocalAttachmentStorage
 from src.config.value_mappings import (
@@ -96,18 +101,6 @@ MAINTENANCE_LOG_COLUMNS = [
     "follow_up_required",
     "next_maintenance_date",
 ]
-
-
-class ProcessedDataNotFoundError(FileNotFoundError):
-    """Raised when a required CSV source is missing or stale."""
-
-
-class AssetNotFoundError(ValueError):
-    """Raised when an asset_id cannot be found in the asset master."""
-
-
-class TicketNotFoundError(ValueError):
-    """Raised when a ticket_id cannot be found in the ticket CSV."""
 
 
 class ProcessedDataService:

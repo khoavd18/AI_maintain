@@ -50,6 +50,10 @@ import {
 } from "@/hooks/use-inventory";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { permissions } from "@/lib/auth";
+import {
+  resolveStatusPresentation,
+  stockStateStatusCatalog,
+} from "@/lib/status-terminology";
 import { formatInventoryCost, formatQuantity } from "@/lib/inventory";
 
 const all = "all";
@@ -166,7 +170,14 @@ export function PartCatalogue() {
               setStockState(value);
               setPage(1);
             }}
-            options={options.data?.stock_states ?? []}
+            options={(options.data?.stock_states ?? []).map((item) => ({
+              ...item,
+              display_name: resolveStatusPresentation(
+                stockStateStatusCatalog,
+                item.code,
+                item.display_name,
+              ).label,
+            }))}
           />
           <Button type="button" variant="outline" onClick={reset}>
             <RotateCcw aria-hidden="true" />
@@ -227,6 +238,7 @@ export function PartCatalogue() {
                     <InventoryStatusBadge
                       status={part.lifecycle_status}
                       label={part.lifecycle_status_display}
+                      context="lifecycle"
                     />
                     <span className="font-semibold tabular-nums">
                       {formatQuantity(
@@ -276,6 +288,7 @@ export function PartCatalogue() {
                         <InventoryStatusBadge
                           status={part.lifecycle_status}
                           label={part.lifecycle_status_display}
+                          context="lifecycle"
                         />
                       </TableCell>
                       <TableCell>

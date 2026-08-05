@@ -143,7 +143,11 @@ describe("permission-aware product UI", () => {
     renderWithQuery(<AuditLogWorkspace />);
 
     expect(await screen.findByText("ticket.status_changed")).toBeInTheDocument();
-    expect(screen.getByText("Thay đổi: status")).toBeInTheDocument();
+    expect(screen.getByText("Trường thay đổi: status")).toBeInTheDocument();
+    expect(screen.getByText("Thành công")).toBeInTheDocument();
+    expect(screen.getByText("request-test-1")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Hành động" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Tài nguyên" })).toBeInTheDocument();
     expect(screen.queryByText(/password/i)).not.toBeInTheDocument();
   });
 });

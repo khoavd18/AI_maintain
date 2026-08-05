@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   AlertCircle,
   Bot,
-  CheckCircle2,
   CircleHelp,
   Loader2,
   RefreshCw,
@@ -39,7 +38,15 @@ import { adaptAsset, adaptTicket } from "@/lib/adapters";
 import { getApiErrorMessage, UserSafeApiError } from "@/lib/api/errors";
 import type { CopilotAskResponse } from "@/lib/api/schemas";
 import {
+  copilotEvidenceLabel,
+  copilotEvidenceMessage,
+  copilotConfidenceLabel,
+  copilotProvenanceMessage,
+  copilotSectionTitle,
+  copilotUserText,
   getCopilotSuggestions,
+  isCopilotSummarySection,
+  orderCopilotAnswerSections,
   parseCopilotAnswer,
   ragStatusFromResponse,
   retrievalStatusMessage,
@@ -72,7 +79,7 @@ export function CopilotWorkspace({
   const [selectedAssetId, setSelectedAssetId] = useState(initialAssetId);
   const [selectedTicketId, setSelectedTicketId] = useState(initialTicketId);
   const [question, setQuestion] = useState(
-    initialAssetId ? `Vì sao ${initialAssetId} đang có mức rủi ro hiện tại và cần kiểm tra gì?` : "",
+    initialAssetId ? "Vì sao thiết bị này đang có mức rủi ro hiện tại và cần kiểm tra gì?" : "",
   );
   const [validationError, setValidationError] = useState<string | null>(null);
   const [history, setHistory] = useState<ConversationTurn[]>([]);
@@ -122,11 +129,16 @@ export function CopilotWorkspace({
     mutation.reset();
     submitting.current = true;
     try {
+      const previousTurn = history.at(-1);
+      const conversationContext = previousTurn
+        ? buildConversationContext(previousTurn.response, selectedAsset?.type, selectedTicket?.failureCategory)
+        : null;
       const response = await mutation.mutateAsync({
         question: normalizedQuestion,
         asset_id: selectedAsset?.id,
         top_k: 5,
         failure_category: selectedTicket?.failureCategory,
+        ...(conversationContext ? { conversation_context: conversationContext } : {}),
       });
       turnSequence.current += 1;
       setHistory((current) => [
@@ -152,7 +164,7 @@ export function CopilotWorkspace({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void submitQuestion();
     }
@@ -163,7 +175,7 @@ export function CopilotWorkspace({
     const failed = assetsQuery.isError ? assetsQuery : ticketsQuery;
     return (
       <ErrorState
-        title="Chưa tải được ngữ cảnh Copilot"
+        title="Chưa tải được thông tin cho Trợ lý bảo trì"
         description={getApiErrorMessage(failed.error)}
         action={<RetryButton onClick={() => void failed.refetch()} />}
       />
@@ -172,9 +184,9 @@ export function CopilotWorkspace({
 
   return (
     <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
-      <aside aria-label="Ngữ cảnh Copilot" className="min-w-0 space-y-4 xl:sticky xl:top-20">
+      <aside aria-label="Thiết bị và sự cố đã chọn" className="min-w-0 space-y-4 xl:sticky xl:top-20">
         <Card>
-          <CardHeader><CardTitle>Ngữ cảnh truy xuất</CardTitle></CardHeader>
+          <CardHeader><CardTitle role="heading" aria-level={2}>Thiết bị cần hỗ trợ</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="copilot-asset">Thiết bị</Label>
@@ -186,13 +198,13 @@ export function CopilotWorkspace({
                 <SelectContent>
                   <SelectItem value={noSelection}>Chưa chọn thiết bị</SelectItem>
                   {assets.map((asset) => (
-                    <SelectItem key={asset.id} value={asset.id}>{asset.id} · {asset.type}</SelectItem>
+                    <SelectItem key={asset.id} value={asset.id}>{asset.name} · {asset.location}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="copilot-ticket">Ticket liên quan</Label>
+              <Label htmlFor="copilot-ticket">Sự cố liên quan (không bắt buộc)</Label>
               <Select
                 disabled={!selectedAsset}
                 value={selectedTicketId || noSelection}
@@ -200,7 +212,7 @@ export function CopilotWorkspace({
               >
                 <SelectTrigger id="copilot-ticket" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={noSelection}>Không chọn ticket</SelectItem>
+                  <SelectItem value={noSelection}>Không chọn sự cố</SelectItem>
                   {relatedTickets.map((ticket) => (
                     <SelectItem key={ticket.id} value={ticket.id}>{ticket.id} · {ticket.failureCategory}</SelectItem>
                   ))}
@@ -209,39 +221,44 @@ export function CopilotWorkspace({
             </div>
             {contextInvalid && (
               <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">
-                Asset hoặc ticket từ đường dẫn không tồn tại hoặc không cùng quan hệ. Hãy chọn lại ngữ cảnh.
+                Thiết bị hoặc sự cố trong đường dẫn không còn phù hợp. Hãy chọn lại trước khi đặt câu hỏi.
               </div>
             )}
-            <ContextRow
-              label="Nguồn ngữ cảnh"
-              value={initialAssetId || initialTicketId ? "Stable ID từ URL" : "Chọn tại trang Copilot"}
-            />
+            {!selectedAsset && (
+              <p className="text-sm leading-5 text-muted-foreground">
+                Bạn vẫn có thể hỏi chung, nhưng chọn thiết bị sẽ giúp tìm đúng tài liệu hơn.
+              </p>
+            )}
           </CardContent>
         </Card>
 
-        {selectedAsset ? (
+        {selectedAsset && (
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
-                <div><CardTitle>{selectedAsset.id}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{selectedAsset.name}</p></div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Thiết bị đã chọn</p>
+                  <CardTitle role="heading" aria-level={3} className="mt-1 break-words">
+                    {selectedAsset.name}
+                  </CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">Mã thiết bị: {selectedAsset.id}</p>
+                </div>
                 {selectedAsset.riskLevel && <RiskBadge level={selectedAsset.riskLevel} />}
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">A. Dữ liệu thiết bị thực tế</p>
               <ContextRow label="Loại" value={selectedAsset.type} />
               <ContextRow label="Vị trí" value={selectedAsset.location} />
-              <ContextRow label="Risk score" value={selectedAsset.riskScore?.toFixed(2) ?? "Chưa có"} mono />
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm text-muted-foreground">Bảo trì</span>
+                <span className="text-sm text-muted-foreground">Kế hoạch bảo trì</span>
                 {selectedAsset.maintenanceStatus ? <MaintenanceBadge status={selectedAsset.maintenanceStatus} /> : <span className="text-sm">Chưa có</span>}
               </div>
               <div className="border-t pt-3">
-                <p className="text-xs font-semibold uppercase text-muted-foreground">Giải thích analytics</p>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Tình trạng cần lưu ý</p>
                 <p className="mt-2 text-sm leading-6">{selectedAsset.contributingFactors}</p>
               </div>
-              <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
-                <p className="text-xs font-semibold uppercase text-blue-800">Khuyến nghị tham khảo</p>
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Gợi ý tiếp theo</p>
                 <p className="mt-1 text-sm leading-5">{selectedAsset.recommendedAction}</p>
               </div>
               <Button asChild variant="outline" className="w-full">
@@ -249,13 +266,11 @@ export function CopilotWorkspace({
               </Button>
             </CardContent>
           </Card>
-        ) : (
-          <Card><CardContent className="py-5 text-sm text-muted-foreground">Chọn thiết bị để thêm asset context vào câu hỏi.</CardContent></Card>
         )}
 
         {selectedTicket && (
           <Card>
-            <CardHeader><CardTitle>Ticket được chọn</CardTitle></CardHeader>
+            <CardHeader><CardTitle role="heading" aria-level={3}>Sự cố liên quan</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs font-medium text-primary">{selectedTicket.id}</span>
@@ -277,25 +292,29 @@ export function CopilotWorkspace({
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Bot className="size-4" aria-hidden="true" /></span>
             <div className="min-w-0">
-              <h2 id="copilot-conversation" className="text-sm font-semibold">Trợ lý bảo trì RAG</h2>
-              <p className="truncate text-xs text-muted-foreground">Phản hồi có nguồn từ SOP/checklist trong Qdrant</p>
+              <h2 id="copilot-conversation" className="text-sm font-semibold">Trợ lý bảo trì</h2>
+              <p className="text-xs leading-5 text-muted-foreground">Hướng dẫn dựa trên tài liệu bảo trì đã kiểm soát</p>
             </div>
           </div>
-          <Badge variant="outline" className={cn("shrink-0", mutation.isPending && "animate-pulse")}>
-            {mutation.isPending ? "Đang truy xuất" : "Sẵn sàng"}
+          <Badge
+            variant="outline"
+            role="status"
+            className={cn("shrink-0", mutation.isPending && "animate-pulse motion-reduce:animate-none")}
+          >
+            {mutation.isPending ? "Đang chuẩn bị" : "Sẵn sàng"}
           </Badge>
         </header>
 
         <div className="border-b bg-muted/30 px-4 py-3 sm:px-5">
-          <p className="text-xs font-semibold text-muted-foreground">Câu hỏi gợi ý theo loại thiết bị</p>
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          <p className="text-xs font-semibold text-muted-foreground">Câu hỏi gợi ý</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
             {suggestions.map((suggestion) => (
               <Button
                 key={suggestion}
                 type="button"
                 variant="outline"
                 size="sm"
-                className="shrink-0 bg-white"
+                className="h-auto min-h-9 justify-start whitespace-normal bg-white px-3 py-2 text-left leading-5"
                 disabled={mutation.isPending}
                 onClick={() => {
                   setQuestion(suggestion);
@@ -308,13 +327,15 @@ export function CopilotWorkspace({
           </div>
         </div>
 
-        <ScrollArea className="h-[min(58vh,620px)] min-h-[360px]">
+        <ScrollArea className="h-[min(54dvh,620px)] min-h-[320px] sm:min-h-[360px]">
           <div className="space-y-6 p-4 sm:p-6" aria-live="polite" aria-busy={mutation.isPending}>
             {history.length === 0 && !mutation.isPending && (
               <div className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center">
                 <CircleHelp className="size-7 text-blue-700" aria-hidden="true" />
-                <h3 className="mt-3 text-sm font-semibold">Đặt câu hỏi theo ngữ cảnh hiện trường</h3>
-                <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">Copilot chỉ sử dụng tài liệu đạt ngưỡng retrieval hiện có và luôn hiển thị nguồn khi tìm thấy.</p>
+                <h3 className="mt-3 text-sm font-semibold">Bạn cần hỗ trợ việc gì?</h3>
+                <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
+                  Hỏi về nguyên nhân, lưu ý an toàn hoặc các bước nên kiểm tra. Nguồn tham khảo sẽ được hiển thị khi có tài liệu phù hợp.
+                </p>
               </div>
             )}
 
@@ -322,8 +343,8 @@ export function CopilotWorkspace({
 
             {mutation.isPending && (
               <div role="status" className="flex items-center gap-3 rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                Đang truy xuất SOP/checklist và kiểm tra mức liên quan...
+                <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                Đang đối chiếu tài liệu và chuẩn bị câu trả lời...
               </div>
             )}
 
@@ -335,14 +356,14 @@ export function CopilotWorkspace({
 
         <form onSubmit={handleSubmit} className="border-t bg-white p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="copilot-question">Câu hỏi cho Copilot</Label>
+            <Label htmlFor="copilot-question">Câu hỏi bảo trì</Label>
             {history.length > 0 && (
               <Button type="button" variant="ghost" size="sm" onClick={() => setHistory([])}>
-                <Trash2 aria-hidden="true" />Xóa phiên
+                <Trash2 aria-hidden="true" />Xóa cuộc trò chuyện
               </Button>
             )}
           </div>
-          <div className="mt-2 flex items-end gap-2">
+          <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
             <Textarea
               ref={textareaRef}
               id="copilot-question"
@@ -353,26 +374,53 @@ export function CopilotWorkspace({
                 if (mutation.isError) mutation.reset();
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Hỏi về nguyên nhân, checklist hoặc SOP liên quan..."
+              placeholder="Ví dụ: Tôi nên kiểm tra gì trước tiên?"
               rows={2}
               maxLength={1000}
-              aria-describedby="copilot-question-help copilot-question-error"
+              aria-describedby={validationError ? "copilot-question-help copilot-question-error" : "copilot-question-help"}
               aria-invalid={Boolean(validationError)}
               className="min-h-16 resize-none"
             />
-            <Button type="submit" size="icon-lg" disabled={!question.trim() || mutation.isPending} aria-label="Gửi câu hỏi">
-              {mutation.isPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
+            <Button type="submit" className="w-full sm:w-auto" disabled={!question.trim() || mutation.isPending}>
+              {mutation.isPending
+                ? <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                : <Send aria-hidden="true" />}
+              {mutation.isPending ? "Đang gửi" : "Gửi câu hỏi"}
             </Button>
           </div>
           <div className="mt-2 flex items-start justify-between gap-3 text-xs">
             <p id="copilot-question-help" className="text-muted-foreground">Enter để gửi · Shift+Enter để xuống dòng</p>
-            <span className="tabular-nums text-muted-foreground">{question.length}/1.000</span>
+            <span className="tabular-nums text-muted-foreground" aria-label={`${question.length} trên 1.000 ký tự`}>
+              {question.length}/1.000
+            </span>
           </div>
           {validationError && <p id="copilot-question-error" role="alert" className="mt-2 text-xs font-medium text-red-700">{validationError}</p>}
         </form>
       </section>
     </div>
   );
+}
+
+function buildConversationContext(
+  response: CopilotAskResponse,
+  selectedAssetType?: string,
+  selectedFailureCategory?: string,
+) {
+  const citationIds = Array.from(new Set(
+    response.sources.flatMap((source) => source.citation_ids),
+  )).slice(0, 10);
+  const parsedSummary = parseCopilotAnswer(response.answer)
+    .find((section) => isCopilotSummarySection(section.title));
+  const summary = response.structured_answer?.summary
+    ?? [...(parsedSummary?.paragraphs ?? []), ...(parsedSummary?.items ?? [])].join(" ");
+  return {
+    resolved_asset_type: selectedAssetType ?? response.sources[0]?.asset_type ?? undefined,
+    resolved_failure_category: selectedFailureCategory
+      ?? response.sources[0]?.failure_category
+      ?? undefined,
+    previous_source_ids: citationIds,
+    previous_answer_summary: summary.slice(0, 600),
+  };
 }
 
 function ConversationResponse({
@@ -383,58 +431,83 @@ function ConversationResponse({
   onRetry: (question: string) => Promise<void>;
 }) {
   const status = retrievalStatusMessage(turn.response.retrieval_status);
-  const sections = parseCopilotAnswer(turn.response.answer).filter((section) => shouldShowSection(section.title));
-  const retryableFallback = turn.response.retrieval_status === "unavailable";
+  const provenance = copilotProvenanceMessage(turn.response);
+  const conversational = turn.response.response_mode === "llm_conversation"
+    || turn.response.retrieval_status === "conversation";
+  const retrievalSucceeded = ["success", "relevant"].includes(turn.response.retrieval_status);
+  const sections = orderCopilotAnswerSections(
+    parseCopilotAnswer(turn.response.answer).filter((section) => shouldShowSection(section.title)),
+  );
+  const summarySections = sections.filter((section) => isCopilotSummarySection(section.title));
+  const detailSections = sections.filter((section) => !isCopilotSummarySection(section.title));
+  const showAnswerGuidance = conversational || retrievalSucceeded || turn.response.sources.length > 0;
+  const safetyMessages = Array.from(new Set([
+    turn.response.safety_notice,
+    ...(turn.response.structured_answer?.safety_warnings.map((warning) => warning.text) ?? []),
+  ].map((message) => message.trim()).filter(Boolean)));
+  const retryableFallback = turn.response.retrieval_status === "unavailable" || [
+    "llm_timeout",
+    "llm_unavailable",
+    "llm_provider_error",
+  ].includes(turn.response.fallback_reason ?? "");
 
   return (
-    <article className="space-y-4">
+    <article className="space-y-4" aria-label="Câu hỏi và câu trả lời từ Trợ lý bảo trì">
       <div className="flex justify-end gap-3">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">{turn.question}</div>
+        <div className="max-w-[85%] break-words whitespace-pre-wrap rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
+          {turn.question}
+        </div>
         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700"><UserRound className="size-4" aria-hidden="true" /></span>
       </div>
-      <div className="flex gap-3">
+      <div className="flex gap-2 sm:gap-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Sparkles className="size-4" aria-hidden="true" /></span>
         <div className="min-w-0 flex-1 space-y-4">
-          <StatusCallout status={status} />
-          <p className="text-xs font-semibold uppercase text-muted-foreground">B. Hướng dẫn được truy xuất từ SOP</p>
-          {sections.map((section, sectionIndex) => (
-            <section key={`${section.title}-${sectionIndex}`} className="rounded-lg border bg-white p-4">
-              <h3 className="text-sm font-semibold">
-                {section.title.toLocaleLowerCase("vi").includes("giới hạn") ? `D. ${section.title}` : section.title}
-              </h3>
-              <div className="mt-2 space-y-2 text-sm leading-6">
-                {section.paragraphs.map((paragraph, index) => <p key={`${paragraph}-${index}`}>{paragraph}</p>)}
-                {section.items.length > 0 && (
-                  <ol className="space-y-2">
-                    {section.items.map((item, index) => (
-                      <li key={`${item}-${index}`} className="flex gap-2">
-                        <CheckCircle2 className="mt-1 size-4 shrink-0 text-green-600" aria-hidden="true" />
-                        <span>
-                          {isChecklistSection(section.title) && <strong className="font-medium">Bước {index + 1}: </strong>}
-                          {item}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </div>
-            </section>
+          <StatusCallout status={retrievalSucceeded ? provenance : status} />
+          <div className="flex flex-wrap items-center gap-2" aria-label="Mức độ tài liệu tham khảo">
+            {!retrievalSucceeded && turn.response.response_mode !== "llm_grounded" && (
+              <Badge variant="outline">{provenance.title}</Badge>
+            )}
+            <Badge variant="outline">{copilotEvidenceLabel(turn.response)}</Badge>
+            <Badge variant="outline">{copilotConfidenceLabel(turn.response)}</Badge>
+            <p className="w-full text-xs leading-5 text-muted-foreground">
+              {copilotEvidenceMessage(turn.response)}
+            </p>
+          </div>
+
+          {showAnswerGuidance && summarySections.map((section, sectionIndex) => (
+            <AnswerSection key={`${section.title}-${sectionIndex}`} section={section} summary />
           ))}
 
-          {turn.response.sources.length > 0 && (
-            <section aria-label="Nguồn tài liệu được truy xuất">
-              <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Nguồn tài liệu</h3>
-              <div className="grid gap-3 lg:grid-cols-2">
-                {turn.response.sources.map((source) => <SourceCard key={`${source.doc_id}-${source.title}`} source={source} />)}
+          {safetyMessages.length > 0 && (
+            <section
+              aria-labelledby={`copilot-safety-${turn.id}`}
+              className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+            >
+              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <div>
+                <h3 id={`copilot-safety-${turn.id}`} className="font-semibold">Cảnh báo an toàn</h3>
+                {safetyMessages.length === 1
+                  ? <p className="mt-1 leading-5">{safetyMessages[0]}</p>
+                  : (
+                    <ul className="mt-1 list-disc space-y-1 pl-5 leading-5">
+                      {safetyMessages.map((message) => <li key={message}>{message}</li>)}
+                    </ul>
+                  )}
               </div>
             </section>
           )}
 
-          {turn.response.safety_notice && (
-            <div role="note" className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <div><p className="font-semibold">C. Lưu ý an toàn</p><p className="mt-1 leading-5">{turn.response.safety_notice}</p></div>
-            </div>
+          {showAnswerGuidance && detailSections.map((section, sectionIndex) => (
+            <AnswerSection key={`${section.title}-${sectionIndex}`} section={section} />
+          ))}
+
+          {turn.response.sources.length > 0 && (
+            <section aria-labelledby={`copilot-sources-${turn.id}`}>
+              <h3 id={`copilot-sources-${turn.id}`} className="mb-2 text-sm font-semibold">Nguồn tham khảo</h3>
+              <div className="grid gap-3 md:grid-cols-2">
+                {turn.response.sources.map((source) => <SourceCard key={`${source.doc_id}-${source.title}`} source={source} />)}
+              </div>
+            </section>
           )}
 
           {retryableFallback && (
@@ -448,12 +521,41 @@ function ConversationResponse({
   );
 }
 
-function isChecklistSection(title: string) {
-  const normalized = title.toLocaleLowerCase("vi");
-  return normalized.includes("checklist") || normalized.includes("bước kiểm tra");
+function AnswerSection({
+  section,
+  summary = false,
+}: {
+  section: ReturnType<typeof parseCopilotAnswer>[number];
+  summary?: boolean;
+}) {
+  const checklist = copilotSectionTitle(section.title) === "Các bước nên kiểm tra";
+  return (
+    <section className={cn("min-w-0", summary && "rounded-lg bg-muted/40 p-4")}>
+      <h3 className="text-sm font-semibold">{copilotSectionTitle(section.title)}</h3>
+      <div className="mt-2 space-y-2 break-words text-sm leading-6">
+        {section.paragraphs.map((paragraph, index) => (
+          <p key={`${paragraph}-${index}`}>{copilotUserText(paragraph)}</p>
+        ))}
+        {section.items.length > 0 && checklist && (
+          <ol className="list-decimal space-y-2 pl-5 marker:font-medium">
+            {section.items.map((item, index) => (
+              <li key={`${item}-${index}`} className="pl-1">{copilotUserText(item)}</li>
+            ))}
+          </ol>
+        )}
+        {section.items.length > 0 && !checklist && (
+          <ul className="list-disc space-y-2 pl-5">
+            {section.items.map((item, index) => (
+              <li key={`${item}-${index}`} className="pl-1">{copilotUserText(item)}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
 }
 
-function StatusCallout({ status }: { status: ReturnType<typeof retrievalStatusMessage> }) {
+function StatusCallout({ status }: { status: { title: string; description: string; tone: "amber" | "red" | "blue" } }) {
   return (
     <div className={cn(
       "rounded-lg border p-3 text-sm",
@@ -472,7 +574,7 @@ function RequestFailure({ error, onRetry }: { error: unknown; onRetry: () => voi
   const invalidAsset = apiError?.code === "not_found";
   return (
     <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-950">
-      <p className="font-semibold">{invalidAsset ? "Asset context không hợp lệ" : "Chưa nhận được phản hồi từ Copilot"}</p>
+      <p className="font-semibold">{invalidAsset ? "Thiết bị đã chọn không còn hợp lệ" : "Chưa nhận được câu trả lời"}</p>
       <p className="mt-1 leading-5">{getApiErrorMessage(error)}</p>
       <p className="mt-1 text-xs">Câu hỏi vẫn được giữ trong ô nhập để bạn kiểm tra hoặc gửi lại.</p>
       {(apiError?.retryable ?? true) && (
@@ -484,11 +586,11 @@ function RequestFailure({ error, onRetry }: { error: unknown; onRetry: () => voi
   );
 }
 
-function ContextRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function ContextRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className={cn("max-w-[65%] break-words text-right font-medium", mono && "font-mono")}>{value}</span>
+      <span className="max-w-[65%] break-words text-right font-medium">{value}</span>
     </div>
   );
 }

@@ -29,12 +29,17 @@ class RetrievalResult:
     failure_category: str = ""
     version: str = ""
     effective_date: str = ""
+    language: str = "vi"
     chunk_index: int = 0
+    dense_score: float | None = None
+    sparse_score: float | None = None
+    reranker_score: float | None = None
+    metadata_prior: float | None = None
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self, *, include_diagnostics: bool = False) -> dict[str, object]:
         """Return an API-safe dictionary."""
 
-        return {
+        payload: dict[str, object] = {
             "chunk_id": self.chunk_id,
             "doc_id": self.doc_id,
             "document_id": self.doc_id,
@@ -45,12 +50,24 @@ class RetrievalResult:
             "failure_category": self.failure_category,
             "version": self.version,
             "effective_date": self.effective_date,
+            "language": self.language,
             "chunk_index": self.chunk_index,
             "source": self.source,
             "text": self.text,
             "content": self.text,
             "score": self.score,
         }
+        if include_diagnostics:
+            diagnostics = {
+                "dense_score": self.dense_score,
+                "sparse_score": self.sparse_score,
+                "reranker_score": self.reranker_score,
+                "metadata_prior": self.metadata_prior,
+            }
+            payload["score_components"] = {
+                key: value for key, value in diagnostics.items() if value is not None
+            }
+        return payload
 
 
 class Retriever(Protocol):
@@ -63,6 +80,8 @@ class Retriever(Protocol):
         asset_type: str | None = None,
         document_type: str | None = None,
         failure_category: str | None = None,
+        version: str | None = None,
+        language: str | None = None,
     ) -> list[RetrievalResult]:
         """Return relevant chunks for a technician question."""
         ...
@@ -92,6 +111,8 @@ class QdrantRetriever:
         asset_type: str | None = None,
         document_type: str | None = None,
         failure_category: str | None = None,
+        version: str | None = None,
+        language: str | None = None,
     ) -> list[RetrievalResult]:
         """Embed the query and search Qdrant."""
 
@@ -101,6 +122,8 @@ class QdrantRetriever:
             for key, value in {
                 "document_type": document_type,
                 "failure_category": failure_category,
+                "version": version,
+                "language": language,
             }.items()
             if value is not None
         }
@@ -123,7 +146,9 @@ class QdrantRetriever:
                 failure_category=result.failure_category,
                 version=result.version,
                 effective_date=result.effective_date,
+                language=result.language,
                 chunk_index=result.chunk_index,
+                dense_score=result.score,
             )
             for result in results
         ]
@@ -141,6 +166,8 @@ class UnavailableRetriever:
         asset_type: str | None = None,
         document_type: str | None = None,
         failure_category: str | None = None,
+        version: str | None = None,
+        language: str | None = None,
     ) -> list[RetrievalResult]:
         """Fail with a public-safe availability error."""
 

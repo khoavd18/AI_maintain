@@ -5,9 +5,9 @@ export default function ChecklistTemplatesPage() {
   return (
     <>
       <PageHeader
-        title="Checklist template"
-        description="Thiết kế và version hóa các bước bảo trì; work order luôn giữ snapshot lịch sử."
-        breadcrumbs={[{ label: "Tổng quan", href: "/" }, { label: "Checklist" }]}
+        title="Mẫu kiểm tra"
+        description="Quản lý các bước kiểm tra dùng khi thực hiện lệnh công việc."
+        breadcrumbs={[{ label: "Tổng quan", href: "/" }, { label: "Mẫu kiểm tra" }]}
       />
       <ChecklistTemplateWorkspace />
     </>

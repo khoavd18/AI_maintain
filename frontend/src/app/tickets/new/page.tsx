@@ -10,8 +10,8 @@ export default async function NewTicketPage({
   return (
     <>
       <PageHeader
-        title="Tiếp nhận ticket"
-        description="Ghi nhận sự cố, phân loại impact và urgency, sau đó áp dụng priority cùng SLA policy từ backend."
+        title="Báo sự cố"
+        description="Ghi nhận thiết bị, mô tả vấn đề và mức độ cần ưu tiên xử lý."
         breadcrumbs={[
           { label: "Phiếu sự cố", href: "/tickets" },
           { label: "Tiếp nhận" },

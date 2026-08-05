@@ -177,6 +177,12 @@ export function AuthTestProvider({
 }
 
 export function defaultRouteFor(user: UserResponse) {
+  if (
+    user.role === "helpdesk" &&
+    user.permissions.includes(permissions.ticketsRead)
+  ) {
+    return "/tickets";
+  }
   if (user.permissions.includes(permissions.analyticsRead)) return "/";
   if (user.permissions.includes(permissions.inventoryRead)) return "/inventory";
   if (user.permissions.includes(permissions.workOrdersRead)) return "/work-orders";
@@ -192,6 +198,8 @@ function permissionForPath(pathname: string | null): Permission | null {
   if (pathname.startsWith("/admin/escalations")) return permissions.escalationsEvaluate;
   if (pathname.startsWith("/admin/users")) return permissions.usersRead;
   if (pathname.startsWith("/admin/audit")) return permissions.auditLogsRead;
+  if (pathname.startsWith("/admin/jobs")) return permissions.jobOperationsRead;
+  if (pathname.startsWith("/notifications")) return permissions.notificationsRead;
   if (pathname.startsWith("/scan/assets")) return permissions.assetsRead;
   if (pathname.startsWith("/assets")) return permissions.assetsRead;
   if (pathname.startsWith("/tickets")) return permissions.ticketsRead;

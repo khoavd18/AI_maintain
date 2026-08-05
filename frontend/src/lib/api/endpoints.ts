@@ -233,7 +233,9 @@ export const api = {
       request,
       copilotAskRequestSchema,
       copilotAskResponseSchema,
-      { signal, operation: "copilot" },
+      // Covers the default backend envelope of two 30-second provider attempts
+      // plus response validation without aborting a generation still in flight.
+      { signal, operation: "copilot", timeoutMs: 75_000 },
     ),
   login: (request: LoginRequest, signal?: AbortSignal) =>
     postJson("/auth/login", request, loginRequestSchema, authResponseSchema, {

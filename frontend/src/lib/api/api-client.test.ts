@@ -5,6 +5,7 @@ import { normalizeApiBaseUrl } from "@/lib/api/config";
 import { api } from "@/lib/api/endpoints";
 import { UserSafeApiError } from "@/lib/api/errors";
 import {
+  type CopilotAskRequest,
   healthResponseSchema,
   copilotAskRequestSchema,
   copilotAskResponseSchema,
@@ -66,6 +67,7 @@ describe("typed API client", () => {
 
   it.each([
     [404, "not_found"],
+    [429, "rate_limited"],
     [422, "validation"],
     [503, "analytics_unavailable"],
   ])("maps HTTP %i without exposing backend details", async (status, code) => {
@@ -248,7 +250,7 @@ describe("typed API client", () => {
   });
 });
 
-const copilotRequest = {
+const copilotRequest: CopilotAskRequest = {
   question: "Vì sao GENERATOR_002 đang rủi ro cao?",
   asset_id: "GENERATOR_002",
   top_k: 5,

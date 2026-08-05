@@ -83,13 +83,27 @@ services:
     image: qdrant/qdrant:v1.10.1
     volumes:
       - pilot_qdrant_data:/qdrant/storage
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "exec 3<>/dev/tcp/127.0.0.1/6333 && printf 'GET /readyz HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
     ports:
       - "${PILOT_QDRANT_BIND_ADDRESS:?PILOT_QDRANT_BIND_ADDRESS is required}:${PILOT_QDRANT_PORT:?PILOT_QDRANT_PORT is required}:6333"
     restart: unless-stopped
 
   migrate:
     image: ${PILOT_APP_IMAGE:?PILOT_APP_IMAGE is required}
-    build: *python-build
+    build:
+      <<: *python-build
+      target: core-runtime
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment: *app-environment
     depends_on:
@@ -99,7 +113,9 @@ services:
 
   api:
     image: ${PILOT_APP_IMAGE:?PILOT_APP_IMAGE is required}
-    build: *python-build
+    build:
+      <<: *python-build
+      target: rag-runtime
     command:
       [
         "python",
@@ -113,12 +129,26 @@ services:
         "--workers",
         "1",
       ]
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      COPILOT_RATE_LIMIT_REQUESTS: ${COPILOT_RATE_LIMIT_REQUESTS:?COPILOT_RATE_LIMIT_REQUESTS is required}
+      COPILOT_RATE_LIMIT_WINDOW_SECONDS: ${COPILOT_RATE_LIMIT_WINDOW_SECONDS:?COPILOT_RATE_LIMIT_WINDOW_SECONDS is required}
+      LLM_ENABLED: ${LLM_ENABLED:?LLM_ENABLED is required}
+      LLM_PROVIDER: ${LLM_PROVIDER:?LLM_PROVIDER is required}
+      LLM_MODEL: ${LLM_MODEL:?LLM_MODEL is required}
+      LLM_BASE_URL: ${LLM_BASE_URL:?LLM_BASE_URL is required}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:?LLM_TIMEOUT_SECONDS is required}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:?LLM_TEMPERATURE is required}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:?LLM_MAX_TOKENS is required}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:?LLM_MAX_RETRIES is required}
+      LLM_MAX_CONTEXT_CHARS: ${LLM_MAX_CONTEXT_CHARS:?LLM_MAX_CONTEXT_CHARS is required}
+      LLM_MIN_RELEVANT_DOCUMENTS: ${LLM_MIN_RELEVANT_DOCUMENTS:?LLM_MIN_RELEVANT_DOCUMENTS is required}
     depends_on:
       migrate:
         condition: service_completed_successfully
       qdrant:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${PILOT_API_BIND_ADDRESS:?PILOT_API_BIND_ADDRESS is required}:${PILOT_API_PORT:?PILOT_API_PORT is required}:8000"
     volumes:
@@ -149,7 +179,9 @@ services:
 
   worker:
     image: ${PILOT_APP_IMAGE:?PILOT_APP_IMAGE is required}
-    build: *python-build
+    build:
+      <<: *python-build
+      target: core-runtime
     command: ["python", "-m", "src.operations.worker"]
     environment: *app-environment
     depends_on:

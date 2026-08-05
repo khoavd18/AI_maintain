@@ -1,8 +1,7 @@
 """API request and response schemas."""
 
 from datetime import date, datetime
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -14,6 +13,15 @@ class HealthResponse(BaseModel):
     status: str
     raw_data_available: bool | None = None
     analytics_available: bool | None = None
+
+
+class RagHealthResponse(BaseModel):
+    """Readiness of the optional but user-visible knowledge retrieval boundary."""
+
+    status: Literal["ready", "degraded"]
+    qdrant_ready: bool
+    collection: str
+    expected_vector_dimensions: int
 
 
 class SummaryResponse(BaseModel):
@@ -120,9 +128,7 @@ class AssetProfileResponse(AssetRecord):
     """Canonical asset lifecycle profile with legacy fields retained."""
 
     asset_type_code: Literal["hvac", "pump", "generator"]
-    asset_category: Literal[
-        "climate_control", "water_system", "power_system", "other"
-    ]
+    asset_category: Literal["climate_control", "water_system", "power_system", "other"]
     asset_category_display: str
     manufacturer: str | None
     model: str | None
@@ -181,9 +187,7 @@ class AssetCreateRequest(BaseModel):
     )
     asset_name: str = Field(min_length=2, max_length=200)
     asset_type: Literal["hvac", "pump", "generator"]
-    asset_category: Literal[
-        "climate_control", "water_system", "power_system", "other"
-    ] = "other"
+    asset_category: Literal["climate_control", "water_system", "power_system", "other"] = "other"
     manufacturer: str | None = Field(default=None, max_length=200)
     model: str | None = Field(default=None, max_length=200)
     serial_number: str | None = Field(default=None, max_length=150)
@@ -224,9 +228,7 @@ class AssetCreateRequest(BaseModel):
         ):
             raise ValueError("warranty_end_date không được sớm hơn warranty_start_date.")
         if self.next_maintenance_date < self.last_maintenance_date:
-            raise ValueError(
-                "next_maintenance_date không được sớm hơn last_maintenance_date."
-            )
+            raise ValueError("next_maintenance_date không được sớm hơn last_maintenance_date.")
         return self
 
 
@@ -238,9 +240,9 @@ class AssetUpdateRequest(BaseModel):
     expected_version: int = Field(ge=1)
     asset_name: str | None = Field(default=None, min_length=2, max_length=200)
     asset_type: Literal["hvac", "pump", "generator"] | None = None
-    asset_category: Literal[
-        "climate_control", "water_system", "power_system", "other"
-    ] | None = None
+    asset_category: Literal["climate_control", "water_system", "power_system", "other"] | None = (
+        None
+    )
     manufacturer: str | None = Field(default=None, max_length=200)
     model: str | None = Field(default=None, max_length=200)
     serial_number: str | None = Field(default=None, max_length=150)
@@ -600,14 +602,29 @@ class AssetDetailsResponse(BaseModel):
     recurring_issues: list[RecurringIssueRecord]
 
 
+class ConversationContextRequest(BaseModel):
+    """Bounded prior-turn facts; raw unbounded chat history is not accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    recent_intent: str | None = Field(default=None, max_length=40)
+    resolved_asset_type: str | None = Field(default=None, max_length=80)
+    resolved_failure_category: str | None = Field(default=None, max_length=80)
+    previous_source_ids: list[str] = Field(default_factory=list, max_length=10)
+    previous_answer_summary: str = Field(default="", max_length=600)
+
+
 class CopilotAskRequest(BaseModel):
-    """Request body for the deterministic Maintenance Copilot."""
+    """Request body for the grounded Maintenance Copilot."""
 
     question: str = Field(min_length=1, max_length=1000)
     asset_id: str | None = None
     top_k: int = Field(default=5, ge=1, le=20)
     document_type: str | None = None
     failure_category: str | None = None
+    version: str | None = Field(default=None, max_length=40)
+    language: str | None = Field(default=None, pattern=r"^[a-z]{2,3}(?:-[A-Z]{2})?$")
+    conversation_context: ConversationContextRequest | None = None
 
 
 class CopilotAskResponse(BaseModel):
@@ -621,3 +638,18 @@ class CopilotAskResponse(BaseModel):
     relevance_status: str = "relevant"
     safety_notice: str = ""
     filters_applied: dict[str, str] = Field(default_factory=dict)
+    response_mode: str = "deterministic_fallback"
+    fallback_reason: str | None = None
+    structured_answer: dict[str, Any] | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    evidence_status: str = "insufficient"
+    citation_validation: dict[str, Any] | None = None
+    context_warnings: list[str] = Field(default_factory=list)
+    confidence: Literal[
+        "high",
+        "medium",
+        "low",
+        "insufficient_evidence",
+        "not_applicable",
+    ] = "insufficient_evidence"

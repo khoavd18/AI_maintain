@@ -41,3 +41,35 @@ class LoginRateLimiter:
         while failures and failures[0] <= cutoff:
             failures.popleft()
         return failures
+
+
+class RequestRateLimitExceededError(RuntimeError):
+    """Raised when a caller exceeds a bounded request budget."""
+
+
+class RequestRateLimiter:
+    """Small per-caller limiter for the documented single-API-instance pilot."""
+
+    def __init__(self, *, max_requests: int, window_seconds: int) -> None:
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._requests: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = Lock()
+
+    def consume(self, key: str) -> None:
+        with self._lock:
+            requests = self._current_requests(key)
+            if len(requests) >= self.max_requests:
+                raise RequestRateLimitExceededError
+            requests.append(time.monotonic())
+
+    def reset(self) -> None:
+        with self._lock:
+            self._requests.clear()
+
+    def _current_requests(self, key: str) -> deque[float]:
+        requests = self._requests[key]
+        cutoff = time.monotonic() - self.window_seconds
+        while requests and requests[0] <= cutoff:
+            requests.popleft()
+        return requests

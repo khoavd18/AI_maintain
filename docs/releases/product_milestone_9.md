@@ -67,7 +67,7 @@ job execution was added.
 | PM9 implementation commits | `425a652`, `e6a5cd8`, `b1fd8c3` |
 | PM9 design-readiness checkpoint | This classification follow-up commit; tag created only after verification |
 | PM9 tag recommendation | `product-milestone-9-pilot-ready-by-design`; do not create `product-milestone-9` |
-| Deployment manifest canonical semantic-JSON SHA-256 | `59a533845e83197aefe3c3c7201f9173ae66a00f4afdfd571471a45957db6dad` |
+| Deployment manifest canonical semantic-JSON SHA-256 | `06bdd63dc28313ca32e5edd862fe019d421460e832dd3c6ccfda7d2d8583e9dc` |
 | Push | Not performed |
 
 The three PM9 implementation commits are local. This follow-up changes only
@@ -253,7 +253,7 @@ Final verification on the settled worktree additionally passed:
   before the final local checkpoint/tag.
 
 The settled manifest semantic-JSON SHA-256 is
-`59a533845e83197aefe3c3c7201f9173ae66a00f4afdfd571471a45957db6dad`.
+`06bdd63dc28313ca32e5edd862fe019d421460e832dd3c6ccfda7d2d8583e9dc`.
 
 The 2026-07-27 design-readiness classification follow-up additionally ran:
 

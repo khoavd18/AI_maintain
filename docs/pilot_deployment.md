@@ -40,7 +40,7 @@ Nguồn authoritative:
 | Migration | Application 0.1.0 / Python 3.11 | Chạy `alembic upgrade head`, rồi kết thúc | one-shot |
 | FastAPI | Application 0.1.0 / Python 3.11 | Authorization và business boundary | 1 |
 | PM7 worker | Application 0.1.0 / Python 3.11 | PostgreSQL polling, lease/outbox | 1 |
-| Next.js | Frontend 0.1.0 / Node 22.20.0 / Next.js 16.2.10 | Authenticated operational frontend | 1 |
+| Next.js | Frontend 0.1.0 / Node 22.20.0 / Next.js 16.2.12 | Authenticated operational frontend | 1 |
 
 Worker chỉ được thực thi bốn job:
 

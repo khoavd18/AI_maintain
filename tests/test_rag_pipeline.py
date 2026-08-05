@@ -130,8 +130,10 @@ def test_generated_documents_are_deterministic_safe_and_cover_focused_assets(
     assert sum(bool(document.failure_category) for document in documents) == 3
 
 
-def test_indexing_rebuild_is_repeatable_and_removes_stale_chunks(tmp_path: Path) -> None:
-    """A repeated indexing run should replace, not append to, the collection."""
+def test_indexing_is_idempotent_and_requires_explicit_replace_for_stale_chunks(
+    tmp_path: Path,
+) -> None:
+    """Default indexing is non-destructive; replace removes only obsolete points."""
 
     document_path = tmp_path / "documents.csv"
     documents = generate_dataset(asset_count=3, days=1, seed=17)["documents"]
@@ -153,21 +155,34 @@ def test_indexing_rebuild_is_repeatable_and_removes_stale_chunks(tmp_path: Path)
         vector_store=store,
     )
 
-    assert first == second
     assert first.document_count == 6
     assert first.chunk_count == store.count_points()
     assert first.embedding_implementation == "HashEmbeddingProvider"
+    assert first.added_points == first.chunk_count
+    assert second.added_points == 0
+    assert second.updated_points == 0
+    assert second.unchanged_points == second.chunk_count
 
     documents.iloc[:-1].to_csv(document_path, index=False)
-    reduced = index_documents(
+    non_destructive = index_documents(
         documents_path=document_path,
         embedding_provider=provider,
         vector_store=store,
     )
+    assert non_destructive.document_count == 5
+    assert non_destructive.obsolete_points > 0
+    assert non_destructive.removed_points == 0
+    assert store.count_points() == first.active_points
 
-    assert reduced.document_count == 5
-    assert reduced.chunk_count < first.chunk_count
-    assert reduced.chunk_count == store.count_points()
+    reduced = index_documents(
+        documents_path=document_path,
+        embedding_provider=provider,
+        vector_store=store,
+        replace=True,
+    )
+    assert reduced.removed_points > 0
+    assert reduced.obsolete_points == 0
+    assert reduced.chunk_count == reduced.active_points == store.count_points()
 
 
 def test_retrieval_supports_all_metadata_filters(tmp_path: Path) -> None:
@@ -203,10 +218,14 @@ def test_retrieval_supports_all_metadata_filters(tmp_path: Path) -> None:
         asset_type="Máy phát điện dự phòng",
         failure_category="Lỗi điện",
     )
+    version_language_results = retriever.search(
+        "kiểm tra máy lạnh",
+        asset_type="Máy lạnh",
+        version="1.0",
+        language="vi",
+    )
 
-    assert asset_results and {result.asset_type for result in asset_results} == {
-        "Máy bơm nước"
-    }
+    assert asset_results and {result.asset_type for result in asset_results} == {"Máy bơm nước"}
     assert document_results and {result.doc_type for result in document_results} == {
         "Danh sách kiểm tra"
     }
@@ -214,6 +233,9 @@ def test_retrieval_supports_all_metadata_filters(tmp_path: Path) -> None:
         "Lỗi điện"
     }
     assert failure_results[0].score >= retriever.minimum_relevance_score
+    assert version_language_results
+    assert {result.version for result in version_language_results} == {"1.0"}
+    assert {result.language for result in version_language_results} == {"vi"}
 
 
 def test_vector_store_reports_missing_empty_and_unavailable_collections() -> None:
@@ -418,6 +440,8 @@ def test_copilot_answer_includes_vietnamese_context_and_sources() -> None:
     assert response.sources[0]["doc_id"] == "DOC-001"
     assert response.retrieved_chunks[0]["text"]
     assert response.retrieval_status == "success"
+    assert "[S1]" in response.answer
+    assert "Khuyến nghị từ analytics" not in response.answer
 
 
 class FakeProcessedDataService:

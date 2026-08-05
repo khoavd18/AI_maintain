@@ -297,6 +297,14 @@ function mapHttpError(
       message: businessDetail ?? "Dữ liệu đã tồn tại hoặc trạng thái vừa thay đổi.",
     });
   }
+  if (status === 429) {
+    return new UserSafeApiError({
+      code: "rate_limited",
+      status,
+      message: businessDetail ?? "Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.",
+      retryable: true,
+    });
+  }
   if (status === 422) {
     return new UserSafeApiError({
       code: "validation",

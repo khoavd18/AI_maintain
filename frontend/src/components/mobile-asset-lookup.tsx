@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { LifecycleBadge, OperationalBadge } from "@/components/status-badges";
+import { LifecycleBadge, OperationalBadge, TicketStatusBadge } from "@/components/status-badges";
 import { TicketCreateSheet } from "@/components/ticket-create-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState, RetryButton } from "@/components/ui-states";
 import { useAssetDetailsQuery, useQrLookupQuery, useTicketsQuery } from "@/hooks/use-api-queries";
-import { adaptAssetDetails, adaptAssetProfile } from "@/lib/adapters";
+import { adaptAssetDetails, adaptAssetProfile, adaptTicket } from "@/lib/adapters";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import type { AssetProfile } from "@/lib/api/schemas";
 import { permissions } from "@/lib/auth";
@@ -61,7 +61,7 @@ function MobileAssetLookupContent({ profile }: { profile: AssetProfile }) {
 
     <section className="rounded-lg border bg-white" aria-labelledby="open-ticket-heading">
       <div className="border-b p-3"><h2 id="open-ticket-heading" className="text-sm font-semibold">Ticket đang mở</h2></div>
-      {tickets.isError ? <p role="alert" className="p-3 text-sm text-red-700">{getApiErrorMessage(tickets.error)}</p> : tickets.isPending ? <p className="p-3 text-sm text-muted-foreground">Đang tải ticket...</p> : openTickets.length === 0 ? <p className="p-3 text-sm text-muted-foreground">Không có ticket đang mở.</p> : <ul className="divide-y">{openTickets.slice(0, 5).map((ticket) => <li key={ticket.ticket_id} className="p-3"><div className="flex flex-wrap items-center justify-between gap-2"><Link href={`/tickets?ticket=${ticket.ticket_id}`} className="font-mono text-xs font-semibold text-primary hover:underline">{ticket.ticket_id}</Link><Badge variant="outline">{ticket.status}</Badge></div><p className="mt-2 break-words text-sm leading-5">{ticket.issue_description}</p><p className="mt-2 text-xs text-muted-foreground">{ticket.priority} · {formatTimestamp(ticket.created_at)}</p></li>)}</ul>}
+      {tickets.isError ? <p role="alert" className="p-3 text-sm text-red-700">{getApiErrorMessage(tickets.error)}</p> : tickets.isPending ? <p className="p-3 text-sm text-muted-foreground">Đang tải ticket...</p> : openTickets.length === 0 ? <p className="p-3 text-sm text-muted-foreground">Không có ticket đang mở.</p> : <ul className="divide-y">{openTickets.slice(0, 5).map((ticket) => <li key={ticket.ticket_id} className="p-3"><div className="flex flex-wrap items-center justify-between gap-2"><Link href={`/tickets?ticket=${ticket.ticket_id}`} className="font-mono text-xs font-semibold text-primary hover:underline">{ticket.ticket_id}</Link><TicketStatusBadge status={adaptTicket(ticket).status} /></div><p className="mt-2 break-words text-sm leading-5">{ticket.issue_description}</p><p className="mt-2 text-xs text-muted-foreground">{ticket.priority} · {formatTimestamp(ticket.created_at)}</p></li>)}</ul>}
     </section>
 
     <p className="text-xs leading-5 text-muted-foreground">QR hỗ trợ nhận diện và truy cập nhanh. Trạng thái và lịch sử vẫn phải được xác minh trước khi thực hiện bảo trì.</p>

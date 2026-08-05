@@ -5,9 +5,9 @@ export default function MaintenancePlansPage() {
   return (
     <>
       <PageHeader
-        title="Kế hoạch bảo trì"
-        description="Quản lý preventive plan, xem kỳ đến hạn và phát hành work order theo lịch xác định."
-        breadcrumbs={[{ label: "Tổng quan", href: "/" }, { label: "Kế hoạch bảo trì" }]}
+        title="Bảo trì định kỳ"
+        description="Theo dõi lịch bảo trì, kỳ sắp đến hạn và lệnh công việc đã phát hành."
+        breadcrumbs={[{ label: "Tổng quan", href: "/" }, { label: "Bảo trì định kỳ" }]}
       />
       <MaintenancePlanWorkspace />
     </>

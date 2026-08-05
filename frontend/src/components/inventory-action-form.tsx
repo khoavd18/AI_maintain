@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ErrorState, LoadingSkeleton } from "@/components/ui-states";
 import {
   useAdjustStockMutation,
+  useInventoryBalancesQuery,
   useInventoryLocationsQuery,
   useInventoryPartsQuery,
   useReceiveStockMutation,
@@ -29,7 +30,7 @@ import {
 import { getApiErrorMessage } from "@/lib/api/errors";
 import type { InventoryMovement } from "@/lib/api/inventory-schemas";
 import { permissions } from "@/lib/auth";
-import { createInventoryIdempotencyKey } from "@/lib/inventory";
+import { createInventoryIdempotencyKey, formatQuantity } from "@/lib/inventory";
 
 export type InventoryActionView = "receiving" | "transfer" | "adjustment";
 
@@ -39,18 +40,15 @@ const copy: Record<
 > = {
   receiving: {
     title: "Nhập kho",
-    description:
-      "Ghi opening balance hoặc receipt bằng movement append-only có idempotency key.",
+    description: "Ghi nhận phụ tùng nhập vào kho hoặc số lượng đầu kỳ.",
   },
   transfer: {
-    title: "Chuyển kho",
-    description:
-      "Transfer-out và transfer-in commit cùng một transaction hoặc cùng rollback.",
+    title: "Điều chuyển kho",
+    description: "Chuyển phụ tùng giữa hai vị trí kho trong một thao tác.",
   },
   adjustment: {
     title: "Điều chỉnh tồn",
-    description:
-      "Điều chỉnh có kiểm soát; không sửa trực tiếp balance hoặc movement history.",
+    description: "Ghi nhận chênh lệch kiểm kê, hư hỏng hoặc loại bỏ có lý do.",
   },
 };
 
@@ -78,7 +76,7 @@ export function InventoryActionForm({ view }: { view: InventoryActionView }) {
         title={heading.title}
         description={heading.description}
         breadcrumbs={[
-          { label: "Kho vật tư", href: "/inventory" },
+          { label: "Kho phụ tùng", href: "/inventory" },
           { label: heading.title },
         ]}
       />
@@ -161,8 +159,8 @@ function ReceivingForm({
 
   return (
     <ActionShell
-      title={operation === "receipt" ? "Receipt" : "Opening balance"}
-      notice="Thao tác thành công chỉ cập nhật transactional inventory; Risk Score và KPI hiện hữu không đổi."
+      title={operation === "receipt" ? "Nhập kho" : "Số lượng đầu kỳ"}
+      notice="Kiểm tra phụ tùng, vị trí và số lượng trước khi xác nhận."
       movement={movement}
     >
       <form onSubmit={submit}>
@@ -208,7 +206,7 @@ function ReceivingForm({
               onChange={(event) => setForm({ ...form, quantity: event.target.value })}
             />
           </Field>
-          <Field id="receiving-reference" label="Business reference">
+          <Field id="receiving-reference" label="Mã chứng từ">
             <Input
               id="receiving-reference"
               required
@@ -218,7 +216,7 @@ function ReceivingForm({
               }
             />
           </Field>
-          <Field id="receiving-cost" label="Unit cost snapshot (tùy chọn)">
+          <Field id="receiving-cost" label="Đơn giá tại thời điểm nhập (tùy chọn)">
             <Input
               id="receiving-cost"
               type="number"
@@ -245,7 +243,7 @@ function ReceivingForm({
           error={mutation.error}
           pending={mutation.isPending}
           disabled={!form.part_id || !form.stock_location_id}
-          label={operation === "receipt" ? "Ghi receipt" : "Ghi opening balance"}
+          label={operation === "receipt" ? "Xác nhận nhập kho" : "Ghi số lượng đầu kỳ"}
         />
       </form>
       {movement && <EvidenceUpload movement={movement} defaultCategory="receipt_evidence" />}
@@ -290,8 +288,8 @@ function TransferForm({
   }
   return (
     <ActionShell
-      title="Atomic stock transfer"
-      notice="Frontend gửi đúng một command. Backend lock hai position và commit cả hai movement."
+      title="Điều chuyển phụ tùng"
+      notice="Kiểm tra kho nguồn, kho đích và số lượng trước khi xác nhận."
       movement={movement}
     >
       <form onSubmit={submit}>
@@ -333,7 +331,7 @@ function TransferForm({
               onChange={(event) => setForm({ ...form, quantity: event.target.value })}
             />
           </Field>
-          <Field id="transfer-reference" label="Business reference">
+          <Field id="transfer-reference" label="Mã chứng từ">
             <Input
               id="transfer-reference"
               required
@@ -362,7 +360,7 @@ function TransferForm({
             !form.source_stock_location_id ||
             !form.destination_stock_location_id
           }
-          label="Chuyển kho"
+          label="Xác nhận điều chuyển"
         />
       </form>
       {movement && <EvidenceUpload movement={movement} defaultCategory="transfer_evidence" />}
@@ -377,6 +375,7 @@ function AdjustmentForm({
   parts: PartOption[];
   locations: LocationOption[];
 }) {
+  const auth = useAuth();
   const mutation = useAdjustStockMutation();
   const key = useRef(createInventoryIdempotencyKey("adjustment"));
   const [movement, setMovement] = useState<InventoryMovement | null>(null);
@@ -392,6 +391,25 @@ function AdjustmentForm({
     reason: "",
     supporting_note: "",
   });
+  const selectedPart = parts.find((part) => part.id === form.part_id);
+  const balances = useInventoryBalancesQuery(
+    {
+      search: selectedPart?.part_number,
+      stock_location_id: form.stock_location_id || undefined,
+      page: 1,
+      page_size: 20,
+    },
+    Boolean(selectedPart && form.stock_location_id),
+  );
+  const currentBalance = balances.data?.items.find(
+    (item) => item.part_id === form.part_id && item.stock_location_id === form.stock_location_id,
+  );
+  const requestedQuantity = Number(form.quantity) || 0;
+  const signedQuantity = form.adjustment_type === "increase" ? requestedQuantity : -requestedQuantity;
+  const resultingOnHand = currentBalance ? currentBalance.on_hand_quantity + signedQuantity : null;
+  const resultingAvailable = currentBalance && resultingOnHand !== null
+    ? resultingOnHand - currentBalance.reserved_quantity
+    : null;
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     try {
@@ -412,8 +430,8 @@ function AdjustmentForm({
   }
   return (
     <ActionShell
-      title="Controlled adjustment"
-      notice="Giảm tồn và damaged/scrapped bị từ chối nếu làm on-hand âm hoặc thấp hơn reserved."
+      title="Điều chỉnh số lượng"
+      notice="Số lượng sau điều chỉnh không được âm hoặc thấp hơn số đã đặt trước."
       movement={movement}
     >
       <form onSubmit={submit}>
@@ -463,7 +481,7 @@ function AdjustmentForm({
               onChange={(event) => setForm({ ...form, quantity: event.target.value })}
             />
           </Field>
-          <Field id="adjustment-reference" label="Business reference">
+          <Field id="adjustment-reference" label="Mã chứng từ">
             <Input
               id="adjustment-reference"
               required
@@ -482,7 +500,7 @@ function AdjustmentForm({
             />
           </Field>
           <div className="sm:col-span-2 xl:col-span-3">
-            <Field id="adjustment-note" label="Supporting note">
+            <Field id="adjustment-note" label="Ghi chú chứng minh">
               <Textarea
                 id="adjustment-note"
                 required
@@ -494,11 +512,24 @@ function AdjustmentForm({
             </Field>
           </div>
         </div>
+        {currentBalance && requestedQuantity > 0 && resultingOnHand !== null && resultingAvailable !== null && (
+          <section aria-label="Tóm tắt điều chỉnh" className="mt-4 rounded-lg border bg-muted/30 p-4">
+            <h3 className="text-sm font-semibold">Kiểm tra trước khi xác nhận</h3>
+            <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <PreviewFact label="Tồn hiện tại" value={formatQuantity(currentBalance.on_hand_quantity, currentBalance.unit_symbol)} />
+              <PreviewFact label="Số lượng điều chỉnh" value={`${form.adjustment_type === "increase" ? "+" : "−"}${formatQuantity(requestedQuantity, currentBalance.unit_symbol)}`} />
+              <PreviewFact label="Tồn dự kiến" value={formatQuantity(resultingOnHand, currentBalance.unit_symbol)} />
+              <PreviewFact label="Khả dụng dự kiến" value={formatQuantity(resultingAvailable, currentBalance.unit_symbol)} />
+              <PreviewFact label="Người thực hiện" value={auth.user?.display_name ?? "Người dùng hiện tại"} />
+            </dl>
+            <p className="mt-3 text-xs text-muted-foreground">Hệ thống sẽ kiểm tra lại số lượng khi ghi giao dịch.</p>
+          </section>
+        )}
         <MutationFooter
           error={mutation.error}
           pending={mutation.isPending}
           disabled={!form.part_id || !form.stock_location_id}
-          label="Ghi adjustment"
+          label="Xác nhận điều chỉnh"
         />
       </form>
       {movement && (
@@ -513,6 +544,10 @@ function AdjustmentForm({
       )}
     </ActionShell>
   );
+}
+
+function PreviewFact({ label, value }: { label: string; value: string }) {
+  return <div><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 text-sm font-semibold tabular-nums">{value}</dd></div>;
 }
 
 function EvidenceUpload({
@@ -591,10 +626,10 @@ function ActionShell({
         >
           <CheckCircle2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-semibold">Đã ghi movement {movement.movement_number}</p>
+            <p className="font-semibold">Đã ghi nhận biến động {movement.movement_number}</p>
             <p className="mt-1 text-xs">
-              Resulting available: {movement.resulting_available_quantity}{" "}
-              {movement.unit_symbol}. Không có recalculation analytics tức thời.
+              Số lượng khả dụng sau giao dịch: {movement.resulting_available_quantity}{" "}
+              {movement.unit_symbol}.
             </p>
           </div>
         </div>
@@ -616,7 +651,7 @@ function PartSelect({
   parts: PartOption[];
 }) {
   return (
-    <Field id={id} label="Spare part">
+    <Field id={id} label="Phụ tùng">
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger id={id} className="w-full">
           <SelectValue placeholder="Chọn vật tư" />
@@ -635,7 +670,7 @@ function PartSelect({
 
 function LocationSelect({
   id,
-  label = "Stock location",
+  label = "Vị trí kho",
   value,
   onChange,
   locations,

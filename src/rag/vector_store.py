@@ -32,6 +32,10 @@ class VectorDimensionMismatchError(VectorStoreError):
     """Raised when embedding and collection dimensions differ."""
 
 
+class CollectionConfigurationError(VectorStoreError):
+    """Raised when an existing collection violates the retrieval contract."""
+
+
 @dataclass(frozen=True)
 class VectorSearchResult:
     """A retrieved chunk and its score."""
@@ -47,6 +51,7 @@ class VectorSearchResult:
     failure_category: str = ""
     version: str = ""
     effective_date: str = ""
+    language: str = "vi"
     chunk_index: int = 0
 
     def to_dict(self) -> dict[str, object]:
@@ -71,12 +76,21 @@ class QdrantVectorStore:
         url: str | None = None,
         collection_name: str | None = None,
         client: QdrantClient | None = None,
+        api_key: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> None:
         settings = get_settings()
         self.url = url or settings.qdrant_url
         self.collection_name = collection_name or settings.qdrant_collection
         _validate_collection_name(self.collection_name)
-        self.client = client or QdrantClient(url=self.url, timeout=5.0)
+        configured_key = api_key
+        if configured_key is None:
+            configured_key = settings.qdrant_api_key.get_secret_value()
+        self.client = client or QdrantClient(
+            url=self.url,
+            api_key=configured_key or None,
+            timeout=timeout_seconds or settings.qdrant_timeout_seconds,
+        )
 
     def create_collection(self, vector_size: int, recreate: bool = False) -> None:
         """Create the Qdrant collection if needed."""
@@ -88,20 +102,21 @@ class QdrantVectorStore:
                 self.client.delete_collection(self.collection_name)
                 exists = False
             if exists:
-                actual_size = self._collection_vector_size()
+                actual_size = self._collection_vector_size(validate_distance=True)
                 if actual_size != vector_size:
                     raise VectorDimensionMismatchError(
                         "Kích thước vector của collection không khớp embedding hiện tại. "
                         "Hãy index lại kho tài liệu."
                     )
-                return
-            self.client.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=models.VectorParams(
-                    size=vector_size,
-                    distance=models.Distance.COSINE,
-                ),
-            )
+            else:
+                self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=models.VectorParams(
+                        size=vector_size,
+                        distance=models.Distance.COSINE,
+                    ),
+                )
+            self._ensure_payload_indexes()
         except VectorStoreError:
             raise
         except Exception as exc:
@@ -122,7 +137,7 @@ class QdrantVectorStore:
         if not chunks:
             raise ValueError("At least one document chunk is required for indexing.")
 
-        expected_size = self._collection_vector_size()
+        expected_size = self._collection_vector_size(validate_distance=True)
         if any(len(vector) != expected_size for vector in vectors):
             raise VectorDimensionMismatchError(
                 "Kích thước vector không khớp collection. Hãy index lại kho tài liệu."
@@ -147,9 +162,7 @@ class QdrantVectorStore:
                     wait=True,
                 )
             except Exception as exc:
-                raise QdrantUnavailableError(
-                    "Không thể ghi tài liệu vào Qdrant."
-                ) from exc
+                raise QdrantUnavailableError("Không thể ghi tài liệu vào Qdrant.") from exc
             total += len(points)
         return total
 
@@ -179,6 +192,8 @@ class QdrantVectorStore:
         asset_type: str | None = None,
         document_type: str | None = None,
         failure_category: str | None = None,
+        version: str | None = None,
+        language: str | None = None,
     ) -> list[VectorSearchResult]:
         """Search relevant chunks with optional conjunctive metadata filters."""
 
@@ -191,7 +206,7 @@ class QdrantVectorStore:
                 raise CollectionEmptyError(
                     "Collection tài liệu đang trống. Hãy index lại kho tài liệu."
                 )
-            expected_size = self._collection_vector_size()
+            expected_size = self._collection_vector_size(validate_distance=True)
             if len(query_vector) != expected_size:
                 raise VectorDimensionMismatchError(
                     "Kích thước vector truy vấn không khớp collection. "
@@ -201,6 +216,8 @@ class QdrantVectorStore:
                 asset_type=asset_type,
                 document_type=document_type,
                 failure_category=failure_category,
+                version=version,
+                language=language,
             )
             response = self.client.query_points(
                 collection_name=self.collection_name,
@@ -212,9 +229,7 @@ class QdrantVectorStore:
         except VectorStoreError:
             raise
         except Exception as exc:
-            raise QdrantUnavailableError(
-                "Không thể truy xuất kho tài liệu Qdrant."
-            ) from exc
+            raise QdrantUnavailableError("Không thể truy xuất kho tài liệu Qdrant.") from exc
 
         results: list[VectorSearchResult] = []
         for point in response.points:
@@ -232,12 +247,127 @@ class QdrantVectorStore:
                     failure_category=str(payload.get("failure_category", "")),
                     version=str(payload.get("version", "")),
                     effective_date=str(payload.get("effective_date", "")),
+                    language=str(payload.get("language", "vi")),
                     chunk_index=int(payload.get("chunk_index", 0)),
                 )
             )
         return results
 
-    def _collection_vector_size(self) -> int:
+    def list_chunks(self, *, max_chunks: int = 10000) -> list[VectorSearchResult]:
+        """Load the bounded payload corpus once for the small-corpus BM25 index."""
+
+        if max_chunks <= 0:
+            raise ValueError("max_chunks must be positive.")
+        try:
+            if not self.client.collection_exists(self.collection_name):
+                raise CollectionMissingError(
+                    "Chưa có collection tài liệu. Hãy chạy indexing trước khi hỏi Copilot."
+                )
+            records: list[object] = []
+            offset: object | None = None
+            while True:
+                page, offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=min(256, max_chunks + 1 - len(records)),
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                records.extend(page)
+                if len(records) > max_chunks:
+                    raise VectorStoreError(
+                        "Kho tài liệu vượt giới hạn BM25 trong bộ nhớ; cần dùng sparse backend "
+                        "được quản lý trước khi tiếp tục."
+                    )
+                if offset is None:
+                    break
+        except VectorStoreError:
+            raise
+        except Exception as exc:
+            raise QdrantUnavailableError("Không thể tải chỉ mục tìm kiếm thưa từ Qdrant.") from exc
+        return [self._payload_result(getattr(record, "payload", None) or {}) for record in records]
+
+    def payloads_by_chunk_id(self, *, max_chunks: int = 100000) -> dict[str, dict[str, object]]:
+        """Return existing payloads for deterministic non-destructive synchronization."""
+
+        return {
+            result.chunk_id: result.to_dict()
+            for result in self.list_chunks(max_chunks=max_chunks)
+            if result.chunk_id
+        }
+
+    def delete_chunk_ids(self, chunk_ids: list[str]) -> int:
+        """Delete explicitly identified obsolete chunks during an authorized replace run."""
+
+        if not chunk_ids:
+            return 0
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.PointIdsList(
+                    points=[_point_id(chunk_id) for chunk_id in chunk_ids]
+                ),
+                wait=True,
+            )
+        except Exception as exc:
+            raise QdrantUnavailableError("Không thể loại bỏ chunk lỗi thời khỏi Qdrant.") from exc
+        return len(chunk_ids)
+
+    def check_health(self, *, expected_vector_size: int | None = None) -> None:
+        """Validate service reachability and the existing collection contract."""
+
+        try:
+            if not self.client.collection_exists(self.collection_name):
+                raise CollectionMissingError("Collection tài liệu chưa được index.")
+            actual_size = self._collection_vector_size(validate_distance=True)
+            if expected_vector_size is not None and actual_size != expected_vector_size:
+                raise VectorDimensionMismatchError(
+                    "Kích thước vector của collection không khớp cấu hình embedding."
+                )
+        except VectorStoreError:
+            raise
+        except Exception as exc:
+            raise QdrantUnavailableError("Không thể đọc trạng thái Qdrant.") from exc
+
+    def _payload_result(self, payload: dict[str, object]) -> VectorSearchResult:
+        return VectorSearchResult(
+            chunk_id=str(payload.get("chunk_id", "")),
+            doc_id=str(payload.get("document_id") or payload.get("doc_id", "")),
+            title=str(payload.get("title", "")),
+            doc_type=str(payload.get("document_type") or payload.get("doc_type", "")),
+            asset_type=str(payload.get("asset_type", "")),
+            source=str(payload.get("source", "")),
+            text=str(payload.get("content") or payload.get("text", "")),
+            score=0.0,
+            failure_category=str(payload.get("failure_category", "")),
+            version=str(payload.get("version", "")),
+            effective_date=str(payload.get("effective_date", "")),
+            language=str(payload.get("language", "vi")),
+            chunk_index=int(payload.get("chunk_index", 0)),
+        )
+
+    def _ensure_payload_indexes(self) -> None:
+        if getattr(self.client, "_client", None).__class__.__name__ == "QdrantLocal":
+            return
+        collection = self.client.get_collection(self.collection_name)
+        existing_schema = getattr(collection, "payload_schema", {}) or {}
+        for field_name in (
+            "asset_type",
+            "document_type",
+            "failure_category",
+            "version",
+            "language",
+        ):
+            if field_name in existing_schema:
+                continue
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name=field_name,
+                field_schema=models.PayloadSchemaType.KEYWORD,
+                wait=True,
+            )
+
+    def _collection_vector_size(self, *, validate_distance: bool = False) -> int:
         try:
             collection = self.client.get_collection(self.collection_name)
             vectors = collection.config.params.vectors
@@ -252,6 +382,10 @@ class QdrantVectorStore:
                 raise VectorDimensionMismatchError(
                     "Không đọc được kích thước vector của collection."
                 )
+            if validate_distance and getattr(vectors, "distance", None) != models.Distance.COSINE:
+                raise CollectionConfigurationError(
+                    "Collection Qdrant phải dùng cosine similarity; không tự động recreate."
+                )
             return size
         except VectorStoreError:
             raise
@@ -264,11 +398,15 @@ def _metadata_filter(
     asset_type: str | None,
     document_type: str | None,
     failure_category: str | None,
+    version: str | None = None,
+    language: str | None = None,
 ) -> models.Filter | None:
     values = {
         "asset_type": asset_type,
         "document_type": document_type,
         "failure_category": failure_category,
+        "version": version,
+        "language": language,
     }
     conditions = [
         models.FieldCondition(key=key, match=models.MatchValue(value=value))

@@ -43,22 +43,22 @@ export function UserManagement() {
       {canCreate ? (
         <CreateUserForm roles={roles.data} />
       ) : (
-        <PermissionDeniedNotice message="Bạn có thể xem nhưng không có permission tạo người dùng." />
+        <PermissionDeniedNotice message="Bạn có thể xem nhưng không có quyền tạo người dùng." />
       )}
       <div className="overflow-hidden rounded-lg border bg-white">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
+        <div className="lg:overflow-x-auto">
+          <Table className="block lg:table">
+            <TableHeader className="hidden lg:table-header-group">
               <TableRow>
                 <TableHead>Người dùng</TableHead>
                 <TableHead>Vai trò</TableHead>
-                <TableHead>Technician ID</TableHead>
+                <TableHead>Mã kỹ thuật viên</TableHead>
                 <TableHead>Trạng thái</TableHead>
                 <TableHead>Lần đăng nhập cuối</TableHead>
                 <TableHead className="text-right">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="block space-y-3 p-3 lg:table-row-group lg:space-y-0 lg:p-0">
               {users.data.map((user) => (
                 <UserRow key={user.id} user={user} roles={roles.data} />
               ))}
@@ -106,7 +106,7 @@ function CreateUserForm({ roles }: { roles: RoleOption[] }) {
       <CardHeader><CardTitle className="text-base">Tạo người dùng nội bộ</CardTitle></CardHeader>
       <CardContent>
         <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" onSubmit={(event) => void submit(event)}>
-          <Field label="Username"><Input value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} /></Field>
+          <Field label="Tên đăng nhập"><Input value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} /></Field>
           <Field label="Tên hiển thị"><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required minLength={2} /></Field>
           <Field label="Email (tùy chọn)"><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></Field>
           <Field label="Mật khẩu ban đầu"><Input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} /></Field>
@@ -116,7 +116,7 @@ function CreateUserForm({ roles }: { roles: RoleOption[] }) {
               <SelectContent>{roles.map((option) => <SelectItem key={option.code} value={option.code}>{option.display_name}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          {role === "technician" && <Field label="Technician ID"><Input value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} required /></Field>}
+          {role === "technician" && <Field label="Mã kỹ thuật viên"><Input value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} required /></Field>}
           <div className="flex items-end">
             <Button type="submit" disabled={mutation.isPending}>
               {mutation.isPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <UserPlus aria-hidden="true" />}
@@ -140,24 +140,42 @@ function UserRow({ user, roles }: { user: UserResponse; roles: RoleOption[] }) {
   const canUpdate = auth.can(permissions.usersUpdate);
 
   return (
-    <TableRow>
-      <TableCell><p className="font-medium">{user.display_name}</p><p className="text-xs text-muted-foreground">{user.username}{user.email ? ` · ${user.email}` : ""}</p></TableCell>
-      <TableCell>
+    <TableRow className="grid grid-cols-2 gap-4 rounded-lg border bg-card p-4 shadow-sm lg:table-row lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+      <TableCell className="col-span-2 block whitespace-normal p-0 lg:table-cell lg:p-2 lg:whitespace-nowrap"><p className="font-medium">{user.display_name}</p><p className="text-xs text-muted-foreground">{user.username}{user.email ? ` · ${user.email}` : ""}</p></TableCell>
+      <TableCell className="col-span-2 block whitespace-normal p-0 sm:col-span-1 lg:table-cell lg:p-2 lg:whitespace-nowrap">
+        <MobileFieldLabel>Vai trò</MobileFieldLabel>
         <Select value={role} onValueChange={(value) => setRole(value as RoleCode)} disabled={!canUpdate}>
-          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full lg:w-44"><SelectValue /></SelectTrigger>
           <SelectContent>{roles.map((option) => <SelectItem key={option.code} value={option.code}>{option.display_name}</SelectItem>)}</SelectContent>
         </Select>
       </TableCell>
-      <TableCell><Input className="w-32" value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} disabled={!canUpdate || role !== "technician"} placeholder="Không áp dụng" /></TableCell>
-      <TableCell><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} disabled={!canUpdate || user.id === auth.user?.id} /><Badge variant={active ? "outline" : "secondary"}>{active ? "Đang hoạt động" : "Đã vô hiệu"}</Badge></label></TableCell>
-      <TableCell className="text-xs text-muted-foreground">{user.last_login_at ? formatTimestamp(user.last_login_at) : "Chưa đăng nhập"}</TableCell>
-      <TableCell className="text-right">
-        <Button type="button" variant="outline" size="sm" disabled={!canUpdate || mutation.isPending} onClick={() => mutation.mutate({ role, is_active: active, technician_id: role === "technician" ? technicianId : null })}>
+      <TableCell className="col-span-2 block whitespace-normal p-0 sm:col-span-1 lg:table-cell lg:p-2 lg:whitespace-nowrap">
+        <MobileFieldLabel>Mã kỹ thuật viên</MobileFieldLabel>
+        <Input className="w-full lg:w-32" value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} disabled={!canUpdate || role !== "technician"} placeholder="Không áp dụng" />
+      </TableCell>
+      <TableCell className="block whitespace-normal p-0 lg:table-cell lg:p-2 lg:whitespace-nowrap">
+        <MobileFieldLabel>Trạng thái</MobileFieldLabel>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} disabled={!canUpdate || user.id === auth.user?.id} /><Badge variant={active ? "outline" : "secondary"}>{active ? "Đang hoạt động" : "Đã vô hiệu"}</Badge></label>
+      </TableCell>
+      <TableCell className="block whitespace-normal p-0 text-xs text-muted-foreground lg:table-cell lg:p-2 lg:whitespace-nowrap">
+        <MobileFieldLabel>Lần đăng nhập cuối</MobileFieldLabel>
+        {user.last_login_at ? formatTimestamp(user.last_login_at) : "Chưa đăng nhập"}
+      </TableCell>
+      <TableCell className="col-span-2 block whitespace-normal p-0 text-right lg:table-cell lg:p-2 lg:whitespace-nowrap">
+        <Button className="w-full lg:w-auto" type="button" variant="outline" size="sm" disabled={!canUpdate || mutation.isPending} onClick={() => mutation.mutate({ role, is_active: active, technician_id: role === "technician" ? technicianId : null })}>
           {mutation.isPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}Lưu
         </Button>
-        {mutation.isError && <p className="mt-1 max-w-48 text-xs text-red-700">{getApiErrorMessage(mutation.error)}</p>}
+        {mutation.isError && <p className="mt-1 text-xs text-red-700 lg:max-w-48">{getApiErrorMessage(mutation.error)}</p>}
       </TableCell>
     </TableRow>
+  );
+}
+
+function MobileFieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mb-1 block text-xs font-medium text-muted-foreground lg:hidden">
+      {children}
+    </span>
   );
 }
 

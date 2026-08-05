@@ -1,18 +1,18 @@
-"""CLI for asking the deterministic Maintenance Copilot."""
+"""CLI for asking the grounded Maintenance Copilot with safe fallback."""
 
 from __future__ import annotations
 
 import argparse
 import sys
 
-from src.api.services import AssetNotFoundError, ProcessedDataNotFoundError
-from src.rag.copilot import get_copilot_service
+from src.api.composition import get_copilot_service
+from src.analytics.errors import AssetNotFoundError, ProcessedDataNotFoundError
 from src.rag.embeddings import EmbeddingDependencyError
 from src.rag.vector_store import VectorStoreError
 
 
 def main() -> None:
-    """Ask the Maintenance Copilot from the command line."""
+    """Ask the optionally LLM-grounded Maintenance Copilot from the command line."""
 
     _configure_stdout()
     parser = argparse.ArgumentParser(description="Ask the RAG Maintenance Copilot.")

@@ -63,7 +63,10 @@ describe("live maintenance workflow forms", () => {
     const onWrite = vi.fn();
     const fetchMock = mockApi({
       "GET /tickets/TCK-000041/work-orders": [],
-      "PATCH /tickets/TCK-000041": async (_input, init) => {
+      "PATCH /tickets/TCK-000041": async (
+        _input: string | URL | Request,
+        init?: RequestInit,
+      ) => {
         const request = JSON.parse(String(init?.body));
         return { body: { ...ticketsFixture[0], ...request }, status: 200 };
       },
@@ -86,7 +89,10 @@ describe("live maintenance workflow forms", () => {
   it("derives IDs, chronology and follow-up, then shows the next-batch notice", async () => {
     const onSaved = vi.fn();
     const fetchMock = mockApi({
-      "POST /maintenance/logs": async (_input, init) => {
+      "POST /maintenance/logs": async (
+        _input: string | URL | Request,
+        init?: RequestInit,
+      ) => {
         const request = JSON.parse(String(init?.body));
         return {
           body: {

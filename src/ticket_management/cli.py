@@ -3,17 +3,11 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-from uuid import uuid4
-
-from sqlalchemy import select
+from datetime import datetime
 
 from src.config.settings import get_settings
-from src.database.models import User
-from src.database.session import get_session_factory
 from src.security.audit import AuditContext
-from src.security.permissions import Role, permissions_for_role
-from src.security.service import CurrentUser
+from src.security.cli_context import load_cli_actor
 from src.ticket_management.service import build_ticket_workflow_service
 
 
@@ -33,7 +27,7 @@ def main() -> None:
     settings = get_settings()
     if settings.storage_backend != "postgresql":
         raise SystemExit("Ticket operations CLI requires STORAGE_BACKEND=postgresql.")
-    actor = _load_actor(args.actor_username)
+    actor = load_cli_actor(args.actor_username)
     service = build_ticket_workflow_service()
     context = AuditContext(
         actor_user_id=actor.id,
@@ -56,30 +50,6 @@ def main() -> None:
     print(f"Created: {report['created_count']}")
     for item in report["candidates"]:
         print(f"- {item['ticket_id']}: {item['rule_code']}")
-
-
-def _load_actor(username: str) -> CurrentUser:
-    settings = get_settings()
-    with get_session_factory(settings.database_url)() as session:
-        user = session.scalar(select(User).where(User.username == username.strip().lower()))
-        if user is None or not user.is_active:
-            raise SystemExit(f"Active user not found: {username}")
-        now = datetime.now(timezone.utc)
-        return CurrentUser(
-            id=user.id,
-            username=user.username,
-            email=user.email,
-            display_name=user.display_name,
-            role=Role(user.role),
-            permissions=permissions_for_role(user.role),
-            technician_id=user.technician_id,
-            is_active=user.is_active,
-            version=user.version,
-            session_id=uuid4(),
-            created_at=user.created_at,
-            updated_at=user.updated_at,
-            last_login_at=user.last_login_at or now,
-        )
 
 
 if __name__ == "__main__":

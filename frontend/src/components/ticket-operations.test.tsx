@@ -8,6 +8,7 @@ import { TicketIntakeForm } from "@/components/ticket-intake-form";
 import { TicketOperationsDetail } from "@/components/ticket-operations-detail";
 import { permissions } from "@/lib/auth";
 import type { UserResponse } from "@/lib/api/schemas";
+import type { TicketDetail } from "@/lib/api/ticketing-schemas";
 import { assetDetailsFixture, assetsFixture } from "@/test/fixtures";
 import {
   administratorTestUser,
@@ -22,7 +23,10 @@ describe("PM5 ticket intake and queues", () => {
       "/ticketing/options": ticketingOptionsFixture,
       "/assets": assetsFixture,
       "/ticketing/priority-preview": priorityPreviewFixture,
-      "POST /tickets/intake": async (_input, init) => {
+      "POST /tickets/intake": async (
+        _input: string | URL | Request,
+        init?: RequestInit,
+      ) => {
         postedBody = JSON.parse(String(init?.body));
         return { body: ticketDetailFixture, status: 201 };
       },
@@ -30,10 +34,10 @@ describe("PM5 ticket intake and queues", () => {
     renderWithQuery(<TicketIntakeForm initialAssetId="GENERATOR_002" />);
 
     expect(
-      await screen.findByText("Backend impact × urgency matrix"),
+      await screen.findByText("Tính từ ảnh hưởng và độ khẩn cấp"),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Trung bình").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Tạo ticket" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lưu phiếu sự cố" }));
     expect(
       await screen.findByText("Mô tả cần ít nhất 5 ký tự."),
     ).toBeInTheDocument();
@@ -46,9 +50,10 @@ describe("PM5 ticket intake and queues", () => {
         value: "Máy phát có điện áp không ổn định trong lần chạy thử.",
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Tạo ticket" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lưu phiếu sự cố" }));
 
-    expect(await screen.findByText("Đã tạo TCK-000100")).toBeInTheDocument();
+    expect(await screen.findByText("Đã lưu phiếu sự cố")).toBeInTheDocument();
+    expect(screen.getByText(/Mã phiếu: TCK-000100/)).toBeInTheDocument();
     expect(postedBody).not.toHaveProperty("priority");
     expect(postedBody).toMatchObject({
       asset_id: "GENERATOR_002",
@@ -70,7 +75,7 @@ describe("PM5 ticket intake and queues", () => {
     fireEvent.change(screen.getByLabelText("Tìm kiếm"), {
       target: { value: "GENERATOR_002" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Áp dụng" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lọc danh sách" }));
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([input]) =>
@@ -79,7 +84,12 @@ describe("PM5 ticket intake and queues", () => {
       ).toBe(true),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Sắp đến hạn SLA" }));
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Nhóm cần xử lý" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Sắp đến hạn SLA" }),
+    );
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([input]) =>
@@ -134,7 +144,10 @@ describe("PM5 ticket detail", () => {
       "/assets/GENERATOR_002/details": assetDetailsFixture,
       "/tickets/TCK-000100/work-orders": [],
       "/tickets/TCK-000100": () => current,
-      "POST /tickets/TCK-000100/comments": async (_input, init) => {
+      "POST /tickets/TCK-000100/comments": async (
+        _input: string | URL | Request,
+        init?: RequestInit,
+      ) => {
         const request = JSON.parse(String(init?.body));
         const comment = {
           id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -377,7 +390,7 @@ const priorityPreviewFixture = {
   priority_display: "Trung bình",
 };
 
-const ticketDetailFixture = {
+const ticketDetailFixture: TicketDetail = {
   ticket_id: "TCK-000100",
   asset_id: "GENERATOR_002",
   issue_description: "Máy phát có điện áp không ổn định khi chạy thử.",
@@ -472,7 +485,7 @@ const ticketDetailFixture = {
   sla_events: [],
   escalations: [],
   linked_work_orders: [],
-} as const;
+};
 
 function queueFixture(queue: "unassigned" | "due_soon", label: string) {
   return {

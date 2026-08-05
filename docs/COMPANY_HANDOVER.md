@@ -1,0 +1,178 @@
+# Company Handover
+
+## Handover Status
+
+This repository is suitable for developer handover and controlled local demonstration after the documented setup. PostgreSQL integration, live Qdrant, a real Ollama provider, the full development Compose stack, and the authenticated multi-role workflow were exercised on an isolated local `_test` environment. It is still not a production acceptance package. Company owner assignments, approved secrets/provider, intended-host rehearsal, recovery evidence, support coverage, dependency remediation, and known-limitation acceptance remain external gates.
+
+## System Ownership Map
+
+| Area | Canonical owner in code |
+|---|---|
+| FastAPI composition and legacy analytics API | `src/api/` |
+| Identity, RBAC, sessions, audit dependencies | `src/security/` |
+| Asset lifecycle/files/QR | `src/asset_management/`, `postgres_assets.py` |
+| Ticket lifecycle/SLA/escalation | `src/ticket_management/`, `postgres_tickets.py` |
+| Preventive plans/work orders/logs | `src/maintenance_management/`, `postgres_maintenance.py` |
+| Spare parts/stock ledger | `src/inventory_management/`, `postgres_inventory.py` |
+| Only worker/jobs/outbox/notifications | `src/operations/`, `postgres_operations.py` |
+| PostgreSQL schema | `src/database/models.py`, `migrations/` |
+| Batch analytics | `src/features/`, `src/models/anomaly_detection.py`, `src/risk/risk_scoring.py` |
+| RAG retrieval/orchestration | `src/rag/` |
+| LLM provider/prompt/parser/citations | `src/llm/` |
+| Next.js workflows | `frontend/src/` |
+| Reliability/rehearsal | `src/reliability/`, `deployment/`, PM9 docs |
+
+## Non-Negotiable Architecture Rules
+
+- PostgreSQL remains transactional truth; no silent CSV write fallback.
+- Every schema change uses Alembic; startup never calls `metadata.create_all()`.
+- Analytics remains batch-first.
+- `src/operations/worker.py` remains the only worker and accepts only four cataloged operations.
+- Notifications remain in-app only.
+- Service boundaries own lifecycle/stock rules; routes/frontends never mutate models/balances directly.
+- Work-order completion/verification never resolves a ticket or silently changes stock.
+- Qdrant is only for controlled document retrieval.
+- LLM output is never executed or persisted as authoritative business state.
+- Human authorized users remain responsible for safety and final decisions.
+
+## Fresh Local Development Setup
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dashboard,dev,rag,postgres]"
+npm --prefix frontend ci
+Copy-Item .env.example .env
+docker compose up -d postgres qdrant
+python -m alembic upgrade head
+python -m src.ingestion.load_data
+python -m src.rag.index_documents
+python -m src.security.cli seed-demo-users
+```
+
+Then start API, frontend, and optionally worker with the commands in README/operations runbook.
+
+## Full Development Compose
+
+```powershell
+docker compose up --build
+docker compose --profile worker up --build
+```
+
+The main Compose migration service applies Alembic before API startup. Seed/import, identity creation, maintenance/inventory seed, and document indexing remain explicit commands to prevent hidden data mutations.
+
+The stricter intended-pilot topology is `docker-compose.pilot.yml`; do not treat the development Compose file as production configuration.
+
+## LLM Operations
+
+Generation is off by default. To enable:
+
+1. Approve provider/model and data handling.
+2. Configure `LLM_ENABLED`, `LLM_PROVIDER`, `LLM_MODEL`, and `LLM_BASE_URL`.
+3. Inject `LLM_API_KEY` only when required.
+4. Run `python -m src.llm.smoke`.
+5. Run `python -m evaluation.run_evaluation --backend configured-qdrant --mode rag-llm`.
+6. Review fallback rate and every small-dataset answer before demo/pilot.
+
+Ollama should be preferred for offline/local defense. No model is pinned because hardware and approved model choice are owner decisions; record the selected model/version in release evidence.
+
+## Knowledge Corpus
+
+The current source is `data/raw/documents.csv`. Re-index with:
+
+```powershell
+python -m src.rag.index_documents
+```
+
+Stable chunk/point IDs prevent duplicates for unchanged documents. Rebuild/recreate is an explicit operator action. There is no web KB admin or persisted active/superseded lifecycle; do not accept arbitrary uploads through a new route without a full metadata, storage, audit, and migration design.
+
+## Verification Checklist
+
+```powershell
+python -m compileall -q src tests evaluation
+python -m pytest
+python -m ruff check .
+python -m alembic heads
+docker compose config --quiet
+docker compose --env-file .env.pilot.example -f docker-compose.pilot.yml config --quiet
+npm --prefix frontend run lint
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+python -m evaluation.run_evaluation --mode deterministic
+python -m evaluation.run_evaluation --backend configured-qdrant --mode rag-llm
+```
+
+PostgreSQL integration:
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@localhost:5432/<name>_test"
+python -m alembic -x database_url=$env:TEST_DATABASE_URL upgrade head
+python -m pytest -m postgres
+```
+
+Use only a dedicated database whose name ends in `_test`. Follow the repository’s actual test-database helper/commands; never run destructive setup against demo data.
+
+Authenticated graduation rehearsal:
+
+```powershell
+$env:TEST_DATABASE_URL = "<protected PostgreSQL URL ending _test>"
+$env:DEMO_USER_PASSWORD = "<temporary test password>"
+python -m src.reliability.graduation_demo_smoke
+```
+
+The runner verifies API database fingerprint attestation before login and never persists credentials or tokens. See [Runtime verification](RUNTIME_VERIFICATION.md) for the executed commands and results.
+
+## Backup, Recovery, And Release
+
+See:
+
+- [Operations runbook](operations_runbook.md)
+- [Backup and restore](backup_restore.md)
+- [Failure recovery](failure_recovery.md)
+- [Pilot deployment](pilot_deployment.md)
+- [Secret rotation](pilot_secret_rotation.md)
+- [Operational ownership](operational_ownership.md)
+- [Known limitations](known_limitations_acceptance.md)
+
+Do not mark a real pilot GO based only on local/synthetic tests. Use the three-gate PM9 record and owner approvals.
+
+## Monitoring And Troubleshooting
+
+- `/health/live`: process liveness.
+- `/health/ready`: primary storage/migration readiness.
+- `/health/worker`: persisted heartbeat readiness.
+- Operations pages/API: job execution, dead letters, outbox, notifications, metrics.
+- Provider smoke: fixed structured output only, without maintenance/user data.
+- Copilot fallback reasons: fixed categories; do not enable raw prompt/response logging during incident diagnosis.
+
+Troubleshooting: [troubleshooting.md](troubleshooting.md).
+
+## Known Handover Risks
+
+| Severity | Risk | Required owner action |
+|---|---|---|
+| High | No approved production/pilot provider and data contract | Select local/hosted provider, retention/residency, key owner |
+| High | PostgreSQL/attachments single-node and incomplete real restore evidence | Approve backup target, cadence, paired restore rehearsal |
+| High | No SSO/MFA/shared rate limit/malware scanning | Accept internal-only boundary or fund production controls |
+| High | No real corpus/model accuracy evidence | Supply approved documents and human-labeled evaluation |
+| High | Next-owned PostCSS/Sharp advisories remain in the production tree | Track a stable Next release supporting patched dependency floors; do not force downgrade/overrides |
+| Medium | Python/RAG Docker image is 9.16 GB and slow to unpack on Docker Desktop | Split/build-cache dependencies and measure a smaller supported runtime image without removing local embeddings |
+| Medium | Oversized service/repository/frontend modules | Refactor incrementally along bounded contexts with tests |
+| Medium | No central logs/alerts/on-call | Assign operations owner and platform |
+| Medium | KB lifecycle is CLI/CSV-only | Design persisted document registry before admin upload UI |
+| Medium | Citation validation is structural, not semantic | Add human claim/span judgments; keep human verification |
+
+## First Week For A New Team
+
+1. Run all local checks and reproduce the deterministic evaluation.
+2. Reproduce the dedicated `_test` migration, 73 PostgreSQL tests, and authenticated graduation smoke from the runtime record.
+3. Walk through asset → ticket → work order → inventory → explicit resolve.
+4. Read architecture, data contract, business process, RAG/LLM design, and security review.
+5. Decide provider/model and run a privacy-approved grounded evaluation.
+6. Assign company owner/security/incident/support/backup responsibilities.
+7. Only then schedule an intended-host rehearsal.
+
+## Acceptance Sign-Off
+
+Technical handover should record commit/tag, Alembic head, frontend lockfile hash, selected provider/model, test counts, skipped/external limitations, backup evidence, and named owners. A technical document cannot substitute for company authorization or production risk acceptance.

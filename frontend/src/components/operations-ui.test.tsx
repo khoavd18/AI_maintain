@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   NotificationCenter,
   notificationHref,
+  presentNotificationText,
 } from "@/components/notification-center";
 import { JobOperationsWorkspace } from "@/components/job-operations-workspace";
 import { NotificationWorkspace } from "@/components/notification-workspace";
@@ -80,6 +81,16 @@ const execution: JobExecution = {
 };
 
 describe("notification UI", () => {
+  it("presents catalog terminology in Vietnamese while preserving identifiers", () => {
+    expect(
+      presentNotificationText(
+        "Work order WO-001 của asset GENERATOR_002; Batch analytics có 2 occurrence.",
+      ),
+    ).toBe(
+      "Lệnh công việc WO-001 của thiết bị GENERATOR_002; Đợt phân tích dữ liệu có 2 kỳ bảo trì.",
+    );
+  });
+
   it("shows unread count and private notification actions", async () => {
     const fetchMock = mockApi({
       "/notifications/unread-count": { unread_count: 1 },
@@ -102,7 +113,7 @@ describe("notification UI", () => {
     });
     fireEvent.click(trigger);
 
-    expect(await screen.findByText(notification.body)).toBeInTheDocument();
+    expect(await screen.findByText("Phiếu sự cố TKT-PM7-001 của thiết bị GENERATOR_002 đã được phân công cho bạn.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Đánh dấu đã đọc" }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -124,7 +135,16 @@ describe("notification UI", () => {
     });
     renderWithQuery(<NotificationWorkspace />);
 
-    expect(await screen.findByText(notification.body)).toBeInTheDocument();
+    expect(await screen.findByText("Phiếu sự cố TKT-PM7-001 của thiết bị GENERATOR_002 đã được phân công cho bạn.")).toBeInTheDocument();
+    const detailLink = screen.getByRole("link", { name: "Mở chi tiết" });
+    expect(detailLink).toHaveAttribute("data-variant", "default");
+    const secondaryActions = screen.getByText("Thao tác khác").closest("details");
+    expect(secondaryActions).not.toBeNull();
+    expect(secondaryActions).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("Thao tác khác"));
+    expect(secondaryActions).toHaveAttribute("open");
+    expect(screen.getByRole("button", { name: "Đánh dấu đã đọc" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Ẩn thông báo" })).toBeVisible();
     fireEvent.click(
       screen.getByRole("button", { name: "Đánh dấu tất cả đã đọc" }),
     );
@@ -194,7 +214,10 @@ describe("job operations UI", () => {
     });
 
     renderWithQuery(<JobOperationsWorkspace />);
-    expect(await screen.findByText(job.display_name)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Đánh giá SLA và chuyển cấp cảnh báo"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(job.job_key)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Chạy thủ công" }));
 
     await waitFor(() =>
@@ -248,8 +271,8 @@ describe("job operations UI", () => {
         age_seconds: 1,
       },
       "POST /operations/jobs/sla_escalation/trigger": (
-        _input,
-        init,
+        _input: string | URL | Request,
+        init?: RequestInit,
       ) => {
         keys.push(new Headers(init?.headers).get("Idempotency-Key") ?? "");
         triggerAttempt += 1;

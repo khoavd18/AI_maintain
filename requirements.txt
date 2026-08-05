@@ -1,1 +1,1 @@
--e .[dev,rag,postgres]
+-e .[dashboard,dev,rag,postgres]

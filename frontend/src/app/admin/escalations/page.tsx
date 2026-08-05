@@ -5,11 +5,11 @@ export default function EscalationsPage() {
   return (
     <>
       <PageHeader
-        title="Escalation"
+        title="Cảnh báo SLA"
         description="Đánh giá deterministic và idempotent các ticket critical, due soon, breached hoặc reopened nhiều lần."
         breadcrumbs={[
-          { label: "Phiếu sự cố", href: "/tickets" },
-          { label: "Escalation" },
+          { label: "Sự cố", href: "/tickets" },
+          { label: "Cảnh báo SLA" },
         ]}
       />
       <EscalationDashboard />

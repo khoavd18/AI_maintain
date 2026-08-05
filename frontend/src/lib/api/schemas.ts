@@ -534,15 +534,42 @@ export const maintenanceLogCreateResponseSchema = maintenanceLogRecordSchema;
 export const copilotRetrievalStatusSchema = z.enum([
   "success",
   "relevant",
+  "conversation",
   "unrelated",
   "unsupported_asset_type",
   "missing_asset_context",
   "unavailable",
   "empty",
   "low_relevance",
+  "asset_context_mismatch",
+  "prompt_injection",
+  "unsafe_operation",
+  "unsafe_conversation",
+  "unsafe_context",
+  "conflicting_evidence",
+  "insufficient_evidence",
 ]);
 
-export const copilotRelevanceStatusSchema = z.enum(["relevant", "not_relevant"]);
+export const copilotRelevanceStatusSchema = z.enum(["relevant", "not_relevant", "not_applicable"]);
+export const copilotResponseModeSchema = z.enum([
+  "llm_grounded",
+  "llm_conversation",
+  "deterministic_fallback",
+]);
+export const copilotEvidenceStatusSchema = z.enum([
+  "sufficient",
+  "limited",
+  "insufficient",
+  "not_applicable",
+]);
+
+const copilotConversationContextSchema = z.object({
+  recent_intent: z.string().trim().max(40).nullable().optional(),
+  resolved_asset_type: z.string().trim().max(80).nullable().optional(),
+  resolved_failure_category: z.string().trim().max(80).nullable().optional(),
+  previous_source_ids: z.array(z.string().regex(/^S[1-9][0-9]{0,2}$/)).max(10).default([]),
+  previous_answer_summary: z.string().trim().max(600).default(""),
+}).strict();
 
 export const copilotAskRequestSchema = z.object({
   question: z.string().trim().min(1, "Câu hỏi không được để trống.").max(1000),
@@ -550,6 +577,9 @@ export const copilotAskRequestSchema = z.object({
   top_k: z.number().int().min(1).max(20).default(5),
   document_type: z.string().trim().min(1).max(100).nullable().optional(),
   failure_category: z.string().trim().min(1).max(200).nullable().optional(),
+  version: z.string().trim().min(1).max(40).nullable().optional(),
+  language: z.string().regex(/^[a-z]{2,3}(?:-[A-Z]{2})?$/).nullable().optional(),
+  conversation_context: copilotConversationContextSchema.nullable().optional(),
 });
 
 export const copilotSourceSchema = z.object({
@@ -562,8 +592,10 @@ export const copilotSourceSchema = z.object({
   failure_category: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   effective_date: z.string().nullable().optional(),
+  language: z.string().nullable().optional(),
   source: requiredStringSchema,
   score: z.number(),
+  citation_ids: z.array(requiredStringSchema).default([]),
 });
 
 export const copilotRetrievedChunkSchema = z.object({
@@ -577,11 +609,39 @@ export const copilotRetrievedChunkSchema = z.object({
   failure_category: z.string().nullable().optional(),
   version: z.string().nullable().optional(),
   effective_date: z.string().nullable().optional(),
+  language: z.string().nullable().optional(),
   source: z.string().optional(),
   score: z.number().optional(),
   text: z.string().optional(),
   content: z.string().optional(),
   chunk_index: z.number().int().nonnegative().optional(),
+  citation_id: z.string().nullable().optional(),
+});
+
+const copilotCitedStatementSchema = z.object({
+  text: requiredStringSchema,
+  source_ids: z.array(requiredStringSchema).min(1),
+});
+
+const copilotStructuredAnswerSchema = z.object({
+  summary: requiredStringSchema,
+  summary_source_ids: z.array(requiredStringSchema).min(1),
+  possible_causes: z.array(copilotCitedStatementSchema),
+  recommended_checks: z.array(copilotCitedStatementSchema),
+  safety_warnings: z.array(copilotCitedStatementSchema),
+  escalation_required: z.boolean(),
+  source_ids: z.array(requiredStringSchema).min(1),
+  confidence: z.enum(["low", "medium", "high"]),
+  insufficient_evidence: z.boolean(),
+});
+
+const copilotCitationValidationSchema = z.object({
+  valid: z.boolean(),
+  cited_source_ids: z.array(requiredStringSchema),
+  invalid_source_ids: z.array(requiredStringSchema),
+  coverage_complete: z.boolean(),
+  support_complete: z.boolean().optional(),
+  unsupported_claims: z.array(requiredStringSchema).optional(),
 });
 
 export const copilotAskResponseSchema = z.object({
@@ -593,6 +653,15 @@ export const copilotAskResponseSchema = z.object({
   relevance_status: copilotRelevanceStatusSchema,
   safety_notice: z.string(),
   filters_applied: z.record(z.string(), z.string()),
+  response_mode: copilotResponseModeSchema.default("deterministic_fallback"),
+  fallback_reason: z.string().nullable().default(null),
+  structured_answer: copilotStructuredAnswerSchema.nullable().default(null),
+  llm_provider: z.string().nullable().default(null),
+  llm_model: z.string().nullable().default(null),
+  evidence_status: copilotEvidenceStatusSchema.default("insufficient"),
+  citation_validation: copilotCitationValidationSchema.nullable().default(null),
+  context_warnings: z.array(requiredStringSchema).default([]),
+  confidence: z.enum(["high", "medium", "low", "insufficient_evidence", "not_applicable"]).optional(),
 });
 
 export const assetDetailsResponseSchema = z.object({
@@ -742,6 +811,8 @@ export type CopilotAskResponse = z.infer<typeof copilotAskResponseSchema>;
 export type CopilotSource = z.infer<typeof copilotSourceSchema>;
 export type CopilotRetrievedChunk = z.infer<typeof copilotRetrievedChunkSchema>;
 export type CopilotRetrievalStatus = z.infer<typeof copilotRetrievalStatusSchema>;
+export type CopilotResponseMode = z.infer<typeof copilotResponseModeSchema>;
+export type CopilotEvidenceStatus = z.infer<typeof copilotEvidenceStatusSchema>;
 export type BackendErrorResponse = z.infer<typeof backendErrorResponseSchema>;
 export type RoleCode = z.infer<typeof roleCodeSchema>;
 export type UserResponse = z.infer<typeof userResponseSchema>;
