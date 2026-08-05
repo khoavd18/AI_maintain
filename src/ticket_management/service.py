@@ -24,10 +24,10 @@ from src.repositories.postgres_tickets import PostgresTicketRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission, Role
 from src.security.service import CurrentUser
+from src.ticket_management.application.catalogue_service import TicketCatalogueService
 from src.ticket_management.domain import (
     ACTIVE_TICKET_STATUSES,
     ASSIGNABLE_STATUSES,
-    COMMENT_VISIBILITY_LABELS,
     ESCALATION_RULE_LABELS,
     IMPACT_LABELS,
     LEGACY_STATUS_LABELS,
@@ -47,7 +47,6 @@ from src.ticket_management.domain import (
     Urgency,
     calculate_priority,
     legacy_priority_dimensions,
-    priority_matrix_values,
 )
 from src.ticket_management.sla import (
     BusinessCalendarDefinition,
@@ -84,38 +83,13 @@ class TicketWorkflowService:
 
     def __init__(self, repository: PostgresTicketRepository) -> None:
         self.repository = repository
+        self.catalogue = TicketCatalogueService(repository, self._require_permission)
 
     def options(self, *, actor: CurrentUser) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_READ)
-        references = self.repository.reference_options()
-        return {
-            **references,
-            "statuses": _options(TICKET_STATUS_LABELS),
-            "impacts": _options(IMPACT_LABELS),
-            "urgencies": _options(URGENCY_LABELS),
-            "priorities": _options(PRIORITY_LABELS),
-            "comment_visibilities": _options(COMMENT_VISIBILITY_LABELS),
-            "sla_statuses": _options(SLA_STATUS_LABELS),
-            "queues": _options(TICKET_QUEUE_LABELS),
-            "failure_categories": [
-                {"code": code, "display_name": label}
-                for code, label in FAILURE_TYPE_CODE_TO_VI.items()
-            ],
-            "priority_matrix": priority_matrix_values(),
-        }
+        return self.catalogue.options(actor=actor)
 
     def priority_preview(self, *, impact: str, urgency: str) -> dict[str, str]:
-        selected_impact = Impact(impact)
-        selected_urgency = Urgency(urgency)
-        priority = calculate_priority(selected_impact, selected_urgency)
-        return {
-            "impact": selected_impact.value,
-            "impact_display": IMPACT_LABELS[selected_impact],
-            "urgency": selected_urgency.value,
-            "urgency_display": URGENCY_LABELS[selected_urgency],
-            "priority": priority.value,
-            "priority_display": PRIORITY_LABELS[priority],
-        }
+        return self.catalogue.priority_preview(impact=impact, urgency=urgency)
 
     def intake(
         self,

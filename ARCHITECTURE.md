@@ -63,9 +63,9 @@ src/operations/worker.py --> four allow-listed jobs --> the same domain services
 |---|---|---|
 | Transport | `src/api/routes.py` compatibility facade, `src/api/routers/`, domain `routes.py`, `src/security/routes.py`, `src/operations/routes.py` | Validate HTTP input, enforce route permission, call services, map known errors |
 | Asset lifecycle | `src/asset_management/service.py` | Own lifecycle, hierarchy, attachment, and QR rules |
-| Tickets and SLA | `src/ticket_management/service.py`, `sla.py`, `domain.py` | Own named lifecycle actions, priority, clocks, and escalation |
+| Tickets and SLA | `src/ticket_management/service.py`, `application/catalogue_service.py`, `sla.py`, `domain.py` | Own named lifecycle actions, priority, clocks, escalation, and read-only catalogue/preview operations |
 | Maintenance | `src/maintenance_management/service.py`, `recurrence.py`, `domain.py` | Own recurrence, checklist snapshots, work-order lifecycle, completion, and verification |
-| Inventory | `src/inventory_management/service.py`, `application/catalogue_service.py`, `domain.py` | Own named stock actions, catalogue reads, idempotency, reservations, issue, consumption, return, and derived availability |
+| Inventory | `src/inventory_management/service.py`, `application/catalogue_service.py`, `routes/`, `domain.py` | Own named stock actions, catalogue reads, idempotency, reservations, issue, consumption, return, and derived availability |
 | Security | `src/security/` | Own roles, permissions, authentication, sessions, password handling, and audit context |
 | Operations | `src/operations/` | Own the closed job/event catalogs and durable worker orchestration |
 | Data access | `src/repositories/` | Implement storage contracts and PostgreSQL transaction/locking semantics |
@@ -169,10 +169,13 @@ The frontend uses npm with the committed `package-lock.json`; it must not change
 package manager. Next.js-specific edits must follow the versioned documentation
 installed under `frontend/node_modules/next/dist/docs/`.
 
-The inventory HTTP implementation is now under
-`src/inventory_management/routes/_legacy.py` inside the inventory route package;
-`src.inventory_management.routes` remains the public facade. Further endpoint
-family extraction is deferred until route characterization is expanded.
+Inventory HTTP routes are composed by `src/inventory_management/routes/router.py`
+from focused catalogue, stock, reservation, work-order-parts, and attachment
+routers. `_legacy.py` remains only as a compatibility re-export, and
+`src.inventory_management.routes` remains the public facade. The ticket and
+maintenance application services similarly delegate read-only catalogue and
+preview responsibilities to `application/` modules while retaining their
+transactional mutation boundaries.
 
 ## Refactoring posture
 

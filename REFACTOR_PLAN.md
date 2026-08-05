@@ -340,7 +340,7 @@ docs/                          Detailed product/operation contracts
 
 ### Stage 4 — Decompose large frontend workspaces by cohesive feature
 
-- **Status:** partial; feature entrypoints and compatibility facades complete.
+- **Status:** complete for the four targeted workspaces.
 - **Current problem:** inventory, work-order parts, ticket operations, and SLA
   workspaces mix multiple forms, query states, and tables in single large files.
 - **Behavior to preserve:** routes, accessibility, responsive layout, Vietnamese
@@ -348,8 +348,8 @@ docs/                          Detailed product/operation contracts
 - **Improvement:** feature entrypoints now live under
   `frontend/src/features/inventory/`, `work-orders/parts/`, `tickets/detail/`,
   and `sla/`; the original component files are thin re-export facades. Internal
-  forms, tables, and action panels remain in the moved files for the next
-  focused extraction; no UI or request contract was changed.
+  forms, tables, selectors, action panels, timelines, and stateful forms now
+  live in cohesive feature modules; no UI or request contract was changed.
 - **Expected files:** selected large component, colocated feature components/tests,
   existing hooks/API modules only when required.
 - **Risk:** medium.
@@ -357,7 +357,27 @@ docs/                          Detailed product/operation contracts
   Next.js build, and manual route smoke where available.
 - **Rollback:** revert one feature extraction at a time.
 - **Complete when:** the parent file becomes navigable, behavior tests cover all
-  loading/empty/success/error/action states, and output is unchanged.
+  loading/empty/success/error/action states, and output is unchanged. Focused
+  inventory, ticket, and work-order suites pass with the full frontend suite.
+
+### Stage 4b — Split inventory route families and read-oriented services
+
+- **Status:** complete for inventory routes, ticket/maintenance catalogue reads,
+  and maintenance occurrence preview.
+- **Implementation:** `src/inventory_management/routes/router.py` composes
+  `catalogue.py`, `stock.py`, `reservations.py`, `work_order_parts.py`, and
+  `attachments.py`; shared dependency aliases and HTTP error mapping are in
+  `dependencies.py` and `error_mapping.py`. `_legacy.py` and the package import
+  remain compatibility facades. Ticket read options/priority preview are in
+  `src/ticket_management/application/catalogue_service.py`; maintenance
+  options/occurrence preview are in
+  `src/maintenance_management/application/catalogue_service.py`.
+- **Behavior preserved:** all 45 historical inventory route path/method/name
+  definitions, dependencies, tags, schemas, status codes, permission checks,
+  error mapping, and service calls; transactional mutation ownership remains in
+  the canonical services/repositories.
+- **Validation:** route contract and application read-service characterization
+  tests, focused inventory/ticket/maintenance tests, Ruff, and compileall.
 
 ### Stage 5 — Extract repository internals behind unchanged public classes
 
@@ -519,13 +539,19 @@ Not run in the untouched baseline:
 - Moved the four largest frontend workspace entrypoints into feature-owned
   directories and retained the original component files as compatibility
   re-exports. Route pages now import the feature entrypoints directly.
-- Moved inventory route implementation into
-  `src/inventory_management/routes/_legacy.py` and retained the package facade
-  at `src.inventory_management.routes`.
+- Split inventory route implementation into focused modules under
+  `src/inventory_management/routes/`; `_legacy.py` now only re-exports the
+  historical names and the package facade remains at
+  `src.inventory_management.routes`.
 - Extracted read-only inventory catalogue operations into
   `src/inventory_management/application/catalogue_service.py` with a focused
   characterization test; mutation families remain atomic in the canonical
   service.
+- Extracted ticket read-only catalogue/priority preview and maintenance
+  read-only options/occurrence preview into focused application services.
+- Decomposed inventory, work-order-parts, ticket-detail, and SLA frontend
+  implementations into feature-owned sections, forms, selectors, tables,
+  action panels, timelines, and compatibility entrypoints.
 
 ### Validation after the completed stages
 
@@ -553,6 +579,7 @@ Not run in the untouched baseline:
   ticket, and work-order focused suites; typecheck and lint passed.
 - Current inventory catalogue characterization: `5 passed, 10 skipped, 1
   warning`.
+- Current inventory route/application-service characterization: `3 passed`.
 
 ## 14. Decisions requiring explicit human approval
 

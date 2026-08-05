@@ -25,13 +25,8 @@ from src.config.value_mappings import (
 )
 from src.database.session import get_session_factory
 from src.maintenance_management.domain import (
-    CHECKLIST_RESPONSE_TYPE_LABELS,
-    INTERVAL_UNIT_LABELS,
-    PLAN_STATUS_LABELS,
     WORK_ORDER_ATTACHMENT_CATEGORIES,
-    WORK_ORDER_STATUS_LABELS,
     WORK_ORDER_TRANSITIONS,
-    WORK_ORDER_TYPE_LABELS,
     ChecklistResponseType,
     ChecklistResultStatus,
     IntervalUnit,
@@ -56,6 +51,7 @@ from src.repositories.postgres_maintenance import PostgresMaintenancePlanningRep
 from src.security.audit import AuditContext
 from src.security.permissions import Role
 from src.security.service import CurrentUser
+from src.maintenance_management.application.catalogue_service import MaintenanceCatalogueService
 
 PLAN_CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{2,49}$")
 TEMPLATE_CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{2,49}$")
@@ -100,29 +96,10 @@ class MaintenancePlanningService:
         self.repository = repository
         self.attachment_storage = attachment_storage
         self.attachment_max_size_bytes = attachment_max_size_bytes
+        self.catalogue = MaintenanceCatalogueService(self._repository, self.get_plan)
 
     def options(self) -> dict[str, Any]:
-        repository = self._repository()
-        return {
-            "plan_statuses": _options(PLAN_STATUS_LABELS),
-            "interval_units": _options(INTERVAL_UNIT_LABELS),
-            "work_order_types": _options(WORK_ORDER_TYPE_LABELS),
-            "work_order_statuses": _options(WORK_ORDER_STATUS_LABELS),
-            "checklist_response_types": _options(CHECKLIST_RESPONSE_TYPE_LABELS),
-            "priorities": [
-                {"code": code, "display_name": label}
-                for code, label in PRIORITY_CODE_TO_VI.items()
-            ],
-            "maintenance_results": [
-                {"code": code, "display_name": label}
-                for code, label in MAINTENANCE_RESULT_CODE_TO_VI.items()
-            ],
-            "evidence_categories": [
-                {"code": code, "display_name": label}
-                for code, label in WORK_ORDER_ATTACHMENT_CATEGORIES.items()
-            ],
-            "technicians": [record.values for record in repository.list_technicians()],
-        }
+        return self.catalogue.options()
 
     def list_plans(
         self,
@@ -390,32 +367,12 @@ class MaintenancePlanningService:
         date_to: date,
         limit: int,
     ) -> dict[str, Any]:
-        plan = self.get_plan(plan_id)
-        spec = _recurrence_spec(plan)
-        due_dates = occurrences_between(
-            spec,
-            start=date_from,
-            end=date_to,
-            first_due=_as_optional_date(plan["next_due_date"]) or spec.start_date,
-            max_occurrences=limit,
+        return self.catalogue.preview_occurrences(
+            plan_id,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
         )
-        generated = self._repository().list_generated_due_dates(plan_id)
-        return {
-            "plan_id": str(plan_id),
-            "timezone": spec.local_timezone,
-            "date_from": date_from.isoformat(),
-            "date_to": date_to.isoformat(),
-            "items": [
-                {
-                    "due_date": value.isoformat(),
-                    "generated": value in generated,
-                    "generation_release_date": (
-                        value - timedelta(days=int(plan["lead_time_days"]))
-                    ).isoformat(),
-                }
-                for value in due_dates
-            ],
-        }
 
     def list_templates(
         self,
