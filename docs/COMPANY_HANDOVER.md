@@ -210,11 +210,23 @@ generation, work-order, checklist-completion, verification, and evidence
 transaction families remain retained. The next safe phase is security service
 decomposition.
 
-The Phase G stop condition is deliberate: `CurrentUser` was already extracted
-to the principal module, but AuthService remains intact because token claims,
-refresh rotation, password changes, session revocation, and audit behavior
-need a dedicated characterization map before any split. Final full-backend
-validation passed (`390 passed, 73 skipped, 1 warning`), latest isolated
-PostgreSQL validation passed (`73 passed, 390 deselected, 1 warning`), and
-Ruff/compileall/Alembic/Compose checks passed. The next recommended backend
-phase is security characterization, not an unvalidated auth extraction.
+Phase G completed the security characterization and one safe pure extraction.
+`src/security/identity.py` now owns identifier normalization, user/principal
+projection, and persisted-user-to-principal construction. `src/security/errors.py`
+owns the shared `AuthenticationError`, while `src.security.service` remains the
+historical import facade. Direct characterization tests cover principal identity,
+normalization, serialization redaction, token claims/key rotation and invalid
+tokens, refresh/CSRF hashing, password compatibility, and audit metadata
+filtering.
+
+AuthService remains intact for login, access authentication, refresh rotation,
+logout, password changes, user administration, and same-transaction audit
+orchestration. No token, password, session, audit, API, environment, schema,
+or frontend behavior changed. The security characterization suite passed `12
+passed`; relevant non-PostgreSQL security tests passed `15 passed, 9 deselected,
+1 warning`. Full backend validation passed (`402 passed, 73 skipped, 1
+warning`), isolated PostgreSQL validation passed (`73 passed, 402 deselected,
+1 warning`), Ruff/compileall passed, and Alembic current/heads/check remain
+clean at `20260726_0008` with no new upgrade operations. No migration or model
+metadata changed. The next single bounded backend phase is deeper transactional
+security characterization before another AuthService extraction.

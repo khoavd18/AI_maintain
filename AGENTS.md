@@ -217,11 +217,19 @@ changed. Phase F maintenance application-service decomposition is now complete
 for checklist templates; maintenance work-order/generation families remain
 retained. The next safe phase is Phase G security service decomposition.
 
-Final continuation checkpoint 2026-08-06: full backend validation passed
-(`390 passed, 73 skipped, 1 warning`), the latest isolated PostgreSQL run
-passed (`73 passed, 390 deselected, 1 warning`), and Alembic current/head/check
-remain clean at `20260726_0008`. Phase G was intentionally stopped after the
-safe principal extraction because further AuthService splitting would cross
-token, refresh-session, password, and audit sequencing without a dedicated
-characterization map. Remaining large transaction/reliability files are listed
-in `docs/backend-structural-inventory.md`.
+Final continuation checkpoint 2026-08-06: the security characterization suite
+passed (`12 passed`), the relevant non-PostgreSQL security suite passed (`15
+passed, 9 deselected, 1 warning`), and the pure identity extraction is now in
+`src/security/identity.py`; shared `AuthenticationError` ownership is in
+`src/security/errors.py`. Historical imports from `src.security.service`,
+including `CurrentUser`, normalization helpers, user serialization, and
+`AuthenticationError`, remain available. Full backend validation passed (`402
+passed, 73 skipped, 1 warning`), isolated PostgreSQL validation passed (`73
+passed, 402 deselected, 1 warning`), Ruff and compileall passed, and Alembic
+current/heads/check remain clean at `20260726_0008`. Token, password,
+refresh-session, transaction, audit, API, environment, and database behavior
+were not changed; no frontend file changed. Further AuthService splitting is
+deferred until a database-backed characterization map covers validation order,
+locking, rollback, revocation, and audit ordering. Remaining large
+transaction/reliability files are listed in
+`docs/backend-structural-inventory.md`.

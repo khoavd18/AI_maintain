@@ -735,18 +735,29 @@ service decomposition.
 
 ## Final continuation checkpoint — 2026-08-06
 
-Phase G was reviewed but not broadened beyond the already validated principal
-extraction. Splitting `AuthService` now would couple a high-risk change across
-password verification, access-token claims/expiry, refresh rotation and CSRF,
-session revocation, user administration, and same-transaction audit behavior;
-the repository does not yet have a dedicated characterization map for those
-seams. The safe stop is therefore documented retention, not a speculative
-extraction.
+Phase G completed the security characterization and one safe pure extraction.
+`src/security/identity.py` now owns identifier normalization, user response
+projection, and persisted-user-to-principal construction. `src/security/errors.py`
+owns the shared `AuthenticationError`; `src.security.service` remains the
+historical import facade. The characterization suite added direct coverage for
+principal identity, normalization, projections, token claims/key rotation and
+invalid-token cases, refresh/CSRF hashing, password compatibility, and audit
+metadata redaction.
 
-Final validation: full backend `390 passed, 73 skipped, 1 warning`; latest
-isolated PostgreSQL `73 passed, 390 deselected, 1 warning`; Ruff passed;
+The transactional AuthService families remain retained: login, access
+authentication, refresh rotation, logout, password change, user administration,
+and audit orchestration. No token/password/session/audit behavior, API contract,
+environment restriction, or transaction boundary was changed. The safe stop is
+therefore documented retention after the pure extraction, pending a future
+database-backed characterization of one transactional seam.
+
+The pre-characterization baseline was full backend `390 passed, 73 skipped, 1
+warning`; latest isolated PostgreSQL `73 passed, 390 deselected, 1 warning`.
+Final security-phase validation passed: full backend `402 passed, 73 skipped, 1
+warning`; isolated PostgreSQL `73 passed, 402 deselected, 1 warning`; Ruff and
 compileall passed; Alembic current/head/check passed at `20260726_0008`; all
 three development/test/pilot Compose configurations parsed successfully. No
 frontend file changed, no API contract or database metadata changed, and no
 transaction boundary was intentionally changed. The next single recommended
-backend phase is security characterization before AuthService decomposition.
+backend phase is deeper transactional security characterization before any
+AuthService decomposition.
