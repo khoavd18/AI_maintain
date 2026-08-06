@@ -9,11 +9,10 @@ import json
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.orm.exc import StaleDataError
 
 from src.database.models import (
     InventoryAttachment,
@@ -54,7 +53,6 @@ from src.inventory_management.domain import (
     derive_stock_state,
     reorder_suggestion,
 )
-from src.maintenance_management.domain import WORK_ORDER_STATUS_LABELS, WorkOrderStatus
 from src.operations.outbox import enqueue_outbox_event
 from src.repositories.contracts import (
     DuplicateIdentifierError,
@@ -66,6 +64,9 @@ from src.repositories.contracts import (
     StoredPage,
     StoredRecord,
 )
+from src.repositories.postgres.inventory.attachments import InventoryAttachmentRepository
+from src.repositories.postgres.inventory.catalogue import InventoryCatalogueRepository
+from src.repositories.postgres.inventory.queries import InventoryQueryRepository
 from src.security.audit import AuditContext, safe_state
 from src.security.service import append_audit_event
 
@@ -165,76 +166,67 @@ class PostgresInventoryRepository:
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self.session_factory = session_factory
+        self.queries = InventoryQueryRepository(
+            session_factory,
+            category_record=_category_record,
+            unit_record=_unit_record,
+            part_record=_part_record,
+            stock_location_record=_stock_location_record,
+            balance_record=_balance_record,
+            movement_record=_movement_record,
+            requirement_record=_requirement_record,
+            reservation_record=_reservation_record,
+            issue_record=_issue_record,
+            work_order_state_record=_work_order_state_record,
+            inventory_attachment_record=_inventory_attachment_record,
+            part_sort_key=_part_sort_key,
+            balance_sort_key=_balance_sort_key,
+            require_work_order=_require_work_order,
+            decimal_value=_decimal,
+            uuid_text=_uuid_text,
+        )
+        self.catalogue = InventoryCatalogueRepository(
+            session_factory,
+            category_record=_category_record,
+            unit_record=_unit_record,
+            part_record=_part_record,
+            stock_location_record=_stock_location_record,
+            reorder_record=_reorder_record,
+            require_active_reference=_require_active_reference,
+            require_part=_require_part,
+            require_stock_location=_require_stock_location,
+            ensure_position=_ensure_position,
+            audit=_audit,
+            require_version=_require_version,
+            raise_integrity=_raise_integrity,
+            decimal_value=_decimal,
+            part_audit_fields=PART_AUDIT_FIELDS,
+            location_audit_fields=LOCATION_AUDIT_FIELDS,
+        )
+        self.attachments = InventoryAttachmentRepository(
+            session_factory,
+            attachment_record=_inventory_attachment_record,
+            audit=_audit,
+            raise_integrity=_raise_integrity,
+            utc_now=_utc_now,
+            audit_fields=ATTACHMENT_AUDIT_FIELDS,
+        )
 
     def list_categories(self, *, include_inactive: bool) -> list[StoredRecord]:
-        try:
-            with self.session_factory() as session:
-                statement = select(PartCategory)
-                if not include_inactive:
-                    statement = statement.where(PartCategory.is_active.is_(True))
-                entities = session.scalars(statement.order_by(PartCategory.code)).all()
-                return [_category_record(entity) for entity in entities]
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc danh mục vật tư.") from exc
+        return self.queries.list_categories(include_inactive=include_inactive)
 
     def create_category(
         self, values: dict[str, Any], *, audit_context: AuditContext
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                entity = PartCategory(id=uuid4(), **values)
-                session.add(entity)
-                session.flush()
-                result = _category_record(entity)
-                _audit(
-                    session,
-                    audit_context,
-                    action="inventory.part_category_created",
-                    resource_type="part_category",
-                    resource_id=str(entity.id),
-                    after=result.values,
-                    fields={"id", "code", "is_active", "version"},
-                )
-            return result
-        except IntegrityError as exc:
-            _raise_integrity(exc, duplicate_message="Mã danh mục vật tư đã tồn tại.")
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể tạo danh mục vật tư.") from exc
+        return self.catalogue.create_category(values, audit_context=audit_context)
 
     def list_units(self, *, include_inactive: bool) -> list[StoredRecord]:
-        try:
-            with self.session_factory() as session:
-                statement = select(UnitOfMeasure)
-                if not include_inactive:
-                    statement = statement.where(UnitOfMeasure.is_active.is_(True))
-                entities = session.scalars(statement.order_by(UnitOfMeasure.code)).all()
-                return [_unit_record(entity) for entity in entities]
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc đơn vị tính.") from exc
+        return self.queries.list_units(include_inactive=include_inactive)
 
     def create_unit(
         self, values: dict[str, Any], *, audit_context: AuditContext
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                entity = UnitOfMeasure(id=uuid4(), **values)
-                session.add(entity)
-                session.flush()
-                result = _unit_record(entity)
-                _audit(
-                    session,
-                    audit_context,
-                    action="inventory.unit_created",
-                    resource_type="unit_of_measure",
-                    resource_id=str(entity.id),
-                    after=result.values,
-                    fields={"id", "code", "symbol", "quantity_precision", "version"},
-                )
-            return result
-        except IntegrityError as exc:
-            _raise_integrity(exc, duplicate_message="Mã đơn vị tính đã tồn tại.")
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể tạo đơn vị tính.") from exc
+        return self.catalogue.create_unit(values, audit_context=audit_context)
 
     def list_parts(
         self,
@@ -245,92 +237,21 @@ class PostgresInventoryRepository:
         page: int,
         page_size: int,
     ) -> StoredPage:
-        try:
-            with self.session_factory() as session:
-                statement = select(SparePart)
-                if filters.get("category_id"):
-                    statement = statement.where(
-                        SparePart.category_id == filters["category_id"]
-                    )
-                if filters.get("lifecycle_status"):
-                    statement = statement.where(
-                        SparePart.lifecycle_status == filters["lifecycle_status"]
-                    )
-                if filters.get("asset_type"):
-                    statement = statement.where(
-                        SparePart.compatible_asset_types.contains([filters["asset_type"]])
-                    )
-                search = str(filters.get("search") or "").strip()
-                if search:
-                    pattern = f"%{search}%"
-                    statement = statement.where(
-                        or_(
-                            SparePart.part_number.ilike(pattern),
-                            SparePart.name_vi.ilike(pattern),
-                            SparePart.name_en.ilike(pattern),
-                            SparePart.manufacturer_reference.ilike(pattern),
-                        )
-                    )
-                records = [
-                    _part_record(session, entity)
-                    for entity in session.scalars(statement).all()
-                ]
-                stock_state = filters.get("stock_state")
-                if stock_state:
-                    records = [
-                        record
-                        for record in records
-                        if record.values["stock_state"] == stock_state
-                    ]
-                records.sort(
-                    key=lambda item: _part_sort_key(item.values, sort_by),
-                    reverse=sort_direction == "desc",
-                )
-                total = len(records)
-                start = (page - 1) * page_size
-                return StoredPage(records[start : start + page_size], page, page_size, total)
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc danh mục spare part.") from exc
+        return self.queries.list_parts(
+            filters=filters,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+            page=page,
+            page_size=page_size,
+        )
 
     def get_part(self, part_id: UUID) -> StoredRecord | None:
-        try:
-            with self.session_factory() as session:
-                entity = session.get(SparePart, part_id)
-                return _part_record(session, entity) if entity else None
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc spare part.") from exc
+        return self.queries.get_part(part_id)
 
     def create_part(
         self, values: dict[str, Any], *, audit_context: AuditContext
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                _require_active_reference(
-                    session, PartCategory, values["category_id"], "danh mục vật tư"
-                )
-                _require_active_reference(
-                    session, UnitOfMeasure, values["unit_of_measure_id"], "đơn vị tính"
-                )
-                entity = SparePart(id=uuid4(), **values)
-                session.add(entity)
-                session.flush()
-                result = _part_record(session, entity)
-                _audit(
-                    session,
-                    audit_context,
-                    action="inventory.part_created",
-                    resource_type="spare_part",
-                    resource_id=str(entity.id),
-                    after=result.values,
-                    fields=PART_AUDIT_FIELDS,
-                )
-            return result
-        except IntegrityError as exc:
-            _raise_integrity(exc, duplicate_message="Part number đã tồn tại.")
-        except (RecordNotFoundError, IntegrityViolationError):
-            raise
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể tạo spare part.") from exc
+        return self.catalogue.create_part(values, audit_context=audit_context)
 
     def update_part(
         self,
@@ -341,90 +262,24 @@ class PostgresInventoryRepository:
         audit_action: str,
         audit_context: AuditContext,
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                entity = session.scalar(
-                    select(SparePart).where(SparePart.id == part_id).with_for_update()
-                )
-                if entity is None:
-                    raise RecordNotFoundError(f"Không tìm thấy spare part: {part_id}")
-                _require_version(entity.version, expected_version, entity.part_number)
-                if updates.get("category_id"):
-                    _require_active_reference(
-                        session, PartCategory, updates["category_id"], "danh mục vật tư"
-                    )
-                before = _part_record(session, entity)
-                for key, value in updates.items():
-                    setattr(entity, key, value)
-                entity.updated_by_user_id = audit_context.actor_user_id
-                session.flush()
-                result = _part_record(session, entity)
-                _audit(
-                    session,
-                    audit_context,
-                    action=audit_action,
-                    resource_type="spare_part",
-                    resource_id=str(entity.id),
-                    before=before.values,
-                    after=result.values,
-                    fields=PART_AUDIT_FIELDS,
-                )
-            return result
-        except (RecordNotFoundError, StaleRecordError):
-            raise
-        except StaleDataError as exc:
-            raise StaleRecordError(
-                "Spare part đã được cập nhật bởi người dùng khác."
-            ) from exc
-        except IntegrityError as exc:
-            _raise_integrity(exc, duplicate_message="Dữ liệu spare part đã tồn tại.")
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể cập nhật spare part.") from exc
+        return self.catalogue.update_part(
+            part_id,
+            updates,
+            expected_version=expected_version,
+            audit_action=audit_action,
+            audit_context=audit_context,
+        )
 
     def list_stock_locations(self, *, include_archived: bool) -> list[StoredRecord]:
-        try:
-            with self.session_factory() as session:
-                statement = select(StockLocation)
-                if not include_archived:
-                    statement = statement.where(
-                        StockLocation.lifecycle_status != StockLocationStatus.ARCHIVED
-                    )
-                entities = session.scalars(statement.order_by(StockLocation.code)).all()
-                return [_stock_location_record(entity) for entity in entities]
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc stock location.") from exc
+        return self.queries.list_stock_locations(include_archived=include_archived)
 
     def get_stock_location(self, location_id: UUID) -> StoredRecord | None:
-        try:
-            with self.session_factory() as session:
-                entity = session.get(StockLocation, location_id)
-                return _stock_location_record(entity) if entity else None
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc stock location.") from exc
+        return self.queries.get_stock_location(location_id)
 
     def create_stock_location(
         self, values: dict[str, Any], *, audit_context: AuditContext
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                entity = StockLocation(id=uuid4(), **values)
-                session.add(entity)
-                session.flush()
-                result = _stock_location_record(entity)
-                _audit(
-                    session,
-                    audit_context,
-                    action="inventory.stock_location_created",
-                    resource_type="stock_location",
-                    resource_id=str(entity.id),
-                    after=result.values,
-                    fields=LOCATION_AUDIT_FIELDS,
-                )
-            return result
-        except IntegrityError as exc:
-            _raise_integrity(exc, duplicate_message="Mã stock location đã tồn tại.")
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể tạo stock location.") from exc
+        return self.catalogue.create_stock_location(values, audit_context=audit_context)
 
     def update_stock_location(
         self,
@@ -435,60 +290,13 @@ class PostgresInventoryRepository:
         audit_action: str,
         audit_context: AuditContext,
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                entity = session.scalar(
-                    select(StockLocation)
-                    .where(StockLocation.id == location_id)
-                    .with_for_update()
-                )
-                if entity is None:
-                    raise RecordNotFoundError(
-                        f"Không tìm thấy stock location: {location_id}"
-                    )
-                _require_version(entity.version, expected_version, entity.code)
-                target_status = updates.get("lifecycle_status")
-                if target_status in {
-                    StockLocationStatus.INACTIVE,
-                    StockLocationStatus.ARCHIVED,
-                }:
-                    quantities = session.execute(
-                        select(
-                            func.coalesce(func.sum(InventoryPosition.on_hand_quantity), 0),
-                            func.coalesce(func.sum(InventoryPosition.reserved_quantity), 0),
-                        ).where(InventoryPosition.stock_location_id == location_id)
-                    ).one()
-                    if _decimal(quantities[0]) > ZERO or _decimal(quantities[1]) > ZERO:
-                        raise IntegrityViolationError(
-                            "Chỉ có thể ngừng hoặc archive stock location khi tồn kho bằng 0."
-                        )
-                before = _stock_location_record(entity)
-                for key, value in updates.items():
-                    setattr(entity, key, value)
-                entity.updated_by_user_id = audit_context.actor_user_id
-                session.flush()
-                result = _stock_location_record(entity)
-                _audit(
-                    session,
-                    audit_context,
-                    action=audit_action,
-                    resource_type="stock_location",
-                    resource_id=str(entity.id),
-                    before=before.values,
-                    after=result.values,
-                    fields=LOCATION_AUDIT_FIELDS,
-                )
-            return result
-        except (RecordNotFoundError, StaleRecordError, IntegrityViolationError):
-            raise
-        except StaleDataError as exc:
-            raise StaleRecordError(
-                "Stock location đã được cập nhật bởi người dùng khác."
-            ) from exc
-        except IntegrityError as exc:
-            _raise_integrity(exc, duplicate_message="Dữ liệu stock location đã tồn tại.")
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể cập nhật stock location.") from exc
+        return self.catalogue.update_stock_location(
+            location_id,
+            updates,
+            expected_version=expected_version,
+            audit_action=audit_action,
+            audit_context=audit_context,
+        )
 
     def upsert_reorder_configuration(
         self,
@@ -497,83 +305,11 @@ class PostgresInventoryRepository:
         expected_version: int | None,
         audit_context: AuditContext,
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                part = _require_part(session, values["part_id"])
-                location = _require_stock_location(session, values["stock_location_id"])
-                entity = session.scalar(
-                    select(PartReorderConfiguration)
-                    .where(
-                        PartReorderConfiguration.part_id == part.id,
-                        PartReorderConfiguration.stock_location_id == location.id,
-                    )
-                    .with_for_update()
-                )
-                before: StoredRecord | None = None
-                if entity is None:
-                    if expected_version is not None:
-                        raise StaleRecordError(
-                            "Reorder configuration chưa tồn tại; hãy tải lại dữ liệu."
-                        )
-                    entity = PartReorderConfiguration(
-                        id=uuid4(),
-                        created_by_user_id=audit_context.actor_user_id,
-                        updated_by_user_id=audit_context.actor_user_id,
-                        **values,
-                    )
-                    session.add(entity)
-                    action = "inventory.reorder_configuration_created"
-                else:
-                    if expected_version is None:
-                        raise StaleRecordError(
-                            "expected_version là bắt buộc khi cập nhật reorder configuration."
-                        )
-                    _require_version(
-                        entity.version,
-                        expected_version,
-                        f"{part.part_number}/{location.code}",
-                    )
-                    before = _reorder_record(session, entity)
-                    for key in ("minimum_stock", "reorder_point", "maximum_stock"):
-                        setattr(entity, key, values[key])
-                    entity.updated_by_user_id = audit_context.actor_user_id
-                    action = "inventory.reorder_configuration_updated"
-                _ensure_position(session, part.id, location.id)
-                session.flush()
-                result = _reorder_record(session, entity)
-                _audit(
-                    session,
-                    audit_context,
-                    action=action,
-                    resource_type="reorder_configuration",
-                    resource_id=str(entity.id),
-                    before=before.values if before else None,
-                    after=result.values,
-                    fields={
-                        "id",
-                        "part_id",
-                        "stock_location_id",
-                        "minimum_stock",
-                        "reorder_point",
-                        "maximum_stock",
-                        "version",
-                    },
-                )
-            return result
-        except (RecordNotFoundError, StaleRecordError, IntegrityViolationError):
-            raise
-        except StaleDataError as exc:
-            raise StaleRecordError(
-                "Reorder configuration đã được cập nhật bởi người dùng khác."
-            ) from exc
-        except IntegrityError as exc:
-            _raise_integrity(
-                exc, duplicate_message="Reorder configuration cho part/location đã tồn tại."
-            )
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể cập nhật reorder configuration."
-            ) from exc
+        return self.catalogue.upsert_reorder_configuration(
+            values,
+            expected_version=expected_version,
+            audit_context=audit_context,
+        )
 
     def list_balances(
         self,
@@ -584,52 +320,13 @@ class PostgresInventoryRepository:
         page: int,
         page_size: int,
     ) -> StoredPage:
-        try:
-            with self.session_factory() as session:
-                statement = select(InventoryPosition)
-                if filters.get("part_id"):
-                    statement = statement.where(
-                        InventoryPosition.part_id == filters["part_id"]
-                    )
-                if filters.get("stock_location_id"):
-                    statement = statement.where(
-                        InventoryPosition.stock_location_id
-                        == filters["stock_location_id"]
-                    )
-                positions = session.scalars(statement).all()
-                records = [_balance_record(session, position) for position in positions]
-                search = str(filters.get("search") or "").strip().casefold()
-                if search:
-                    records = [
-                        item
-                        for item in records
-                        if search in str(item.values["part_number"]).casefold()
-                        or search in str(item.values["part_name_vi"]).casefold()
-                        or search in str(item.values["stock_location_code"]).casefold()
-                        or search in str(item.values["stock_location_name"]).casefold()
-                    ]
-                if filters.get("stock_state"):
-                    records = [
-                        item
-                        for item in records
-                        if item.values["stock_state"] == filters["stock_state"]
-                    ]
-                if filters.get("low_stock_only"):
-                    records = [
-                        item
-                        for item in records
-                        if item.values["stock_state"]
-                        in {"out_of_stock", "low_stock", "at_reorder_point"}
-                    ]
-                records.sort(
-                    key=lambda item: _balance_sort_key(item.values, sort_by),
-                    reverse=sort_direction == "desc",
-                )
-                total = len(records)
-                start = (page - 1) * page_size
-                return StoredPage(records[start : start + page_size], page, page_size, total)
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc inventory balance.") from exc
+        return self.queries.list_balances(
+            filters=filters,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+            page=page,
+            page_size=page_size,
+        )
 
     def list_movements(
         self,
@@ -638,64 +335,14 @@ class PostgresInventoryRepository:
         page: int,
         page_size: int,
     ) -> StoredPage:
-        try:
-            with self.session_factory() as session:
-                statement = select(InventoryMovement)
-                if filters.get("part_id"):
-                    statement = statement.where(
-                        InventoryMovement.part_id == filters["part_id"]
-                    )
-                if filters.get("stock_location_id"):
-                    statement = statement.where(
-                        InventoryMovement.stock_location_id
-                        == filters["stock_location_id"]
-                    )
-                if filters.get("movement_type"):
-                    statement = statement.where(
-                        InventoryMovement.movement_type == filters["movement_type"]
-                    )
-                if filters.get("work_order_id"):
-                    statement = statement.where(
-                        InventoryMovement.work_order_id == filters["work_order_id"]
-                    )
-                if filters.get("occurred_from"):
-                    statement = statement.where(
-                        InventoryMovement.occurred_at >= filters["occurred_from"]
-                    )
-                if filters.get("occurred_to"):
-                    statement = statement.where(
-                        InventoryMovement.occurred_at <= filters["occurred_to"]
-                    )
-                total = int(
-                    session.scalar(
-                        select(func.count()).select_from(statement.subquery())
-                    )
-                    or 0
-                )
-                entities = session.scalars(
-                    statement.order_by(
-                        InventoryMovement.occurred_at.desc(),
-                        InventoryMovement.movement_number.desc(),
-                    )
-                    .offset((page - 1) * page_size)
-                    .limit(page_size)
-                ).all()
-                return StoredPage(
-                    [_movement_record(session, entity) for entity in entities],
-                    page,
-                    page_size,
-                    total,
-                )
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc stock movement.") from exc
+        return self.queries.list_movements(
+            filters=filters,
+            page=page,
+            page_size=page_size,
+        )
 
     def get_movement(self, movement_id: UUID) -> StoredRecord | None:
-        try:
-            with self.session_factory() as session:
-                entity = session.get(InventoryMovement, movement_id)
-                return _movement_record(session, entity) if entity else None
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc stock movement.") from exc
+        return self.queries.get_movement(movement_id)
 
     def create_opening_balance(
         self,
@@ -1051,14 +698,7 @@ class PostgresInventoryRepository:
             ) from exc
 
     def get_requirement(self, requirement_id: UUID) -> StoredRecord | None:
-        try:
-            with self.session_factory() as session:
-                entity = session.get(WorkOrderPartRequirement, requirement_id)
-                return _requirement_record(session, entity) if entity else None
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể đọc work-order part requirement."
-            ) from exc
+        return self.queries.get_requirement(requirement_id)
 
     def reserve_stock(
         self,
@@ -1210,55 +850,16 @@ class PostgresInventoryRepository:
             raise StorageUnavailableError("Không thể reserve stock.") from exc
 
     def get_reservation(self, reservation_id: UUID) -> StoredRecord | None:
-        try:
-            with self.session_factory() as session:
-                entity = session.get(StockReservation, reservation_id)
-                return _reservation_record(session, entity) if entity else None
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc stock reservation.") from exc
+        return self.queries.get_reservation(reservation_id)
 
     def list_reservations(
         self, *, filters: dict[str, Any], page: int, page_size: int
     ) -> StoredPage:
-        try:
-            with self.session_factory() as session:
-                statement = select(StockReservation)
-                if filters.get("work_order_id"):
-                    statement = statement.where(
-                        StockReservation.work_order_id == filters["work_order_id"]
-                    )
-                if filters.get("part_id"):
-                    statement = statement.where(
-                        StockReservation.part_id == filters["part_id"]
-                    )
-                if filters.get("stock_location_id"):
-                    statement = statement.where(
-                        StockReservation.stock_location_id
-                        == filters["stock_location_id"]
-                    )
-                if filters.get("status"):
-                    statement = statement.where(
-                        StockReservation.status == filters["status"]
-                    )
-                total = int(
-                    session.scalar(
-                        select(func.count()).select_from(statement.subquery())
-                    )
-                    or 0
-                )
-                entities = session.scalars(
-                    statement.order_by(StockReservation.created_at.desc())
-                    .offset((page - 1) * page_size)
-                    .limit(page_size)
-                ).all()
-                return StoredPage(
-                    [_reservation_record(session, entity) for entity in entities],
-                    page,
-                    page_size,
-                    total,
-                )
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc stock reservations.") from exc
+        return self.queries.list_reservations(
+            filters=filters,
+            page=page,
+            page_size=page_size,
+        )
 
     def close_reservation(
         self,
@@ -1772,12 +1373,7 @@ class PostgresInventoryRepository:
             raise StorageUnavailableError("Không thể issue spare part.") from exc
 
     def get_issue(self, issue_id: UUID) -> StoredRecord | None:
-        try:
-            with self.session_factory() as session:
-                entity = session.get(WorkOrderPartIssue, issue_id)
-                return _issue_record(session, entity) if entity else None
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc part issue.") from exc
+        return self.queries.get_issue(issue_id)
 
     def consume_issue(
         self,
@@ -1993,293 +1589,31 @@ class PostgresInventoryRepository:
             raise StorageUnavailableError("Không thể return spare part.") from exc
 
     def get_work_order_state(self, work_order_id: UUID) -> StoredRecord | None:
-        try:
-            with self.session_factory() as session:
-                entity = session.get(WorkOrder, work_order_id)
-                return _work_order_state_record(entity) if entity else None
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc work order.") from exc
+        return self.queries.get_work_order_state(work_order_id)
 
     def work_order_parts(self, work_order_id: UUID) -> StoredRecord:
-        try:
-            with self.session_factory() as session:
-                work_order = _require_work_order(session, work_order_id)
-                requirements = session.scalars(
-                    select(WorkOrderPartRequirement)
-                    .where(WorkOrderPartRequirement.work_order_id == work_order_id)
-                    .order_by(WorkOrderPartRequirement.created_at)
-                ).all()
-                reservations = session.scalars(
-                    select(StockReservation)
-                    .where(StockReservation.work_order_id == work_order_id)
-                    .order_by(StockReservation.created_at)
-                ).all()
-                issues = session.scalars(
-                    select(WorkOrderPartIssue)
-                    .where(WorkOrderPartIssue.work_order_id == work_order_id)
-                    .order_by(WorkOrderPartIssue.issued_at)
-                ).all()
-                movements = session.scalars(
-                    select(InventoryMovement)
-                    .where(InventoryMovement.work_order_id == work_order_id)
-                    .order_by(InventoryMovement.occurred_at.desc())
-                ).all()
-                requirement_records = [
-                    _requirement_record(session, entity) for entity in requirements
-                ]
-                reservation_records = [
-                    _reservation_record(session, entity) for entity in reservations
-                ]
-                issue_records = [_issue_record(session, entity) for entity in issues]
-                planned = sum(
-                    (
-                        _decimal(record.values["planned_quantity"])
-                        for record in requirement_records
-                    ),
-                    ZERO,
-                )
-                reserved = sum(
-                    (
-                        _decimal(record.values["remaining_quantity"])
-                        for record in reservation_records
-                        if record.values["status"]
-                        in {
-                            ReservationStatus.ACTIVE,
-                            ReservationStatus.PARTIALLY_ISSUED,
-                        }
-                    ),
-                    ZERO,
-                )
-                issued = sum(
-                    (_decimal(record.values["quantity"]) for record in issue_records),
-                    ZERO,
-                )
-                returned = sum(
-                    (
-                        _decimal(record.values["returned_quantity"])
-                        for record in issue_records
-                    ),
-                    ZERO,
-                )
-                consumed = sum(
-                    (
-                        _decimal(record.values["consumed_quantity"])
-                        for record in issue_records
-                    ),
-                    ZERO,
-                )
-                shortage_count = sum(
-                    1
-                    for record in requirement_records
-                    if _decimal(record.values["shortage_quantity"]) > ZERO
-                )
-                unresolved = any(
-                    _decimal(record.values["outstanding_quantity"]) > ZERO
-                    for record in issue_records
-                )
-                warning = (
-                    "Work order còn vật tư đã issue nhưng chưa ghi consumption hoặc return."
-                    if unresolved
-                    else None
-                )
-                return StoredRecord(
-                    {
-                        "work_order_id": str(work_order.id),
-                        "work_order_number": work_order.work_order_number,
-                        "work_order_status": work_order.status,
-                        "work_order_status_display": WORK_ORDER_STATUS_LABELS[
-                            WorkOrderStatus(work_order.status)
-                        ],
-                        "assigned_to_user_id": _uuid_text(
-                            work_order.assigned_to_user_id
-                        ),
-                        "requirements": [
-                            record.values for record in requirement_records
-                        ],
-                        "reservations": [
-                            record.values for record in reservation_records
-                        ],
-                        "issues": [record.values for record in issue_records],
-                        "movements": [
-                            _movement_record(session, movement).values
-                            for movement in movements
-                        ],
-                        "total_planned_quantity": planned,
-                        "total_reserved_quantity": reserved,
-                        "total_issued_quantity": issued,
-                        "total_returned_quantity": returned,
-                        "net_consumed_quantity": consumed,
-                        "open_shortage_count": shortage_count,
-                        "has_unresolved_issued_stock": unresolved,
-                        "completion_policy": "warning_only",
-                        "completion_warning": warning,
-                    }
-                )
-        except RecordNotFoundError:
-            raise
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể đọc work-order inventory summary."
-            ) from exc
+        return self.queries.work_order_parts(work_order_id)
 
     def inventory_metrics(self) -> StoredRecord:
-        try:
-            with self.session_factory() as session:
-                positions = session.scalars(select(InventoryPosition)).all()
-                balance_records = [
-                    _balance_record(session, position) for position in positions
-                ]
-                low_part_ids = {
-                    record.values["part_id"]
-                    for record in balance_records
-                    if record.values["stock_state"]
-                    in {
-                        "low_stock",
-                        "at_reorder_point",
-                    }
-                }
-                out_part_ids = {
-                    record.values["part_id"]
-                    for record in balance_records
-                    if record.values["stock_state"] == "out_of_stock"
-                }
-                requirements = session.scalars(
-                    select(WorkOrderPartRequirement).where(
-                        WorkOrderPartRequirement.status != RequirementStatus.CANCELLED
-                    )
-                ).all()
-                shortage_requirements = [
-                    requirement
-                    for requirement in requirements
-                    if _decimal(
-                        _requirement_record(session, requirement).values[
-                            "shortage_quantity"
-                        ]
-                    )
-                    > ZERO
-                ]
-                movement_rows = session.execute(
-                    select(
-                        InventoryMovement.movement_type,
-                        func.count(InventoryMovement.id),
-                    ).group_by(InventoryMovement.movement_type)
-                ).all()
-                on_hand = sum(
-                    (_decimal(item.values["on_hand_quantity"]) for item in balance_records),
-                    ZERO,
-                )
-                reserved = sum(
-                    (_decimal(item.values["reserved_quantity"]) for item in balance_records),
-                    ZERO,
-                )
-                return StoredRecord(
-                    {
-                        "total_active_parts": int(
-                            session.scalar(
-                                select(func.count())
-                                .select_from(SparePart)
-                                .where(
-                                    SparePart.lifecycle_status
-                                    == PartLifecycleStatus.ACTIVE
-                                )
-                            )
-                            or 0
-                        ),
-                        "total_on_hand_units": on_hand,
-                        "total_reserved_units": reserved,
-                        "total_available_units": on_hand - reserved,
-                        "low_stock_parts": len(low_part_ids),
-                        "out_of_stock_parts": len(out_part_ids),
-                        "open_shortages": len(shortage_requirements),
-                        "work_orders_waiting_for_parts": len(
-                            {
-                                requirement.work_order_id
-                                for requirement in shortage_requirements
-                            }
-                        ),
-                        "movements_by_type": {
-                            str(movement_type): int(count)
-                            for movement_type, count in movement_rows
-                        },
-                        "data_notice": (
-                            "Tổng quantity cộng các đơn vị tính khác nhau chỉ dùng làm "
-                            "chỉ báo vận hành; xem balance theo UOM để đối chiếu."
-                        ),
-                    }
-                )
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể tính inventory metrics.") from exc
+        return self.queries.inventory_metrics()
 
     def list_inventory_attachments(
         self, movement_id: UUID, *, include_deleted: bool = False
     ) -> list[StoredRecord]:
-        try:
-            with self.session_factory() as session:
-                statement = select(InventoryAttachment).where(
-                    InventoryAttachment.movement_id == movement_id
-                )
-                if not include_deleted:
-                    statement = statement.where(InventoryAttachment.deleted_at.is_(None))
-                entities = session.scalars(
-                    statement.order_by(InventoryAttachment.created_at.desc())
-                ).all()
-                return [_inventory_attachment_record(entity) for entity in entities]
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc inventory evidence.") from exc
+        return self.queries.list_inventory_attachments(
+            movement_id,
+            include_deleted=include_deleted,
+        )
 
     def get_inventory_attachment(
         self, movement_id: UUID, attachment_id: UUID
     ) -> StoredRecord | None:
-        try:
-            with self.session_factory() as session:
-                entity = session.scalar(
-                    select(InventoryAttachment).where(
-                        InventoryAttachment.id == attachment_id,
-                        InventoryAttachment.movement_id == movement_id,
-                    )
-                )
-                return (
-                    _inventory_attachment_record(entity, include_storage_key=True)
-                    if entity
-                    else None
-                )
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc inventory evidence.") from exc
+        return self.queries.get_inventory_attachment(movement_id, attachment_id)
 
     def create_inventory_attachment(
         self, values: dict[str, Any], *, audit_context: AuditContext
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                if session.get(InventoryMovement, values["movement_id"]) is None:
-                    raise RecordNotFoundError(
-                        f"Không tìm thấy stock movement: {values['movement_id']}"
-                    )
-                entity = InventoryAttachment(id=uuid4(), **values)
-                session.add(entity)
-                session.flush()
-                result = _inventory_attachment_record(
-                    entity, include_storage_key=True
-                )
-                _audit(
-                    session,
-                    audit_context,
-                    action="inventory.attachment_uploaded",
-                    resource_type="inventory_movement",
-                    resource_id=str(entity.movement_id),
-                    after=result.values,
-                    fields=ATTACHMENT_AUDIT_FIELDS,
-                    metadata={"attachment_id": str(entity.id)},
-                )
-            return result
-        except RecordNotFoundError:
-            raise
-        except IntegrityError as exc:
-            _raise_integrity(exc, duplicate_message="Storage key evidence đã tồn tại.")
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể lưu inventory evidence metadata."
-            ) from exc
+        return self.attachments.create(values, audit_context=audit_context)
 
     def delete_inventory_attachment(
         self,
@@ -2288,50 +1622,11 @@ class PostgresInventoryRepository:
         *,
         audit_context: AuditContext,
     ) -> StoredRecord:
-        try:
-            with self.session_factory() as session, session.begin():
-                entity = session.scalar(
-                    select(InventoryAttachment)
-                    .where(
-                        InventoryAttachment.id == attachment_id,
-                        InventoryAttachment.movement_id == movement_id,
-                    )
-                    .with_for_update()
-                )
-                if entity is None:
-                    raise RecordNotFoundError(
-                        f"Không tìm thấy inventory evidence: {attachment_id}"
-                    )
-                if entity.deleted_at is None:
-                    before = _inventory_attachment_record(entity)
-                    entity.deleted_at = _utc_now()
-                    entity.deleted_by_user_id = audit_context.actor_user_id
-                    session.flush()
-                    result = _inventory_attachment_record(
-                        entity, include_storage_key=True
-                    )
-                    _audit(
-                        session,
-                        audit_context,
-                        action="inventory.attachment_deleted",
-                        resource_type="inventory_movement",
-                        resource_id=str(movement_id),
-                        before=before.values,
-                        after=result.values,
-                        fields=ATTACHMENT_AUDIT_FIELDS,
-                        metadata={"attachment_id": str(entity.id)},
-                    )
-                else:
-                    result = _inventory_attachment_record(
-                        entity, include_storage_key=True
-                    )
-            return result
-        except RecordNotFoundError:
-            raise
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể soft-delete inventory evidence."
-            ) from exc
+        return self.attachments.delete(
+            movement_id,
+            attachment_id,
+            audit_context=audit_context,
+        )
 
 
 def _category_record(entity: PartCategory) -> StoredRecord:

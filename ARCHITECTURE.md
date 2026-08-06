@@ -42,6 +42,8 @@ src/operations/worker.py --> four allow-listed jobs --> the same domain services
 - Qdrant stores RAG document chunks only.
 - The frontend and Streamlit consume FastAPI rather than transactional tables or
   CSV files directly.
+- The dedicated PostgreSQL test workflow uses only the local `_test` database
+  on port `15433`; see [`docs/testing-postgresql.md`](docs/testing-postgresql.md).
 
 ## Applications and entry points
 
@@ -69,7 +71,7 @@ src/operations/worker.py --> four allow-listed jobs --> the same domain services
 | Security | `src/security/` | Own roles, permissions, authentication, sessions, password handling, and audit context |
 | Operations | `src/operations/` | Own the closed job/event catalogs and durable worker orchestration |
 | Data access | `src/repositories/` | Implement storage contracts and PostgreSQL transaction/locking semantics |
-| Persistence mapping | `src/database/models.py` | Canonical SQLAlchemy metadata corresponding to immutable Alembic history |
+| Persistence mapping | `src/database/models/` | Domain-owned SQLAlchemy model modules re-exported through `src.database.models`, corresponding to immutable Alembic history |
 | Analytics | canonical paths named in `AGENTS.md` | Remain batch-first and preserve validated CSV contracts |
 | RAG | `src/rag/` plus `src/rag/adapters/` | Retrieve documents and compose bounded guidance through application ports; never depend on API transport or become transactional storage |
 
@@ -84,13 +86,17 @@ The legacy `src/api/routes.py` module remains the public route facade. System,
 analytics, and Copilot endpoints are composed from focused routers under
 `src/api/routers/`; their dependency functions are shared with the facade so
 existing test overrides and import seams remain valid. The concrete Copilot
-graph is built by `src/api/composition.py`.
+graph is built by `src/application/copilot_factory.py`; `src/api/composition.py`
+is a compatibility import for the serving boundary.
 
 RAG orchestration consumes the narrow `AssetContextProvider` port from
 `src/rag/adapters/asset_context.py`. `ProcessedDataAssetContextAdapter` is
 selected by the API composition root, keeping storage/query-service knowledge
 outside the RAG application. The old `src.rag.copilot.get_copilot_service`
-symbol remains as a lazy compatibility facade.
+symbol remains as a lazy compatibility facade. Its ordered pipeline is request
+analysis, conversation and asset context resolution, retrieval/filtering,
+safety and conflict gates, context budgeting, generation/output parsing,
+citation validation, and the existing deterministic fallback policy.
 
 Routes and frontend code must not manipulate SQLAlchemy entities or inventory
 balances. Repositories must not make authorization decisions that belong only to
@@ -169,6 +175,12 @@ The frontend uses npm with the committed `package-lock.json`; it must not change
 package manager. Next.js-specific edits must follow the versioned documentation
 installed under `frontend/node_modules/next/dist/docs/`.
 
+The high-change compatibility entrypoints now delegate to bounded modules:
+inventory actions live under `frontend/src/components/inventory/actions/`,
+mutation hooks under `frontend/src/hooks/mutations/`, Copilot response views
+under `frontend/src/components/copilot/`, and operations tables under
+`frontend/src/components/operations/`.
+
 Inventory HTTP routes are composed by `src/inventory_management/routes/router.py`
 from focused catalogue, stock, reservation, work-order-parts, and attachment
 routers. `_legacy.py` remains only as a compatibility re-export, and
@@ -176,6 +188,22 @@ routers. `_legacy.py` remains only as a compatibility re-export, and
 maintenance application services similarly delegate read-only catalogue and
 preview responsibilities to `application/` modules while retaining their
 transactional mutation boundaries.
+
+The current application capability split is documented in
+[`docs/application-services.md`](docs/application-services.md). Repository
+session ownership, lock order, idempotency, audit, and outbox boundaries are
+documented in [`docs/repository-transaction-map.md`](docs/repository-transaction-map.md).
+
+The PostgreSQL implementation is decomposed by cohesive read capability while
+the historical façades remain stable. Inventory reads, catalogue mutations, and
+evidence mutations live under `src/repositories/postgres/inventory/`; maintenance
+and ticket read queries live under their corresponding `maintenance/` and
+`tickets/` packages; PM7 operational reads live under `operations/`. The original
+repositories continue to own transaction-sensitive mutations, including locks,
+idempotency, audit, outbox, and commit/rollback sequencing. The historical
+`src.repositories.postgres` maintenance import is re-exported by the package
+façade, and the pilot-contract CLI is similarly preserved through
+`src/reliability/pilot_contract/`.
 
 ## Refactoring posture
 

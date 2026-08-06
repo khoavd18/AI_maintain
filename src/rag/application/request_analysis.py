@@ -1,0 +1,231 @@
+"""Input validation, conversation resolution, and deterministic query routing."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from src.rag.adapters.asset_context import AssetContextProvider
+from src.rag.conversation import ConversationContext, parse_conversation_context
+from src.rag.query_analysis import QueryAnalysis, QueryAnalyzer, normalize_document_type, normalize_failure_category
+
+MAX_QUESTION_LENGTH = 1000
+
+
+@dataclass(frozen=True)
+class PreparedCopilotRequest:
+    """All routing facts needed by the retrieval and generation stages."""
+
+    normalized_question: str
+    asset_id: str | None
+    conversation: ConversationContext | None
+    pre_analysis: QueryAnalysis | None
+    analysis: QueryAnalysis | None
+    asset_context: dict[str, Any] | None
+    filters: dict[str, str]
+    retrieval_query: str | None
+    early_status: str | None = None
+
+
+class RequestAnalysisService:
+    """Own the ordered, non-LLM input and query-analysis stages."""
+
+    def __init__(
+        self,
+        *,
+        asset_context_provider: AssetContextProvider,
+        query_analyzer: QueryAnalyzer,
+    ) -> None:
+        self.asset_context_provider = asset_context_provider
+        self.query_analyzer = query_analyzer
+
+    def prepare(
+        self,
+        *,
+        question: str,
+        asset_id: str | None,
+        document_type: str | None,
+        failure_category: str | None,
+        version: str | None,
+        language: str | None,
+        conversation_context: dict[str, Any] | None,
+    ) -> PreparedCopilotRequest:
+        normalized_question = " ".join(question.split())
+        self._validate_question(normalized_question)
+        conversation = parse_conversation_context(conversation_context)
+        if conversation and conversation.unsafe:
+            return self._early(normalized_question, asset_id, conversation, "unsafe_conversation")
+
+        pre_analysis = self.query_analyzer.analyze(normalized_question)
+        if pre_analysis.status in {"prompt_injection", "unsafe_operation"}:
+            return self._early(
+                normalized_question,
+                asset_id,
+                conversation,
+                pre_analysis.status,
+                pre_analysis=pre_analysis,
+            )
+        if pre_analysis.status == "conversation":
+            return self._early(
+                normalized_question,
+                asset_id,
+                conversation,
+                "conversation",
+                pre_analysis=pre_analysis,
+            )
+
+        asset_context = self._load_asset_context(asset_id)
+        selected_asset_type = self._asset_type_from_context(asset_context)
+        contextual_asset_type = (
+            conversation.resolved_asset_type
+            if (
+                conversation
+                and pre_analysis.follow_up_reference
+                and not selected_asset_type
+                and not pre_analysis.asset_type
+            )
+            else None
+        )
+        analysis = self.query_analyzer.analyze(
+            normalized_question,
+            selected_asset_type=selected_asset_type or contextual_asset_type,
+        )
+        asset_type_filter = analysis.asset_type or selected_asset_type or contextual_asset_type
+        contextual_failure = (
+            conversation.resolved_failure_category
+            if conversation and analysis.follow_up_reference
+            else None
+        )
+        filters = self._clean_filters(
+            asset_type=asset_type_filter,
+            document_type=normalize_document_type(document_type) or analysis.document_type,
+            failure_category=normalize_failure_category(failure_category)
+            or analysis.failure_category
+            or contextual_failure,
+            version=version,
+            language=language,
+        )
+        if analysis.status != "supported":
+            return PreparedCopilotRequest(
+                normalized_question=normalized_question,
+                asset_id=asset_id,
+                conversation=conversation,
+                pre_analysis=pre_analysis,
+                analysis=analysis,
+                asset_context=asset_context,
+                filters=filters,
+                retrieval_query=None,
+                early_status=analysis.status,
+            )
+
+        retrieval_query = self._build_retrieval_query(
+            normalized_question,
+            self._recent_ticket_context(asset_id),
+            previous_answer_summary=(
+                conversation.previous_answer_summary
+                if conversation and analysis.follow_up_reference
+                else ""
+            ),
+        )
+        return PreparedCopilotRequest(
+            normalized_question=normalized_question,
+            asset_id=asset_id,
+            conversation=conversation,
+            pre_analysis=pre_analysis,
+            analysis=analysis,
+            asset_context=asset_context,
+            filters=filters,
+            retrieval_query=retrieval_query,
+        )
+
+    def _early(
+        self,
+        normalized_question: str,
+        asset_id: str | None,
+        conversation: ConversationContext | None,
+        status: str,
+        *,
+        pre_analysis: QueryAnalysis | None = None,
+    ) -> PreparedCopilotRequest:
+        return PreparedCopilotRequest(
+            normalized_question=normalized_question,
+            asset_id=asset_id,
+            conversation=conversation,
+            pre_analysis=pre_analysis,
+            analysis=None,
+            asset_context=None,
+            filters={},
+            retrieval_query=None,
+            early_status=status,
+        )
+
+    @staticmethod
+    def _validate_question(question: str) -> None:
+        if not question:
+            raise ValueError("Câu hỏi không được để trống.")
+        if len(question) > MAX_QUESTION_LENGTH:
+            raise ValueError(f"Câu hỏi không được dài quá {MAX_QUESTION_LENGTH} ký tự.")
+
+    def _load_asset_context(self, asset_id: str | None) -> dict[str, Any] | None:
+        if not asset_id:
+            return None
+        return self.asset_context_provider.get_asset_context(asset_id)
+
+    def _recent_ticket_context(self, asset_id: str | None) -> list[str]:
+        if not asset_id:
+            return []
+        list_tickets = getattr(self.asset_context_provider, "list_tickets", None)
+        if list_tickets is None:
+            return []
+        tickets = list_tickets(asset_id=asset_id, limit=3)
+        context: list[str] = []
+        for ticket in tickets:
+            category = str(ticket.get("failure_category") or "").strip()
+            description = str(ticket.get("issue_description") or "").strip()
+            value = " - ".join(part for part in [category, description] if part)
+            if value:
+                context.append(value)
+        return context
+
+    @staticmethod
+    def _asset_type_from_context(asset_context: dict[str, Any] | None) -> str | None:
+        if not asset_context:
+            return None
+        latest_risk = asset_context.get("latest_risk") or {}
+        asset_type = latest_risk.get("asset_type")
+        return str(asset_type) if asset_type else None
+
+    @staticmethod
+    def _clean_filters(
+        *,
+        asset_type: str | None,
+        document_type: str | None,
+        failure_category: str | None,
+        version: str | None = None,
+        language: str | None = None,
+    ) -> dict[str, str]:
+        return {
+            key: value
+            for key, value in {
+                "asset_type": asset_type,
+                "document_type": document_type,
+                "failure_category": failure_category,
+                "version": version,
+                "language": language,
+            }.items()
+            if value
+        }
+
+    @staticmethod
+    def _build_retrieval_query(
+        question: str,
+        ticket_context: list[str],
+        *,
+        previous_answer_summary: str = "",
+    ) -> str:
+        supporting: list[str] = [question]
+        if previous_answer_summary:
+            supporting.append(f"Tóm tắt lượt trước: {previous_answer_summary[:600]}")
+        if ticket_context:
+            supporting.append(f"Ngữ cảnh ticket tham khảo: {' | '.join(ticket_context)[:600]}")
+        return "\n".join(supporting)

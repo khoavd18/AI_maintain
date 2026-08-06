@@ -24,7 +24,15 @@ from src.repositories.postgres_tickets import PostgresTicketRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission, Role
 from src.security.service import CurrentUser
+from src.ticket_management.application.comment_service import TicketCommentService
 from src.ticket_management.application.catalogue_service import TicketCatalogueService
+from src.ticket_management.application.query_service import TicketQueryService
+from src.ticket_management.errors import (
+    TicketAuthorizationError,
+    TicketConflictError,
+    TicketDomainError,
+    TicketNotFoundError,
+)
 from src.ticket_management.domain import (
     ACTIVE_TICKET_STATUSES,
     ASSIGNABLE_STATUSES,
@@ -33,10 +41,8 @@ from src.ticket_management.domain import (
     LEGACY_STATUS_LABELS,
     PRIORITY_LABELS,
     SLA_STATUS_LABELS,
-    TICKET_QUEUE_LABELS,
     TICKET_STATUS_LABELS,
     URGENCY_LABELS,
-    CommentVisibility,
     EscalationRule,
     Impact,
     SlaClockStatus,
@@ -62,28 +68,30 @@ EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PRIORITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
-class TicketDomainError(ValueError):
-    """Base class for safe ticket workflow errors."""
-
-
-class TicketNotFoundError(TicketDomainError):
-    """Raised when a ticket or related resource does not exist."""
-
-
-class TicketConflictError(TicketDomainError):
-    """Raised when a transition conflicts with current state."""
-
-
-class TicketAuthorizationError(TicketDomainError):
-    """Raised when resource ownership or service-level RBAC rejects an action."""
-
-
 class TicketWorkflowService:
     """Canonical boundary for PM5 ticket operations."""
 
     def __init__(self, repository: PostgresTicketRepository) -> None:
         self.repository = repository
         self.catalogue = TicketCatalogueService(repository, self._require_permission)
+        self.comments = TicketCommentService(
+            repository,
+            require_permission=self._require_permission,
+            ticket_for_action=self._ticket_for_action,
+            normalize_text=_plain_text,
+        )
+        self.queries = TicketQueryService(
+            repository,
+            require_permission=self._require_permission,
+            ticket_record=self._ticket_record,
+            require_ticket_access=self._require_ticket_access,
+            present=self._present,
+            is_owned=self._is_owned,
+            in_queue=self._in_queue,
+            queue_sort_key=_queue_sort_key,
+            normalize_time=_aware_utc,
+            now=_utc_now,
+        )
 
     def options(self, *, actor: CurrentUser) -> dict[str, Any]:
         return self.catalogue.options(actor=actor)
@@ -200,41 +208,14 @@ class TicketWorkflowService:
         page_size: int,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_READ)
-        queue = TicketQueue(queue_name)
-        current = _aware_utc(as_of or _utc_now())
-        repository_filters = {
-            key: value
-            for key, value in filters.items()
-            if key
-            in {
-                "asset_id",
-                "status",
-                "priority",
-                "category_id",
-                "support_group_id",
-                "assigned_user_id",
-                "search",
-            }
-            and value is not None
-        }
-        records = self.repository.list_tickets(filters=repository_filters)
-        items = [self._present(record.values, actor=actor, as_of=current) for record in records]
-        if actor.role is Role.TECHNICIAN:
-            items = [item for item in items if self._is_owned(actor, item)]
-        items = [item for item in items if self._in_queue(queue, item, actor, current)]
-        items.sort(key=_queue_sort_key)
-        total = len(items)
-        start = (page - 1) * page_size
-        return {
-            "items": items[start : start + page_size],
-            "page": page,
-            "page_size": page_size,
-            "total": total,
-            "queue": queue.value,
-            "queue_display": TICKET_QUEUE_LABELS[queue],
-            "as_of": current.isoformat(),
-        }
+        return self.queries.list_queue(
+            queue_name,
+            actor=actor,
+            filters=filters,
+            page=page,
+            page_size=page_size,
+            as_of=as_of,
+        )
 
     def get_ticket(
         self,
@@ -243,10 +224,7 @@ class TicketWorkflowService:
         actor: CurrentUser,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_READ)
-        record = self._ticket_record(ticket_id, include_timeline=True)
-        self._require_ticket_access(actor, record.values)
-        return self._present(record.values, actor=actor, as_of=as_of or _utc_now())
+        return self.queries.get_ticket(ticket_id, actor=actor, as_of=as_of)
 
     def assign(
         self,
@@ -736,32 +714,12 @@ class TicketWorkflowService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        visibility = CommentVisibility(request["visibility"])
-        permission = (
-            Permission.TICKET_COMMENTS_INTERNAL
-            if visibility is CommentVisibility.INTERNAL
-            else Permission.TICKET_COMMENTS_REQUESTER
-        )
-        self._require_permission(actor, permission)
-        record = self._ticket_for_action(ticket_id, actor)
-        if TicketStatus(record.values["status"]) in {
-            TicketStatus.CLOSED,
-            TicketStatus.CANCELLED,
-        }:
-            raise TicketConflictError("Ticket closed/cancelled không nhận comment mới.")
-        result = self.repository.create_comment(
+        return self.comments.add_comment(
             ticket_id,
-            visibility=visibility.value,
-            body=_plain_text(request["body"], "body", 4000),
-            asset_attachment_ids=[
-                UUID(str(value)) for value in request.get("asset_attachment_ids", [])
-            ],
-            work_order_attachment_ids=[
-                UUID(str(value)) for value in request.get("work_order_attachment_ids", [])
-            ],
+            request,
+            actor=actor,
             audit_context=audit_context,
         )
-        return dict(result.values)
 
     def list_calendars(self, *, actor: CurrentUser) -> list[dict[str, Any]]:
         self._require_permission(actor, Permission.SLA_POLICIES_READ)

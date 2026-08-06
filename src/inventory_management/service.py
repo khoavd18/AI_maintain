@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-import hashlib
 from pathlib import Path
 import re
 from typing import Any
@@ -13,15 +11,12 @@ from uuid import UUID
 
 from src.asset_management.storage import (
     AttachmentStorage,
-    AttachmentStorageError,
     LocalAttachmentStorage,
-    validate_attachment,
 )
 from src.config.settings import get_settings
 from src.config.value_mappings import ASSET_TYPE_CODE_TO_VI
 from src.database.session import get_session_factory
 from src.inventory_management.domain import (
-    INVENTORY_ATTACHMENT_CATEGORIES,
     ISSUABLE_WORK_ORDER_STATUSES,
     REQUIREMENT_EDITABLE_WORK_ORDER_STATUSES,
     InventoryMovementType,
@@ -33,6 +28,19 @@ from src.inventory_management.domain import (
 )
 from src.inventory_management.application.catalogue_service import (
     InventoryCatalogueService,
+)
+from src.inventory_management.application.evidence_service import (
+    InventoryEvidenceDownload,
+    InventoryEvidenceService,
+)
+from src.inventory_management.application.stock_query_service import (
+    InventoryStockQueryService,
+)
+from src.inventory_management.errors import (
+    InventoryAuthorizationError,
+    InventoryConflictError,
+    InventoryDomainError,
+    InventoryNotFoundError,
 )
 from src.repositories.contracts import (
     InventoryRepository,
@@ -47,29 +55,6 @@ from src.security.service import CurrentUser
 
 _CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._-]*$")
 _IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,99}$")
-
-
-class InventoryDomainError(ValueError):
-    """Raised when an inventory request violates the public domain contract."""
-
-
-class InventoryNotFoundError(InventoryDomainError):
-    """Raised when an inventory resource does not exist."""
-
-
-class InventoryConflictError(InventoryDomainError):
-    """Raised when lifecycle, stock, or relationship state rejects an action."""
-
-
-class InventoryAuthorizationError(InventoryDomainError):
-    """Raised when resource-level access is not allowed."""
-
-
-@dataclass(frozen=True)
-class InventoryEvidenceDownload:
-    filename: str
-    media_type: str
-    content: bytes
 
 
 class InventoryManagementService:
@@ -89,6 +74,20 @@ class InventoryManagementService:
             self._repository,
             self._require_permission,
             self._require_any_read,
+        )
+        self.evidence = InventoryEvidenceService(
+            self._repository,
+            attachment_storage,
+            attachment_max_size_bytes=attachment_max_size_bytes,
+            require_permission=self._require_permission,
+            get_movement=self._movement,
+            require_movement_access=self._require_movement_access,
+        )
+        self.stock_queries = InventoryStockQueryService(
+            self._repository,
+            require_permission=self._require_permission,
+            get_work_order=self._work_order,
+            require_work_order_access=self._require_work_order_access,
         )
 
     def options(self, *, actor: CurrentUser) -> dict[str, Any]:
@@ -542,26 +541,13 @@ class InventoryManagementService:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_READ)
-        if sort_by not in {
-            "part_number",
-            "stock_location",
-            "on_hand_quantity",
-            "reserved_quantity",
-            "available_quantity",
-            "stock_state",
-        }:
-            raise InventoryDomainError("Trường sắp xếp balance không hợp lệ.")
-        if sort_direction not in {"asc", "desc"}:
-            raise InventoryDomainError("sort_direction chỉ hỗ trợ asc hoặc desc.")
-        return _page_values(
-            self._repository().list_balances(
-                filters=filters,
-                sort_by=sort_by,
-                sort_direction=sort_direction,
-                page=page,
-                page_size=page_size,
-            )
+        return self.stock_queries.list_balances(
+            actor=actor,
+            filters=filters,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+            page=page,
+            page_size=page_size,
         )
 
     def list_movements(
@@ -572,11 +558,11 @@ class InventoryManagementService:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_READ)
-        return _page_values(
-            self._repository().list_movements(
-                filters=filters, page=page, page_size=page_size
-            )
+        return self.stock_queries.list_movements(
+            actor=actor,
+            filters=filters,
+            page=page,
+            page_size=page_size,
         )
 
     def create_opening_balance(
@@ -1016,25 +1002,15 @@ class InventoryManagementService:
     def work_order_parts(
         self, work_order_id: UUID, *, actor: CurrentUser
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.WORK_ORDER_PARTS_READ)
-        work_order = self._work_order(work_order_id)
-        self._require_work_order_access(work_order, actor)
-        return dict(self._repository().work_order_parts(work_order_id).values)
+        return self.stock_queries.work_order_parts(work_order_id, actor=actor)
 
     def metrics(self, *, actor: CurrentUser) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_READ)
-        return dict(self._repository().inventory_metrics().values)
+        return self.stock_queries.metrics(actor=actor)
 
     def list_evidence(
         self, movement_id: UUID, *, actor: CurrentUser
     ) -> list[dict[str, Any]]:
-        self._require_permission(actor, Permission.INVENTORY_ATTACHMENTS_READ)
-        movement = self._movement(movement_id)
-        self._require_movement_access(movement, actor)
-        return [
-            dict(record.values)
-            for record in self._repository().list_inventory_attachments(movement_id)
-        ]
+        return self.evidence.list_evidence(movement_id, actor=actor)
 
     def upload_evidence(
         self,
@@ -1047,40 +1023,15 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_ATTACHMENTS_CREATE)
-        movement = self._movement(movement_id)
-        self._require_movement_access(movement, actor)
-        if category not in INVENTORY_ATTACHMENT_CATEGORIES:
-            raise InventoryDomainError("Inventory evidence category không hợp lệ.")
-        validated = validate_attachment(
+        return self.evidence.upload_evidence(
+            movement_id,
+            category=category,
             filename=filename,
             claimed_media_type=claimed_media_type,
             content=content,
-            max_size_bytes=self.attachment_max_size_bytes,
+            actor=actor,
+            audit_context=audit_context,
         )
-        storage_key = self.attachment_storage.save(
-            validated, namespace="inventory"
-        )
-        try:
-            record = self._repository().create_inventory_attachment(
-                {
-                    "movement_id": movement_id,
-                    "category": category,
-                    "original_filename": validated.original_filename,
-                    "storage_key": storage_key,
-                    "media_type": validated.media_type,
-                    "size_bytes": validated.size_bytes,
-                    "checksum": validated.checksum,
-                    "uploaded_by_user_id": actor.id,
-                    "deleted_at": None,
-                    "deleted_by_user_id": None,
-                },
-                audit_context=audit_context,
-            )
-        except Exception:
-            self.attachment_storage.delete(storage_key)
-            raise
-        return _public_attachment(record.values)
 
     def download_evidence(
         self,
@@ -1089,23 +1040,8 @@ class InventoryManagementService:
         *,
         actor: CurrentUser,
     ) -> InventoryEvidenceDownload:
-        self._require_permission(actor, Permission.INVENTORY_ATTACHMENTS_READ)
-        movement = self._movement(movement_id)
-        self._require_movement_access(movement, actor)
-        record = self._repository().get_inventory_attachment(
-            movement_id, attachment_id
-        )
-        if record is None or record.values.get("deleted_at"):
-            raise InventoryNotFoundError(
-                f"Không tìm thấy inventory evidence: {attachment_id}"
-            )
-        content = self.attachment_storage.read(str(record.values["storage_key"]))
-        if hashlib.sha256(content).hexdigest() != record.values["checksum"]:
-            raise AttachmentStorageError("Checksum inventory evidence không khớp.")
-        return InventoryEvidenceDownload(
-            filename=str(record.values["original_filename"]),
-            media_type=str(record.values["media_type"]),
-            content=content,
+        return self.evidence.download_evidence(
+            movement_id, attachment_id, actor=actor
         )
 
     def delete_evidence(
@@ -1116,14 +1052,12 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_ATTACHMENTS_DELETE)
-        movement = self._movement(movement_id)
-        self._require_movement_access(movement, actor)
-        record = self._repository().delete_inventory_attachment(
-            movement_id, attachment_id, audit_context=audit_context
+        return self.evidence.delete_evidence(
+            movement_id,
+            attachment_id,
+            actor=actor,
+            audit_context=audit_context,
         )
-        self.attachment_storage.delete(str(record.values["storage_key"]))
-        return _public_attachment(record.values)
 
     def _stock_operation_values(self, request: dict[str, Any]) -> dict[str, Any]:
         part = dict(self._part_record(_uuid(request["part_id"], "part_id")).values)
@@ -1456,10 +1390,6 @@ def _optional_date(value: object) -> date | None:
     if value is None:
         return None
     return value if isinstance(value, date) else date.fromisoformat(str(value))
-
-
-def _public_attachment(values: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in values.items() if key != "storage_key"}
 
 
 def _utc_now() -> datetime:

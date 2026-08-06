@@ -7,10 +7,11 @@ import os
 
 import psycopg
 from psycopg import sql
-from sqlalchemy.engine.url import make_url
+
+from src.database.test_database import validate_test_database_url
 
 DEFAULT_TEST_DATABASE_URL = (
-    "postgresql+psycopg://maintenance:maintenance@localhost:5432/"
+    "postgresql+psycopg://maintenance_test:maintenance_test_password@localhost:15433/"
     "maintenance_copilot_test"
 )
 
@@ -18,12 +19,8 @@ DEFAULT_TEST_DATABASE_URL = (
 def create_test_database(database_url: str) -> bool:
     """Create an `_test` database without modifying an existing database."""
 
-    parsed = make_url(database_url)
+    parsed = validate_test_database_url(database_url)
     database_name = parsed.database or ""
-    if parsed.drivername != "postgresql+psycopg":
-        raise ValueError("TEST_DATABASE_URL must use postgresql+psycopg://")
-    if not database_name.endswith("_test"):
-        raise ValueError("Test database name must end with _test")
 
     admin_url = parsed.set(drivername="postgresql", database="postgres")
     connection_url = admin_url.render_as_string(hide_password=False)

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-import hashlib
 from pathlib import Path
 import re
 from typing import Any
@@ -13,9 +11,7 @@ from zoneinfo import ZoneInfo
 
 from src.asset_management.storage import (
     AttachmentStorage,
-    AttachmentStorageError,
     LocalAttachmentStorage,
-    validate_attachment,
 )
 from src.config.settings import get_settings
 from src.config.value_mappings import (
@@ -25,12 +21,10 @@ from src.config.value_mappings import (
 )
 from src.database.session import get_session_factory
 from src.maintenance_management.domain import (
-    WORK_ORDER_ATTACHMENT_CATEGORIES,
     WORK_ORDER_TRANSITIONS,
     ChecklistResponseType,
     ChecklistResultStatus,
     IntervalUnit,
-    PlanStatus,
     WorkOrderStatus,
     WorkOrderType,
 )
@@ -52,35 +46,21 @@ from src.security.audit import AuditContext
 from src.security.permissions import Role
 from src.security.service import CurrentUser
 from src.maintenance_management.application.catalogue_service import MaintenanceCatalogueService
+from src.maintenance_management.application.evidence_service import (
+    EvidenceDownload,
+    MaintenanceEvidenceService,
+)
+from src.maintenance_management.application.query_service import MaintenanceQueryService
+from src.maintenance_management.errors import (
+    MaintenanceAuthorizationError,
+    MaintenanceConflictError,
+    MaintenanceDomainError,
+    MaintenanceNotFoundError,
+)
 
 PLAN_CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{2,49}$")
 TEMPLATE_CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{2,49}$")
 MAX_CATCH_UP_DAYS = 366
-
-
-class MaintenanceDomainError(ValueError):
-    """Base error for safe business-rule messages."""
-
-
-class MaintenanceNotFoundError(MaintenanceDomainError):
-    """Raised when a planning resource does not exist."""
-
-
-class MaintenanceConflictError(MaintenanceDomainError):
-    """Raised when a transition or relationship is inconsistent."""
-
-
-class MaintenanceAuthorizationError(MaintenanceDomainError):
-    """Raised when resource ownership denies an otherwise permitted action."""
-
-
-@dataclass(frozen=True)
-class EvidenceDownload:
-    """Authorized attachment bytes and public-safe response metadata."""
-
-    filename: str
-    media_type: str
-    content: bytes
 
 
 class MaintenancePlanningService:
@@ -97,6 +77,20 @@ class MaintenancePlanningService:
         self.attachment_storage = attachment_storage
         self.attachment_max_size_bytes = attachment_max_size_bytes
         self.catalogue = MaintenanceCatalogueService(self._repository, self.get_plan)
+        self.evidence = MaintenanceEvidenceService(
+            self._repository,
+            attachment_storage,
+            attachment_max_size_bytes=attachment_max_size_bytes,
+            get_work_order=self._work_order_record,
+            require_work_order_access=self._require_work_order_access,
+        )
+        self.queries = MaintenanceQueryService(
+            self._repository,
+            get_plan=lambda plan_id: dict(self._plan_record(plan_id).values),
+            get_work_order_record=self._work_order_record,
+            require_work_order_access=self._require_work_order_access,
+            scope_work_order=self._scope_work_order,
+        )
 
     def options(self) -> dict[str, Any]:
         return self.catalogue.options()
@@ -112,23 +106,18 @@ class MaintenancePlanningService:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        if status is not None:
-            PlanStatus(status)
-        page_result = self._repository().list_plans(
-            filters={
-                "asset_id": asset_id,
-                "status": status,
-                "search": search,
-                "due_from": due_from,
-                "due_to": due_to,
-            },
+        return self.queries.list_plans(
+            asset_id=asset_id,
+            status=status,
+            search=search,
+            due_from=due_from,
+            due_to=due_to,
             page=page,
             page_size=page_size,
         )
-        return _page_values(page_result)
 
     def get_plan(self, plan_id: UUID) -> dict[str, Any]:
-        return dict(self._plan_record(plan_id).values)
+        return self.queries.get_plan(plan_id)
 
     def create_plan(
         self,
@@ -520,23 +509,17 @@ class MaintenancePlanningService:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        scoped = dict(filters)
-        if actor.role is Role.TECHNICIAN:
-            scoped["assigned_to_user_id"] = actor.id
-        page_result = self._repository().list_work_orders(
-            filters=scoped, page=page, page_size=page_size
+        return self.queries.list_work_orders(
+            actor=actor,
+            filters=filters,
+            page=page,
+            page_size=page_size,
         )
-        return {
-            **_page_values(page_result),
-            "items": [self._scope_work_order(item.values, actor) for item in page_result.items],
-        }
 
     def get_work_order(
         self, work_order_id: UUID, *, actor: CurrentUser
     ) -> dict[str, Any]:
-        record = self._work_order_record(work_order_id)
-        self._require_work_order_access(record.values, actor)
-        return self._scope_work_order(record.values, actor)
+        return self.queries.get_work_order(work_order_id, actor=actor)
 
     def create_work_order(
         self,
@@ -1139,12 +1122,7 @@ class MaintenancePlanningService:
     def list_evidence(
         self, work_order_id: UUID, *, actor: CurrentUser
     ) -> list[dict[str, Any]]:
-        current = dict(self._work_order_record(work_order_id).values)
-        self._require_work_order_access(current, actor)
-        return [
-            dict(record.values)
-            for record in self._repository().list_work_order_attachments(work_order_id)
-        ]
+        return self.evidence.list_evidence(work_order_id, actor=actor)
 
     def upload_evidence(
         self,
@@ -1157,44 +1135,15 @@ class MaintenancePlanningService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        if category not in WORK_ORDER_ATTACHMENT_CATEGORIES:
-            raise MaintenanceDomainError("Evidence category không được hỗ trợ.")
-        current = dict(self._work_order_record(work_order_id).values)
-        self._require_work_order_access(current, actor)
-        if current["status"] in {"verified", "cancelled"}:
-            raise MaintenanceConflictError(
-                "Không thể thêm evidence cho work order đã verify hoặc cancel."
-            )
-        validated = validate_attachment(
+        return self.evidence.upload_evidence(
+            work_order_id,
+            category=category,
             filename=filename,
             claimed_media_type=claimed_media_type,
             content=content,
-            max_size_bytes=self.attachment_max_size_bytes,
+            actor=actor,
+            audit_context=audit_context,
         )
-        storage_key = self.attachment_storage.save(
-            validated, namespace="work-orders"
-        )
-        try:
-            record = self._repository().create_work_order_attachment(
-                {
-                    "work_order_id": work_order_id,
-                    "asset_id": current["asset_id"],
-                    "category": category,
-                    "original_filename": validated.original_filename,
-                    "storage_key": storage_key,
-                    "media_type": validated.media_type,
-                    "size_bytes": validated.size_bytes,
-                    "checksum": validated.checksum,
-                    "uploaded_by_user_id": actor.id,
-                    "deleted_at": None,
-                    "deleted_by_user_id": None,
-                },
-                audit_context=audit_context,
-            )
-        except Exception:
-            self.attachment_storage.delete(storage_key)
-            raise
-        return _public_attachment(record.values)
 
     def download_evidence(
         self,
@@ -1203,22 +1152,8 @@ class MaintenancePlanningService:
         *,
         actor: CurrentUser,
     ) -> EvidenceDownload:
-        current = dict(self._work_order_record(work_order_id).values)
-        self._require_work_order_access(current, actor)
-        record = self._repository().get_work_order_attachment(
-            work_order_id, attachment_id
-        )
-        if record is None or record.values.get("deleted_at"):
-            raise MaintenanceNotFoundError(
-                f"Không tìm thấy evidence attachment: {attachment_id}"
-            )
-        content = self.attachment_storage.read(str(record.values["storage_key"]))
-        if hashlib.sha256(content).hexdigest() != record.values["checksum"]:
-            raise AttachmentStorageError("Checksum evidence không khớp metadata.")
-        return EvidenceDownload(
-            filename=str(record.values["original_filename"]),
-            media_type=str(record.values["media_type"]),
-            content=content,
+        return self.evidence.download_evidence(
+            work_order_id, attachment_id, actor=actor
         )
 
     def delete_evidence(
@@ -1229,17 +1164,12 @@ class MaintenancePlanningService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        current = dict(self._work_order_record(work_order_id).values)
-        self._require_work_order_access(current, actor)
-        if current["status"] == "verified":
-            raise MaintenanceConflictError(
-                "Evidence của work order verified được giữ bất biến."
-            )
-        record = self._repository().delete_work_order_attachment(
-            work_order_id, attachment_id, audit_context=audit_context
+        return self.evidence.delete_evidence(
+            work_order_id,
+            attachment_id,
+            actor=actor,
+            audit_context=audit_context,
         )
-        self.attachment_storage.delete(str(record.values["storage_key"]))
-        return _public_attachment(record.values)
 
     def linked_work_orders(
         self, ticket_id: str, *, actor: CurrentUser
@@ -1706,10 +1636,6 @@ def _page_values(page: StoredPage) -> dict[str, Any]:
         "total": page.total,
         "total_pages": total_pages,
     }
-
-
-def _public_attachment(values: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in values.items() if key != "storage_key"}
 
 
 def _utc_now() -> datetime:

@@ -7,10 +7,10 @@ from collections.abc import Generator
 
 import pytest
 from sqlalchemy import inspect, text
-from sqlalchemy.engine.url import make_url
 
 from src.database.migrations import upgrade_database
 from src.database.session import build_engine
+from src.database.test_database import validate_test_database_environment
 
 
 @pytest.fixture
@@ -20,11 +20,10 @@ def postgres_database_url() -> str:
     value = os.getenv("TEST_DATABASE_URL")
     if not value:
         pytest.skip("TEST_DATABASE_URL is not configured")
-    parsed = make_url(value)
-    if parsed.drivername != "postgresql+psycopg":
-        pytest.fail("TEST_DATABASE_URL must use postgresql+psycopg://")
-    if not (parsed.database or "").endswith("_test"):
-        pytest.fail("TEST_DATABASE_URL database name must end with _test")
+    try:
+        validate_test_database_environment()
+    except ValueError as exc:
+        pytest.fail(str(exc))
     return value
 
 

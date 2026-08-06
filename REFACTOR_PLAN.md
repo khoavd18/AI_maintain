@@ -87,14 +87,14 @@ None confirmed during this audit.
 
 ### High
 
-1. **Large high-consequence modules.** `src/repositories/postgres_inventory.py`
-   is about 3,450 lines, `src/database/models.py` about 3,150,
-   `src/repositories/postgres_operations.py` about 2,200, and multiple services
-   and repositories exceed 1,400 lines. Several functions exceed 100 lines and
-   combine validation, row locking, mutation, append-only history, audit, and
-   serialization. These are hard to review but cannot be mechanically split
-   without risking transaction semantics.
-2. **Large reliability procedures.** `src/reliability/pilot_contract.py`,
+1. **Large high-consequence modules.** The remaining mutation façades
+   `src/repositories/postgres_inventory.py`, `postgres_operations.py`,
+   `postgres_maintenance.py`, and `postgres_tickets.py` remain large, while
+   the SQLAlchemy model package is spread across domain-owned modules. Several
+   functions exceed 100 lines and combine validation, row locking, mutation,
+   append-only history, audit, and serialization. These are hard to review but
+   cannot be mechanically split without risking transaction semantics.
+2. **Large reliability procedures.** `src/reliability/pilot_contract/legacy.py`,
    `load_harness.py`, `drills.py`, `deployment_rehearsal.py`, and
    `post_start_validation.py` contain long procedural workflows. The longest
    functions are 288-534 lines. They are operator tooling rather than runtime
@@ -317,9 +317,10 @@ docs/                          Detailed product/operation contracts
   `src/repositories/csv_writes.py`; `src.api.csv_repository` preserves object
   identity for existing imports. The RAG context port now lives in
   `src/rag/adapters/asset_context.py`; concrete assembly is in
-  `src/api/composition.py`.
+  `src/application/copilot_factory.py`, with `src/api/composition.py` retained
+  as a compatibility import.
 - **Expected files:** `src/api/csv_repository.py`, `src/repositories/csv.py`,
-  `src/rag/copilot.py`, `src/api/services.py`, focused tests.
+  `src/rag/copilot.py`, `src/api/services/`, focused tests.
 - **Risk:** medium.
 - **Validation:** storage configuration/workflow/RAG/API tests, full pytest, Ruff.
 - **Rollback:** retain existing implementation modules/imports.
@@ -494,7 +495,7 @@ Not run in the untouched baseline:
 - `AGENTS.md` product boundaries and canonical path rules.
 - Existing files under `migrations/versions/`; add a new Alembic revision only for
   an explicitly approved schema change.
-- `src/database/models.py` without an approved migration and isolated schema tests.
+- `src/database/models/` without an approved migration and isolated schema tests.
 - Canonical recurrence, analytics, worker, job/event catalog, permission matrix,
   token/session, audit, attachment, and stock-control logic.
 - Public FastAPI routes/schemas and frontend Zod/API contracts.
@@ -600,3 +601,70 @@ Approval is required before:
   scheduler/worker.
 
 No such approval-gated change is part of Stage 1.
+
+## Current PostgreSQL-safe refactor checkpoint
+
+The dedicated test workflow is now implemented in `docker-compose.test.yml`,
+`.env.test.example`, and `scripts/test-postgres.ps1`. It uses PostgreSQL 16 on
+port `15433` with `maintenance_copilot_test`; URL validation rejects non-local,
+non-`_test`, placeholder, development-credential, and mismatched runtime
+targets. See [`docs/testing-postgresql.md`](docs/testing-postgresql.md).
+
+The verified PostgreSQL result is `73 passed, 388 deselected, 1 warning`; the
+clean-environment backend result is `388 passed, 73 skipped, 1 warning`. With
+the isolated PostgreSQL URL, the complete backend is `460 passed, 1 failed,
+1 warning` because of the documented pre-existing pilot-settings validation
+ordering defect. Alembic head/current remain `20260726_0008` and `alembic check`
+reports no new upgrade operations. The metadata snapshot tool and
+characterization tests are in `src/database/metadata_snapshot.py` and
+`tests/test_metadata_snapshot.py`.
+
+Inventory, ticket, and maintenance facades now delegate evidence, query,
+catalogue, comment, and preview capabilities to focused application modules.
+Transaction-heavy repository methods were deliberately left intact; their
+session, lock, idempotency, audit, and outbox map is recorded in
+[`docs/repository-transaction-map.md`](docs/repository-transaction-map.md).
+The remaining mutation orchestration is deferred until one family at a time
+has additional method-level characterization coverage.
+
+## Current backend-core decomposition checkpoint
+
+The SQLAlchemy model monolith is now the domain-owned package
+`src/database/models/`, with compatibility exports for historical imports and
+metadata/Alembic equivalence tests. PostgreSQL query capabilities are composed
+under `src/repositories/postgres/`:
+
+- inventory queries, catalogue mutations, and evidence mutations;
+- maintenance plan/template/work-order/evidence reads;
+- ticket intake, queue, SLA-policy, calendar, and policy reads;
+- PM7 job, execution, outbox, notification, worker-health, and metrics reads.
+
+The historical repository façade signatures remain unchanged. Stock-control,
+maintenance lifecycle/completion/generation, ticket lifecycle/SLA/comments/
+escalation, and PM7 lease/delivery/retry/heartbeat mutations remain in their
+original files because they own atomic lock, idempotency, audit, outbox, and
+commit sequencing. Reliability pilot-contract redaction is now a separate
+implementation module with a package façade and preserved module CLI.
+
+Known pre-existing defect found during validation: a pilot `Settings` test can
+report the release-identity validation error before the expected development
+database-credential error when the release identity is not supplied. It was
+not changed in this structural refactor and should be handled as a separate
+settings-validation bug fix.
+
+## Current non-transactional decomposition checkpoint
+
+The pilot contract implementation is package-owned with a 53-line historical
+façade. The 913-line processed-data service is now a 77-line public package
+façade over snapshot, projection, legacy-write, asset-context, and factory
+collaborators. RAG no longer imports API composition; `MaintenanceCopilot.ask`
+is linear orchestration over request analysis, retrieval/evidence, and
+generation/citation services. The first four remaining frontend hotspots are
+split into operation forms, bounded mutation-hook modules, Copilot response
+views, and PM7 operations tables.
+
+The deliberately deferred mutation repositories remain
+`postgres_inventory.py`, `postgres_maintenance.py`, `postgres_tickets.py`, and
+`postgres_operations.py`; their transaction boundaries, session ownership,
+locks, idempotency, audit, and outbox behavior were not moved. The known
+reliability-settings validation-order defect remains open.

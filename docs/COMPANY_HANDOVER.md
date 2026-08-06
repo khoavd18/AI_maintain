@@ -15,7 +15,7 @@ This repository is suitable for developer handover and controlled local demonstr
 | Preventive plans/work orders/logs | `src/maintenance_management/`, `postgres_maintenance.py` |
 | Spare parts/stock ledger | `src/inventory_management/`, `postgres_inventory.py` |
 | Only worker/jobs/outbox/notifications | `src/operations/`, `postgres_operations.py` |
-| PostgreSQL schema | `src/database/models.py`, `migrations/` |
+| PostgreSQL schema | `src/database/models/`, `migrations/` |
 | Batch analytics | `src/features/`, `src/models/anomaly_detection.py`, `src/risk/risk_scoring.py` |
 | RAG retrieval/orchestration | `src/rag/` |
 | LLM provider/prompt/parser/citations | `src/llm/` |

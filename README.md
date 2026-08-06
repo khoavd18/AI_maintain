@@ -1202,6 +1202,10 @@ docs/                 Scope, architecture, process, contracts và demo docs
 - [Operations runbook](docs/operations_runbook.md)
 - [Security boundary](docs/security.md)
 - [Testing guide](docs/testing.md)
+- [Isolated PostgreSQL testing](docs/testing-postgresql.md)
+- [Application-service decomposition](docs/application-services.md)
+- [Repository transaction map](docs/repository-transaction-map.md)
+- [Backend decomposition checkpoint](docs/repository-transaction-map.md)
 - [PM8 reliability validation](docs/reliability_validation.md)
 - [PM8 load test plan](docs/load_test_plan.md)
 - [Backup and restore drill](docs/backup_restore.md)
@@ -1223,3 +1227,16 @@ docs/                 Scope, architecture, process, contracts và demo docs
 - [Interview notes](docs/interview_notes.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [CV bullets](docs/cv_bullets.md)
+
+## Current decomposition checkpoint
+
+The reliability pilot contract, API processed-data boundary, and RAG
+orchestration now use cohesive implementations behind preserved compatibility
+imports. The shared Copilot graph is composed by
+`src/application/copilot_factory.py`; canonical RAG code has no API reverse
+dependency. The first four frontend hotspots are split into feature-owned
+operation, mutation, response, and operations-table modules. PostgreSQL
+mutation repositories remain deliberately deferred so transaction, locking,
+idempotency, audit, and outbox behavior stays unchanged. Validation details and
+the one known pilot-settings test issue are recorded in
+[`REFACTOR_PLAN.md`](REFACTOR_PLAN.md).

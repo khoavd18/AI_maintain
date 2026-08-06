@@ -161,3 +161,40 @@ python -m ruff check .
 
 Keep the product demo reproducible with local Docker PostgreSQL, migrations, and canonical CSV seed import.
 Use a dedicated database whose name ends in `_test` for PostgreSQL integration tests. Never run destructive test setup against the developer/demo database.
+
+## Current refactor verification workflow
+
+The repository provides `docker-compose.test.yml` and
+`scripts/test-postgres.ps1` for the isolated PostgreSQL integration database.
+It is fixed to local port `15433` and database `maintenance_copilot_test`; the
+database URL validator fails closed for non-loopback hosts, placeholders,
+development credentials, missing `_test` suffixes, and mismatched
+`DATABASE_URL`/`TEST_DATABASE_URL`. Follow [`docs/testing-postgresql.md`](docs/testing-postgresql.md).
+
+Application-service capability ownership and the deliberate boundary around
+transaction-heavy repository methods are documented in
+[`docs/application-services.md`](docs/application-services.md). The current
+repository transaction/session/lock/idempotency/audit/outbox map is in
+[`docs/repository-transaction-map.md`](docs/repository-transaction-map.md).
+
+The current backend decomposition keeps `src/database/models/` as the
+canonical model package and preserves `src.database.models` imports. Real
+PostgreSQL query implementations are composed under `src/repositories/postgres/`
+for inventory, maintenance, tickets, and PM7 operations. Inventory catalogue
+and evidence mutations are also composed there; transaction-heavy stock,
+lifecycle, SLA, and outbox mutation families remain in their original
+repositories until separately characterized. Pilot-contract redaction is
+implemented in `src/reliability/pilot_contract/redaction.py`, with the
+historical CLI and imports preserved by the package façade.
+
+The reliability implementation is otherwise owned by the modules under
+`src/reliability/pilot_contract/`; `legacy.py` is only the historical façade.
+The API service package under `src/api/services/` separates snapshot loading,
+analytics projections, legacy ticket/maintenance adapters, asset context, and
+outer construction. `ProcessedDataService` remains the compatibility façade,
+and `src/application/copilot_factory.py` is the shared Copilot composition root.
+Canonical RAG orchestration is split into request analysis, retrieval/evidence,
+and generation/citation collaborators under `src/rag/application/`. The four
+current frontend hotspots preserve their old import paths while delegating to
+feature-owned operation forms, mutation-context modules, Copilot response
+views, and operations tables. Transaction-heavy repositories remain deferred.

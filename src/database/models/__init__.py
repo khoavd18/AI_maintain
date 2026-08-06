@@ -1,0 +1,133 @@
+"""Compatibility exports for the domain-owned SQLAlchemy model package."""
+
+from src.database.models.base_mixins import _asset_qr_token, _utc_now
+from src.database.models.assets import (
+    Location,
+    Asset,
+    AssetAttachment,
+)
+from src.database.models.tickets import (
+    TicketCategory,
+    TicketSubcategory,
+    TicketIntakeSource,
+    SupportGroup,
+    BusinessCalendar,
+    BusinessWorkingPeriod,
+    BusinessCalendarHoliday,
+    SlaPolicy,
+    SlaPolicyTarget,
+    Ticket,
+    TicketSlaState,
+    TicketSlaEvent,
+    TicketComment,
+    TicketCommentAttachment,
+    TicketEscalationEvent,
+)
+from src.database.models.maintenance import (
+    MaintenanceLog,
+    ChecklistTemplate,
+    ChecklistTemplateItem,
+    PreventiveMaintenancePlan,
+    WorkOrder,
+    WorkOrderChecklistItem,
+    WorkOrderAttachment,
+)
+from src.database.models.inventory import (
+    PartCategory,
+    UnitOfMeasure,
+    SparePart,
+    StockLocation,
+    InventoryPosition,
+    PartReorderConfiguration,
+    InventoryOperation,
+    InventoryMovement,
+    WorkOrderPartRequirement,
+    StockReservation,
+    StockReservationEvent,
+    WorkOrderPartIssue,
+    WorkOrderPartConsumption,
+    WorkOrderPartReturn,
+    InventoryAttachment,
+)
+from src.database.models.identity import (
+    User,
+    RefreshSession,
+    AuditLog,
+)
+from src.database.models.operations import (
+    ScheduledJob,
+    JobExecution,
+    OutboxEvent,
+    OutboxDeliveryAttempt,
+    Notification,
+    NotificationAlertState,
+    WorkerHeartbeat,
+    OutboxRedriveRequest,
+)
+from src.database.models.reliability import (
+    ReliabilityValidationRecord,
+)
+
+from src.database.session import Base
+
+# Former experimental compatibility alias.
+MaintenanceTicket = Ticket
+
+__all__ = [
+    "Location",
+    "Asset",
+    "AssetAttachment",
+    "TicketCategory",
+    "TicketSubcategory",
+    "TicketIntakeSource",
+    "SupportGroup",
+    "BusinessCalendar",
+    "BusinessWorkingPeriod",
+    "BusinessCalendarHoliday",
+    "SlaPolicy",
+    "SlaPolicyTarget",
+    "Ticket",
+    "TicketSlaState",
+    "TicketSlaEvent",
+    "TicketComment",
+    "TicketCommentAttachment",
+    "TicketEscalationEvent",
+    "MaintenanceLog",
+    "ChecklistTemplate",
+    "ChecklistTemplateItem",
+    "PreventiveMaintenancePlan",
+    "WorkOrder",
+    "WorkOrderChecklistItem",
+    "WorkOrderAttachment",
+    "PartCategory",
+    "UnitOfMeasure",
+    "SparePart",
+    "StockLocation",
+    "InventoryPosition",
+    "PartReorderConfiguration",
+    "InventoryOperation",
+    "InventoryMovement",
+    "WorkOrderPartRequirement",
+    "StockReservation",
+    "StockReservationEvent",
+    "WorkOrderPartIssue",
+    "WorkOrderPartConsumption",
+    "WorkOrderPartReturn",
+    "InventoryAttachment",
+    "User",
+    "RefreshSession",
+    "AuditLog",
+    "ScheduledJob",
+    "JobExecution",
+    "OutboxEvent",
+    "OutboxDeliveryAttempt",
+    "Notification",
+    "NotificationAlertState",
+    "WorkerHeartbeat",
+    "OutboxRedriveRequest",
+    "ReliabilityValidationRecord",
+    "Base",
+    "MaintenanceTicket",
+    "_asset_qr_token",
+    "_utc_now",
+]

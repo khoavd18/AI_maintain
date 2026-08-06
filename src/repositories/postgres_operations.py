@@ -42,6 +42,7 @@ from src.repositories.contracts import (
     StaleRecordError,
     StorageUnavailableError,
 )
+from src.repositories.postgres.operations.queries import OperationsQueryRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Role, permissions_for_role
 from src.security.service import CurrentUser, append_audit_event
@@ -66,6 +67,18 @@ class PostgresOperationsRepository:
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self.session_factory = session_factory
+        self.queries = OperationsQueryRepository(
+            session_factory,
+            job_values=_job_values,
+            execution_values=_execution_values,
+            outbox_values=_outbox_values,
+            notification_values=_notification_values,
+            current_user=_current_user,
+            aware_utc=_aware_utc,
+            utc_now=_utc_now,
+            claimable_execution_statuses=CLAIMABLE_EXECUTION_STATUSES,
+            claimable_outbox_statuses=CLAIMABLE_OUTBOX_STATUSES,
+        )
 
     def check_health(self) -> None:
         try:
@@ -78,14 +91,7 @@ class PostgresOperationsRepository:
             ) from exc
 
     def list_jobs(self) -> list[dict[str, Any]]:
-        try:
-            with self.session_factory() as session:
-                jobs = session.scalars(
-                    select(ScheduledJob).order_by(ScheduledJob.job_key)
-                ).all()
-                return [_job_values(job) for job in jobs]
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc danh sách background job.") from exc
+        return self.queries.list_jobs()
 
     def set_job_enabled(
         self,
@@ -613,29 +619,7 @@ class PostgresOperationsRepository:
             ) from exc
 
     def load_execution_actor(self, execution_id: UUID) -> CurrentUser:
-        try:
-            with self.session_factory() as session:
-                execution = session.get(JobExecution, execution_id)
-                if execution is None:
-                    raise RecordNotFoundError(
-                        f"Không tìm thấy job execution: {execution_id}"
-                    )
-                job = session.get(ScheduledJob, execution.job_key)
-                user_id = execution.requested_by_user_id or (
-                    job.run_as_user_id if job else None
-                )
-                user = session.get(User, user_id) if user_id else None
-                if user is None or not user.is_active:
-                    raise IntegrityViolationError(
-                        "Background job chưa có run-as user đang hoạt động."
-                    )
-                return _current_user(user)
-        except (IntegrityViolationError, RecordNotFoundError):
-            raise
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể tải run-as user của background job."
-            ) from exc
+        return self.queries.load_execution_actor(execution_id)
 
     def list_executions(
         self,
@@ -645,37 +629,12 @@ class PostgresOperationsRepository:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        try:
-            with self.session_factory() as session:
-                statement = select(JobExecution)
-                if status:
-                    JobExecutionStatus(status)
-                    statement = statement.where(JobExecution.status == status)
-                if job_key:
-                    statement = statement.where(JobExecution.job_key == job_key)
-                total = int(
-                    session.scalar(
-                        select(func.count()).select_from(statement.subquery())
-                    )
-                    or 0
-                )
-                items = session.scalars(
-                    statement.order_by(
-                        JobExecution.created_at.desc(), JobExecution.id.desc()
-                    )
-                    .offset((page - 1) * page_size)
-                    .limit(page_size)
-                ).all()
-                return {
-                    "items": [_execution_values(item) for item in items],
-                    "page": page,
-                    "page_size": page_size,
-                    "total": total,
-                }
-        except ValueError:
-            raise
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc job executions.") from exc
+        return self.queries.list_executions(
+            status=status,
+            job_key=job_key,
+            page=page,
+            page_size=page_size,
+        )
 
     def list_outbox(
         self,
@@ -684,35 +643,11 @@ class PostgresOperationsRepository:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        try:
-            with self.session_factory() as session:
-                statement = select(OutboxEvent)
-                if status:
-                    OutboxStatus(status)
-                    statement = statement.where(OutboxEvent.status == status)
-                total = int(
-                    session.scalar(
-                        select(func.count()).select_from(statement.subquery())
-                    )
-                    or 0
-                )
-                items = session.scalars(
-                    statement.order_by(
-                        OutboxEvent.created_at.desc(), OutboxEvent.id.desc()
-                    )
-                    .offset((page - 1) * page_size)
-                    .limit(page_size)
-                ).all()
-                return {
-                    "items": [_outbox_values(item) for item in items],
-                    "page": page,
-                    "page_size": page_size,
-                    "total": total,
-                }
-        except ValueError:
-            raise
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc transactional outbox.") from exc
+        return self.queries.list_outbox(
+            status=status,
+            page=page,
+            page_size=page_size,
+        )
 
     def redrive_outbox_event(
         self,
@@ -1378,61 +1313,16 @@ class PostgresOperationsRepository:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        try:
-            with self.session_factory() as session:
-                statement = select(Notification).where(
-                    Notification.recipient_user_id == recipient_user_id,
-                    Notification.dismissed_at.is_(None),
-                )
-                if unread_only:
-                    statement = statement.where(Notification.read_at.is_(None))
-                if severity:
-                    if severity not in {"info", "warning", "critical"}:
-                        raise ValueError("Notification severity không hợp lệ.")
-                    statement = statement.where(Notification.severity == severity)
-                total = int(
-                    session.scalar(
-                        select(func.count()).select_from(statement.subquery())
-                    )
-                    or 0
-                )
-                items = session.scalars(
-                    statement.order_by(
-                        Notification.created_at.desc(), Notification.id.desc()
-                    )
-                    .offset((page - 1) * page_size)
-                    .limit(page_size)
-                ).all()
-                return {
-                    "items": [_notification_values(item) for item in items],
-                    "page": page,
-                    "page_size": page_size,
-                    "total": total,
-                }
-        except ValueError:
-            raise
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc notifications.") from exc
+        return self.queries.list_notifications(
+            recipient_user_id=recipient_user_id,
+            unread_only=unread_only,
+            severity=severity,
+            page=page,
+            page_size=page_size,
+        )
 
     def unread_notification_count(self, recipient_user_id: UUID) -> int:
-        try:
-            with self.session_factory() as session:
-                return int(
-                    session.scalar(
-                        select(func.count())
-                        .select_from(Notification)
-                        .where(
-                            Notification.recipient_user_id == recipient_user_id,
-                            Notification.read_at.is_(None),
-                            Notification.dismissed_at.is_(None),
-                        )
-                    )
-                    or 0
-                )
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError(
-                "Không thể đọc số notification chưa xem."
-            ) from exc
+        return self.queries.unread_notification_count(recipient_user_id)
 
     def mutate_notification(
         self,
@@ -1548,192 +1438,13 @@ class PostgresOperationsRepository:
         stale_after_seconds: int,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        current = _aware_utc(now or _utc_now())
-        try:
-            with self.session_factory() as session:
-                fresh_ready = session.scalar(
-                    select(WorkerHeartbeat)
-                    .where(
-                        WorkerHeartbeat.status == "ready",
-                        WorkerHeartbeat.last_seen_at
-                        >= current - timedelta(seconds=stale_after_seconds),
-                    )
-                    .order_by(WorkerHeartbeat.last_seen_at.desc())
-                )
-                heartbeat = fresh_ready or session.scalar(
-                    select(WorkerHeartbeat).order_by(
-                        WorkerHeartbeat.last_seen_at.desc()
-                    )
-                )
-                if heartbeat is None:
-                    return {
-                        "status": "missing",
-                        "ready": False,
-                        "worker_identity": None,
-                        "last_seen_at": None,
-                        "age_seconds": None,
-                    }
-                age = max(
-                    0, int((current - heartbeat.last_seen_at).total_seconds())
-                )
-                ready = heartbeat.status == "ready" and age <= stale_after_seconds
-                return {
-                    "status": (
-                        "ready"
-                        if ready
-                        else (
-                            heartbeat.status
-                            if age <= stale_after_seconds
-                            else "stale"
-                        )
-                    ),
-                    "ready": ready,
-                    "worker_identity": heartbeat.worker_identity,
-                    "last_seen_at": heartbeat.last_seen_at.isoformat(),
-                    "age_seconds": age,
-                }
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc worker heartbeat.") from exc
+        return self.queries.worker_health(
+            stale_after_seconds=stale_after_seconds,
+            now=now,
+        )
 
     def operational_metrics(self, *, now: datetime | None = None) -> dict[str, Any]:
-        current = _aware_utc(now or _utc_now())
-        try:
-            with self.session_factory() as session:
-                pending_jobs = _count_where(
-                    session,
-                    JobExecution,
-                    JobExecution.status.in_(CLAIMABLE_EXECUTION_STATUSES),
-                )
-                failed_jobs = _count_where(
-                    session,
-                    JobExecution,
-                    JobExecution.status == JobExecutionStatus.FAILED.value,
-                )
-                dead_jobs = _count_where(
-                    session,
-                    JobExecution,
-                    JobExecution.status
-                    == JobExecutionStatus.DEAD_LETTERED.value,
-                )
-                pending_outbox = _count_where(
-                    session,
-                    OutboxEvent,
-                    OutboxEvent.status.in_(CLAIMABLE_OUTBOX_STATUSES),
-                )
-                dead_outbox = _count_where(
-                    session,
-                    OutboxEvent,
-                    OutboxEvent.status == OutboxStatus.DEAD_LETTERED.value,
-                )
-                active_job_leases = _count_where(
-                    session,
-                    JobExecution,
-                    JobExecution.status == JobExecutionStatus.RUNNING.value,
-                )
-                active_outbox_leases = _count_where(
-                    session,
-                    OutboxEvent,
-                    OutboxEvent.status == OutboxStatus.PROCESSING.value,
-                )
-                outbox_retry_count = int(
-                    session.scalar(
-                        select(func.count())
-                        .select_from(OutboxDeliveryAttempt)
-                        .where(OutboxDeliveryAttempt.status == "failed")
-                    )
-                    or 0
-                )
-                expired_lease_recovery_count = int(
-                    session.scalar(
-                        select(func.count())
-                        .select_from(OutboxDeliveryAttempt)
-                        .where(
-                            OutboxDeliveryAttempt.safe_error_code
-                            == "lease_expired"
-                        )
-                    )
-                    or 0
-                )
-                notification_creation_count = int(
-                    session.scalar(
-                        select(func.count()).select_from(Notification)
-                    )
-                    or 0
-                )
-                active_operational_alert_count = int(
-                    session.scalar(
-                        select(func.count())
-                        .select_from(NotificationAlertState)
-                        .where(
-                            NotificationAlertState.alert_type
-                            != "inventory_low_stock",
-                            NotificationAlertState.is_active.is_(True),
-                        )
-                    )
-                    or 0
-                )
-                oldest = session.scalar(
-                    select(func.min(OutboxEvent.created_at)).where(
-                        OutboxEvent.status.in_(
-                            {
-                                OutboxStatus.PENDING.value,
-                                OutboxStatus.RETRY_SCHEDULED.value,
-                                OutboxStatus.PROCESSING.value,
-                            }
-                        )
-                    )
-                )
-                jobs = session.scalars(
-                    select(ScheduledJob).order_by(ScheduledJob.job_key)
-                ).all()
-                latest_backup = session.scalar(
-                    select(ReliabilityValidationRecord.performed_at)
-                    .where(
-                        ReliabilityValidationRecord.validation_type
-                        == "backup_restore",
-                        ReliabilityValidationRecord.status == "passed",
-                    )
-                    .order_by(
-                        ReliabilityValidationRecord.performed_at.desc()
-                    )
-                )
-                return {
-                    "as_of": current.isoformat(),
-                    "pending_job_count": pending_jobs,
-                    "failed_job_count": failed_jobs,
-                    "dead_letter_job_count": dead_jobs,
-                    "pending_outbox_count": pending_outbox,
-                    "dead_letter_outbox_count": dead_outbox,
-                    "active_job_lease_count": active_job_leases,
-                    "active_outbox_lease_count": active_outbox_leases,
-                    "outbox_retry_count": outbox_retry_count,
-                    "expired_lease_recovery_count": expired_lease_recovery_count,
-                    "notification_creation_count": notification_creation_count,
-                    "active_operational_alert_count": active_operational_alert_count,
-                    "oldest_pending_outbox_age_seconds": (
-                        max(0, int((current - oldest).total_seconds()))
-                        if oldest
-                        else None
-                    ),
-                    "last_successful_run_by_job": {
-                        job.job_key: (
-                            job.last_successful_run_at.isoformat()
-                            if job.last_successful_run_at
-                            else None
-                        )
-                        for job in jobs
-                    },
-                    "last_validated_backup_at": (
-                        latest_backup.isoformat() if latest_backup else None
-                    ),
-                    "last_validated_backup_age_seconds": (
-                        max(0, int((current - latest_backup).total_seconds()))
-                        if latest_backup
-                        else None
-                    ),
-                }
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể đọc operational metrics.") from exc
+        return self.queries.operational_metrics(now=now)
 
 
 def _job_values(job: ScheduledJob) -> dict[str, Any]:

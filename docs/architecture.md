@@ -19,14 +19,16 @@ The public `src/api/routes.py` import remains a compatibility facade. The
 system/readiness, analytics, and Copilot endpoint families now live in focused
 routers under `src/api/routers/`, while the facade preserves the existing
 dependency override and function import seams used by tests and internal
-callers. `src/api/composition.py` is the outer composition root for the
-concrete Copilot graph.
+callers. `src/application/copilot_factory.py` is the shared outer composition
+root; `src/api/composition.py` remains a compatibility import.
 
 RAG does not import `src.api.services`. It consumes the narrow
 `AssetContextProvider` port in `src/rag/adapters/asset_context.py`; the API
 composition root supplies `ProcessedDataAssetContextAdapter`. The adapter
 exposes only bounded read context and recent ticket enrichment, so RAG remains
-independent of FastAPI transport and transactional mutation code.
+independent of FastAPI transport and transactional mutation code. The RAG
+application pipeline is implemented by request-analysis, retrieval/evidence,
+and generation/citation collaborators under `src/rag/application/`.
 
 Frontend feature entrypoints live under `frontend/src/features/` for inventory,
 work-order parts, ticket detail, and SLA administration. The old component
@@ -34,7 +36,10 @@ paths remain re-export facades. Inventory catalogue read operations also have a
 dedicated application collaborator at
 `src/inventory_management/application/catalogue_service.py`; stock-changing
 operations remain in the canonical service so their transaction boundaries are
-not fragmented.
+not fragmented. The current Next.js compatibility entrypoints similarly split
+inventory operation forms, mutation hooks, Copilot response rendering, and
+PM7 operations tables into feature-owned modules without changing request
+payloads, query keys, or visible states.
 
 ## System Map
 
@@ -103,12 +108,23 @@ flowchart LR
 1. Alembic tạo và version schema; API không gọi `metadata.create_all()`.
 2. `src/ingestion/load_data.py` validate full synthetic dataset, tạo deterministic location hierarchy/defaults rồi import assets, tickets và logs trong một transaction.
 3. `src/repositories/contracts.py` định nghĩa storage-neutral operations.
-4. `src/repositories/postgres.py`, `postgres_assets.py`, `postgres_tickets.py`, `postgres_maintenance.py`, `postgres_inventory.py` và `postgres_operations.py` thực thi từng bounded context, dùng PostgreSQL constraints/sequence/row locks và không được gọi trực tiếp từ routes.
-5. `src/api/services.py`, các canonical domain services và `src/operations/service.py` giữ lifecycle, priority/SLA, chronology, recurrence, stock-control, completion, verification và operator rules.
+4. `src/repositories/postgres/` and the historical repository façades (`postgres_assets.py`, `postgres_tickets.py`, `postgres_maintenance.py`, `postgres_inventory.py`, and `postgres_operations.py`) thực thi từng bounded context, dùng PostgreSQL constraints/sequence/row locks và không được gọi trực tiếp từ routes. Read/query capabilities are composed under the domain subpackages; transaction-sensitive mutations remain owned by the façades.
+5. `src/api/services/compatibility.py`, các canonical domain services và `src/operations/service.py` giữ lifecycle, priority/SLA, chronology, recurrence, stock-control, completion, verification và operator rules.
 6. FastAPI routes chỉ phụ thuộc service; route không chọn storage backend.
 7. API startup kiểm tra PostgreSQL connection và migration tables. Nếu PostgreSQL không sẵn sàng, startup fail rõ ràng và không fallback sang mutable CSV.
 
 `src/repositories/csv.py` cùng `src/api/csv_repository.py` được giữ làm compatibility adapter cho isolated tests và fixtures. Adapter vẫn có atomic file replacement nhưng không phải normal product mode.
+
+### Persistence decomposition checkpoint
+
+SQLAlchemy models are owned by `src/database/models/` and imported through the
+compatibility package `src.database.models`; metadata snapshots and Alembic
+checks are required to remain identical. PostgreSQL read/query implementations
+are composed in `src/repositories/postgres/{inventory,maintenance,tickets,operations}/`.
+Inventory catalogue and evidence mutations have real component implementations,
+while stock-control, maintenance lifecycle, ticket lifecycle/SLA, and PM7
+claim/delivery mutations remain in their original repositories until their full
+transaction maps have method-level characterization coverage.
 
 ## Background Jobs, Outbox Và Notifications
 
@@ -558,6 +574,27 @@ Không có automatic fallback. `STORAGE_BACKEND=postgresql` cùng database unava
 - Inventory chưa có lot/serial tracking, cycle counting, barcode scanning, procurement/supplier workflow, stock valuation, accounting integration hoặc automatic replenishment.
 - Low-stock state/reorder suggestion là threshold deterministic, không phải demand forecast hoặc optimization.
 - PostgreSQL local Docker defaults và development ephemeral signing secret chỉ phục vụ development/demo, không phải secret strategy cho production.
+
+## Refactor validation and ownership
+
+Application-service extraction keeps the public service facades and leaves
+transaction-sensitive repository methods as the session/lock/audit/outbox
+owner. The extracted inventory, ticket, and maintenance capabilities are
+listed in [`application-services.md`](application-services.md), while the
+method-level repository transaction map is in
+[`repository-transaction-map.md`](repository-transaction-map.md).
+
+PostgreSQL integration work uses the dedicated local `_test` Compose project
+on port `15433`; its startup, teardown, safety checks, and metadata snapshot
+workflow are in [`testing-postgresql.md`](testing-postgresql.md).
+
+Reliability contract tooling is now exposed through the compatibility package
+`src/reliability/pilot_contract/`; `legacy.py` retains historical imports, the
+package modules own validator responsibilities, `redaction.py` owns recursive
+secret/path/contact redaction, and `__main__.py`
+preserves the existing module CLI. This is tooling decomposition only; it does
+not change release decisions, report schemas, command ordering, or fail-closed
+validation.
 
 ## Human-In-The-Loop Boundary
 

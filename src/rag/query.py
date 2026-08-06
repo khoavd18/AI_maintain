@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from src.api.composition import get_copilot_service
+from src.application.copilot_factory import get_copilot_service
 from src.analytics.errors import AssetNotFoundError, ProcessedDataNotFoundError
 from src.rag.embeddings import EmbeddingDependencyError
 from src.rag.vector_store import VectorStoreError
