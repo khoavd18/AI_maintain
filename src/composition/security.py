@@ -6,6 +6,7 @@ from functools import lru_cache
 
 from src.config.settings import get_settings
 from src.database.session import get_session_factory
+from src.security.session_service import SessionRevocationService
 from src.security.service import AuthService
 
 
@@ -14,4 +15,9 @@ def get_auth_service() -> AuthService:
     """Return the process-scoped authentication service used by FastAPI."""
 
     settings = get_settings()
-    return AuthService(get_session_factory(settings.database_url), settings)
+    session_factory = get_session_factory(settings.database_url)
+    return AuthService(
+        session_factory,
+        settings,
+        session_revocation=SessionRevocationService(session_factory),
+    )

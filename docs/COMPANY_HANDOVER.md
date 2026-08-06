@@ -210,23 +210,27 @@ generation, work-order, checklist-completion, verification, and evidence
 transaction families remain retained. The next safe phase is security service
 decomposition.
 
-Phase G completed the security characterization and one safe pure extraction.
-`src/security/identity.py` now owns identifier normalization, user/principal
-projection, and persisted-user-to-principal construction. `src/security/errors.py`
-owns the shared `AuthenticationError`, while `src.security.service` remains the
-historical import facade. Direct characterization tests cover principal identity,
-normalization, serialization redaction, token claims/key rotation and invalid
-tokens, refresh/CSRF hashing, password compatibility, and audit metadata
-filtering.
+Phase G now includes an explicit ORM-free security transaction contract and one
+complete transaction-family extraction. `src/security/identity.py` owns
+identity projections; `src/security/errors.py` owns shared security errors;
+`src/security/session_state.py` owns the pure access-state predicate; and
+`src/security/contracts.py` plus `src/security/session_service.py` own the
+single-session logout port and complete SQLAlchemy-backed transaction.
+`src.security.service` remains the historical facade. Contract and PostgreSQL
+tests protect one-session ownership, audit atomicity, idempotency, and facade
+compatibility.
 
 AuthService remains intact for login, access authentication, refresh rotation,
-logout, password changes, user administration, and same-transaction audit
-orchestration. No token, password, session, audit, API, environment, schema,
-or frontend behavior changed. The security characterization suite passed `12
-passed`; relevant non-PostgreSQL security tests passed `15 passed, 9 deselected,
-1 warning`. Full backend validation passed (`402 passed, 73 skipped, 1
-warning`), isolated PostgreSQL validation passed (`73 passed, 402 deselected,
-1 warning`), Ruff/compileall passed, and Alembic current/heads/check remain
-clean at `20260726_0008` with no new upgrade operations. No migration or model
-metadata changed. The next single bounded backend phase is deeper transactional
-security characterization before another AuthService extraction.
+password changes, user administration, and their audit orchestration. No token,
+password, session, audit, API, environment, schema, or frontend behavior
+changed outside the selected complete logout family. Refresh rotation is
+characterized in [`security-refresh-rotation-contract.md`](security-refresh-rotation-contract.md)
+and remains in `AuthService` because its complete token/session family shares
+the login session-result factory. The combined security characterization/
+contract suite passed `14 passed`; the isolated PostgreSQL security suite passed
+`13 passed`. Full backend validation passed (`404 passed, 86 skipped, 1
+warning`); the final isolated PostgreSQL workflow passed (`86 passed, 404
+deselected, 1 warning`). Ruff/compileall passed, and Alembic current/heads/
+check remain clean at `20260726_0008` with no new operations.
+The next single bounded backend phase requires a separately approved complete
+transaction-family contract.

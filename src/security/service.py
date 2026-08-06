@@ -17,8 +17,9 @@ from sqlalchemy.orm.exc import StaleDataError
 from src.config.settings import Settings
 from src.database.models import AuditLog, RefreshSession, User
 from src.repositories.contracts import StorageUnavailableError
-from src.security.audit import safe_metadata
-from src.security.errors import AuthenticationError
+from src.security.audit import append_security_audit, safe_metadata
+from src.security.contracts import SessionRevocationPort
+from src.security.errors import AuthenticationError, CsrfValidationError
 from src.security.identity import (
     current_user_from_user,
     normalize_identifier,
@@ -33,8 +34,9 @@ from src.security.permissions import (
 )
 from src.security.principal import CurrentUser
 from src.security.rate_limit import LoginRateLimiter, LoginRateLimitExceededError
+from src.security.session_service import SessionRevocationService
+from src.security.session_state import access_state_is_valid
 from src.security.tokens import (
-    AccessClaims,
     InvalidAccessTokenError,
     create_access_token,
     create_csrf_token,
@@ -44,10 +46,6 @@ from src.security.tokens import (
     refresh_session_id,
     token_hash_matches,
 )
-
-
-class CsrfValidationError(ValueError):
-    """Raised when a refresh-cookie mutation lacks its bound CSRF token."""
 
 
 class DuplicateUserError(ValueError):
@@ -75,9 +73,15 @@ class AuthResult:
 class AuthService:
     """Keep identity business rules outside FastAPI route functions."""
 
-    def __init__(self, session_factory: sessionmaker[Session], settings: Settings) -> None:
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session],
+        settings: Settings,
+        session_revocation: SessionRevocationPort | None = None,
+    ) -> None:
         self.session_factory = session_factory
         self.settings = settings
+        self.session_revocation = session_revocation or SessionRevocationService(session_factory)
         self.rate_limiter = LoginRateLimiter(
             max_attempts=settings.login_rate_limit_attempts,
             window_seconds=settings.login_rate_limit_window_seconds,
@@ -168,7 +172,7 @@ class AuthService:
             with self.session_factory() as session:
                 user = session.get(User, claims.user_id)
                 refresh_session = session.get(RefreshSession, claims.session_id)
-                if not _access_state_is_valid(user, refresh_session, claims, now):
+                if not access_state_is_valid(user, refresh_session, claims, now):
                     raise AuthenticationError("Phiên đăng nhập không hợp lệ hoặc đã hết hạn.")
                 return current_user_from_user(user, claims.session_id)
         except AuthenticationError:
@@ -239,42 +243,11 @@ class AuthService:
         csrf_token: str | None,
         request_id: str,
     ) -> None:
-        if not refresh_token:
-            return
-        try:
-            session_id = refresh_session_id(refresh_token)
-        except ValueError:
-            return
-        now = _utc_now()
-        try:
-            with self.session_factory() as session, session.begin():
-                refresh_session = session.get(
-                    RefreshSession, session_id, with_for_update=True
-                )
-                if refresh_session is None or not token_hash_matches(
-                    refresh_token, refresh_session.token_hash
-                ):
-                    return
-                if not csrf_token or not token_hash_matches(
-                    csrf_token, refresh_session.csrf_token_hash
-                ):
-                    raise CsrfValidationError("Yêu cầu đăng xuất không hợp lệ.")
-                user = session.get(User, refresh_session.user_id)
-                if refresh_session.revoked_at is None:
-                    refresh_session.revoked_at = now
-                    _append_audit(
-                        session,
-                        actor=user,
-                        action="auth.logout",
-                        resource_type="refresh_session",
-                        resource_id=str(refresh_session.id),
-                        request_id=request_id,
-                        outcome="success",
-                    )
-        except CsrfValidationError:
-            raise
-        except (OperationalError, SQLAlchemyError) as exc:
-            raise StorageUnavailableError("Không thể kết thúc phiên đăng nhập.") from exc
+        self.session_revocation.logout(
+            refresh_token=refresh_token,
+            csrf_token=csrf_token,
+            request_id=request_id,
+        )
 
     def change_password(
         self,
@@ -597,52 +570,7 @@ class AuthService:
         )
 
 
-def _access_state_is_valid(
-    user: User | None,
-    refresh_session: RefreshSession | None,
-    claims: AccessClaims,
-    now: datetime,
-) -> bool:
-    return bool(
-        user
-        and user.is_active
-        and user.version == claims.user_version
-        and user.role == claims.role
-        and refresh_session
-        and refresh_session.user_id == user.id
-        and refresh_session.revoked_at is None
-        and refresh_session.expires_at > now
-    )
-
-
-def _append_audit(
-    session: Session,
-    *,
-    actor: User | CurrentUser | None,
-    action: str,
-    resource_type: str,
-    resource_id: str | None,
-    request_id: str,
-    before_state: dict[str, object] | None = None,
-    after_state: dict[str, object] | None = None,
-    metadata: dict[str, Any] | None = None,
-    outcome: str,
-) -> None:
-    session.add(
-        AuditLog(
-            id=uuid4(),
-            actor_user_id=actor.id if actor else None,
-            actor_display_name=actor.display_name if actor else None,
-            action=action,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            request_id=request_id[:100],
-            before_state=before_state,
-            after_state=after_state,
-            event_metadata=safe_metadata(metadata),
-            outcome=outcome,
-        )
-    )
+_append_audit = append_security_audit
 
 
 def append_audit_event(

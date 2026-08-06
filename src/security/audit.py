@@ -2,7 +2,12 @@
 
 from dataclasses import dataclass
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
+
+from sqlalchemy.orm import Session
+
+from src.database.models import AuditLog, User
+from src.security.principal import CurrentUser
 
 
 @dataclass(frozen=True)
@@ -108,6 +113,38 @@ def safe_metadata(values: dict[str, Any] | None = None) -> dict[str, object] | N
         if isinstance(value, (str, int, float, bool)) or value is None:
             result[str(key)[:80]] = str(value)[:300] if isinstance(value, str) else value
     return result or None
+
+
+def append_security_audit(
+    session: Session,
+    *,
+    actor: User | CurrentUser | None,
+    action: str,
+    resource_type: str,
+    resource_id: str | None,
+    request_id: str,
+    before_state: dict[str, object] | None = None,
+    after_state: dict[str, object] | None = None,
+    metadata: dict[str, Any] | None = None,
+    outcome: str,
+) -> None:
+    """Add one security audit row to the caller-owned transaction."""
+
+    session.add(
+        AuditLog(
+            id=uuid4(),
+            actor_user_id=actor.id if actor else None,
+            actor_display_name=actor.display_name if actor else None,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            request_id=request_id[:100],
+            before_state=before_state,
+            after_state=after_state,
+            event_metadata=safe_metadata(metadata),
+            outcome=outcome,
+        )
+    )
 
 
 def _json_value(value: Any) -> object:

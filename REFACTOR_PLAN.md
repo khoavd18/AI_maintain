@@ -735,29 +735,30 @@ service decomposition.
 
 ## Final continuation checkpoint — 2026-08-06
 
-Phase G completed the security characterization and one safe pure extraction.
-`src/security/identity.py` now owns identifier normalization, user response
-projection, and persisted-user-to-principal construction. `src/security/errors.py`
-owns the shared `AuthenticationError`; `src.security.service` remains the
-historical import facade. The characterization suite added direct coverage for
-principal identity, normalization, projections, token claims/key rotation and
-invalid-token cases, refresh/CSRF hashing, password compatibility, and audit
-metadata redaction.
+Phase G now includes an explicit ORM-free security transaction contract and one
+complete transaction-family extraction. `src/security/identity.py` owns
+identity projections; `src/security/errors.py` owns shared security errors;
+`src/security/session_state.py` owns the pure access-state predicate; and
+`src/security/contracts.py` plus `src/security/session_service.py` own the
+single-session logout port and complete SQLAlchemy-backed transaction.
+`src.security.service` remains the historical facade. Contract and PostgreSQL
+tests protect one-session ownership, audit atomicity, idempotency, and facade
+compatibility.
 
-The transactional AuthService families remain retained: login, access
-authentication, refresh rotation, logout, password change, user administration,
-and audit orchestration. No token/password/session/audit behavior, API contract,
-environment restriction, or transaction boundary was changed. The safe stop is
-therefore documented retention after the pure extraction, pending a future
-database-backed characterization of one transactional seam.
+Login, refresh rotation, password revoke-all, user administration, and their
+audit orchestration remain retained in `AuthService`. No token/password/API or
+environment behavior changed, and no partial transaction family was moved.
 
-The pre-characterization baseline was full backend `390 passed, 73 skipped, 1
-warning`; latest isolated PostgreSQL `73 passed, 390 deselected, 1 warning`.
-Final security-phase validation passed: full backend `402 passed, 73 skipped, 1
-warning`; isolated PostgreSQL `73 passed, 402 deselected, 1 warning`; Ruff and
-compileall passed; Alembic current/head/check passed at `20260726_0008`; all
-three development/test/pilot Compose configurations parsed successfully. No
-frontend file changed, no API contract or database metadata changed, and no
-transaction boundary was intentionally changed. The next single recommended
-backend phase is deeper transactional security characterization before any
-AuthService decomposition.
+The pre-characterization baseline was full backend `402 passed, 73 skipped, 1
+warning`; latest isolated PostgreSQL `73 passed, 402 deselected, 1 warning`.
+Refresh characterization added the exact operation contract, 2 application
+signature tests, and 3 additional PostgreSQL tests without moving production
+refresh code. The final security-phase validation passed: full backend `404
+passed, 86 skipped, 1 warning`; isolated PostgreSQL `86 passed, 404
+deselected, 1 warning`; Ruff and compileall passed; Alembic current/head/check
+passed at `20260726_0008`; and all three development/test/pilot Compose
+configurations parsed successfully. No frontend file changed, no API contract
+or database metadata changed, and no transaction boundary was intentionally
+changed. The next single recommended backend phase is a separately approved
+extraction of a complete transaction family, only if its repository/session
+contract is first made explicit.

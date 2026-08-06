@@ -92,6 +92,39 @@ method remains in its current repository until focused PostgreSQL tests prove
 that the entire idempotency -> locks -> mutation -> audit/outbox -> commit
 sequence can move without changing session ownership or lock order.
 
+## Security: `AuthService`
+
+Security persistence is owned by `src/security/service.py`, not by a
+PostgreSQL repository. `src/composition/security.py` injects the cached
+`sessionmaker[Session]`; routes, dependencies, and the explicit security CLI
+only call `AuthService`. Each atomic mutation opens exactly one session and
+transaction with `with self.session_factory() as session, session.begin()`.
+`_create_session_result` and `append_security_audit` receive that caller-owned
+session and never open or commit a second one. `AuthService.logout` delegates
+the complete operation to `SessionRevocationService`, which uses the same
+injected factory and owns one session/transaction. Access validation, identity
+projection, and token/password helpers are pure or cryptographic collaborators
+and do not own PostgreSQL transactions.
+
+| Methods | Session/transaction owner | Reads, writes, locks, and state boundaries | Audit and characterization |
+|---|---|---|---|
+| `login` | `AuthService.login` | Reads `users` by normalized identifier; dummy-verifies unknown users; updates `last_login_at`; adds one hashed `refresh_sessions` row and access/CSRF token result; refresh hash uniqueness remains database-enforced | `auth.login_succeeded` or `auth.login_failed` is appended before the single commit; SQL/audit failure rolls back. Persistent behavior is covered by `test_security_postgres_characterization.py`. |
+| `authenticate_access` | Read-only `AuthService.authenticate_access` session | Decodes claims first, then reads `users` and `refresh_sessions`; `session_state.access_state_is_valid` checks active/version/role/ownership/revocation/expiry | No write or audit; mismatch/inactive/role/version tests characterize rejection. |
+| `refresh` | `AuthService.refresh` | Locks the old `refresh_sessions` row with `FOR UPDATE`; verifies both hashes and owner state; revokes old row; creates replacement row; no replacement-link column exists | Old revocation, new row, token timing, and `auth.refreshed` commit together. Replay, CSRF isolation, expired/revoked/inactive-user rejection, replacement/audit rollback, and concurrent single-winner behavior are characterized in `test_security_postgres_characterization.py`; the exact sequence and retained boundary are in [`security-refresh-rotation-contract.md`](security-refresh-rotation-contract.md). |
+| `logout` | `SessionRevocationService` through `AuthService.logout` | Locks one session, verifies refresh/CSRF hashes, loads owner, and revokes only an active row; unknown/malformed values are silent no-ops | `auth.logout` is appended only for actual revocation and commits atomically. Repeated logout, cross-user isolation, one-session ownership, and audit-failure rollback are characterized. |
+| `change_password` | `AuthService.change_password` | Locks the actor `users` row; verifies current password; updates password and bulk-revokes that user's active `refresh_sessions` | `auth.password_changed` commits with password/session state. Invalid current password performs no mutation; revoke-all behavior is characterized. |
+| `create_user` / `bootstrap_user` | `AuthService._insert_user` | Normalizes/validates and hashes before opening one transaction; adds user, flushes, then appends `user.created`; unique identity constraints map to duplicate errors | User/audit commit together. Bootstrap is explicit, active, actorless, and uses `cli-bootstrap`; persistence and redaction are characterized. |
+| `update_user` | `AuthService.update_user` | Locks target user, rejects unsafe self-disable, applies allow-listed state, flushes, bulk-revokes sessions on role/active changes, then adds ordered state audits | User, revocations, and audit rows share one commit; optimistic version and integrity failures roll back the sequence. Post-issuance role invalidation is characterized. |
+| `list_users` / `list_audit_logs` | Short-lived read session in `AuthService` | Ordered/filter reads only; response mapping excludes password/token material | No commit mutation or audit; existing API tests cover projections/pagination/redaction. |
+| `record_authorization_denied` | `AuthService.record_authorization_denied` | Adds one bounded denial event in a transaction | Best-effort by deliberate contract: SQL/operational errors are swallowed after the permission denial remains in force. |
+
+Persistent tables are `users`, `refresh_sessions`, and append-only
+`audit_logs`. There is no security cleanup operation for expired sessions, no
+generic authentication idempotency key, and no separate session repository
+beyond the selected complete logout component. Refresh, password, login, and
+user mutation families remain in `AuthService` because moving only part of a
+sequence would change the session owner, lock/flush order, or audit atomicity.
+
 ## Refactoring checkpoint — 2026-08-06
 
 Phase A extracted only the storage-neutral `CurrentUser` value type. No
@@ -121,8 +154,21 @@ families remain retained.
 
 ## Final continuation checkpoint — 2026-08-06
 
-No transaction-heavy repository family was moved during this continuation.
-Latest PostgreSQL validation passed (`73 passed, 390 deselected, 1 warning`);
-Alembic remained at `20260726_0008` with no pending operations. Further security
-decomposition is deferred until authentication/session/audit characterization
-is explicit; this map remains the authority for any future repository move.
+Database-backed security characterization is now explicit. Thirteen isolated
+tests cover login persistence, session hash/expiry state, refresh rotation and
+replay, CSRF isolation, expired/revoked refreshes, inactive/password/role
+refresh invalidation, replacement/audit rollback, concurrent single-winner
+refresh, logout idempotency and user isolation, password revoke-all,
+post-issuance access invalidation, bootstrap audit state, and one-session
+contract ownership. `AuthService`
+remains the facade and transaction owner for its families; the selected
+`SessionRevocationService` owns the complete logout transaction using one
+injected session. The other additional implementation move is the pure
+`access_state_is_valid` predicate in `src/security/session_state.py`.
+
+The exact refresh sequence, generation timing, rollback, concurrency, and
+retained-in-`AuthService` decision are recorded in
+[`security-refresh-rotation-contract.md`](security-refresh-rotation-contract.md).
+Further security decomposition is deferred until a complete
+transaction-family repository/session contract is explicitly approved; this
+map remains the authority for future repository moves.

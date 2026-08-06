@@ -217,19 +217,22 @@ changed. Phase F maintenance application-service decomposition is now complete
 for checklist templates; maintenance work-order/generation families remain
 retained. The next safe phase is Phase G security service decomposition.
 
-Final continuation checkpoint 2026-08-06: the security characterization suite
-passed (`12 passed`), the relevant non-PostgreSQL security suite passed (`15
-passed, 9 deselected, 1 warning`), and the pure identity extraction is now in
-`src/security/identity.py`; shared `AuthenticationError` ownership is in
-`src/security/errors.py`. Historical imports from `src.security.service`,
-including `CurrentUser`, normalization helpers, user serialization, and
-`AuthenticationError`, remain available. Full backend validation passed (`402
-passed, 73 skipped, 1 warning`), isolated PostgreSQL validation passed (`73
-passed, 402 deselected, 1 warning`), Ruff and compileall passed, and Alembic
-current/heads/check remain clean at `20260726_0008`. Token, password,
-refresh-session, transaction, audit, API, environment, and database behavior
-were not changed; no frontend file changed. Further AuthService splitting is
-deferred until a database-backed characterization map covers validation order,
-locking, rollback, revocation, and audit ordering. Remaining large
+Final continuation checkpoint 2026-08-06: the combined security
+characterization/contract suite passed (`14 passed`), the PostgreSQL security
+characterization suite passed (`13 passed`), and the complete logout transaction now lives behind
+`src/security/contracts.py` and `src/security/session_service.py`. The pure
+access-state predicate remains in `src/security/session_state.py`; prior
+identity/error extraction remains intact. Historical imports from
+`src.security.service`, including `CurrentUser`, normalization helpers, user
+serialization, `AuthenticationError`, and `CsrfValidationError`, remain
+available. Refresh rotation is fully characterized in
+[`docs/security-refresh-rotation-contract.md`](docs/security-refresh-rotation-contract.md)
+and remains in `AuthService`; no standalone refresh port or duplicate token
+factory was introduced. Full backend validation passed (`404 passed, 86
+skipped, 1 warning`), and isolated PostgreSQL validation passed (`86 passed,
+404 deselected, 1 warning`). Ruff and compileall passed, and Alembic
+current/heads/check remain clean at `20260726_0008`. No unrelated transaction
+family, API, environment, database metadata, or frontend behavior changed.
+Remaining large
 transaction/reliability files are listed in
 `docs/backend-structural-inventory.md`.
