@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 import re
 from typing import Any
 from uuid import UUID
@@ -11,15 +10,12 @@ from zoneinfo import ZoneInfo
 
 from src.asset_management.storage import (
     AttachmentStorage,
-    LocalAttachmentStorage,
 )
-from src.config.settings import get_settings
 from src.config.value_mappings import (
     MAINTENANCE_RESULT_CODE_TO_VI,
     MAINTENANCE_RESULT_VI_TO_CODE,
     PRIORITY_CODE_TO_VI,
 )
-from src.database.session import get_session_factory
 from src.maintenance_management.domain import (
     WORK_ORDER_TRANSITIONS,
     ChecklistResponseType,
@@ -41,16 +37,16 @@ from src.repositories.contracts import (
     StoredRecord,
     UnsupportedStorageOperationError,
 )
-from src.repositories.postgres_maintenance import PostgresMaintenancePlanningRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 from src.maintenance_management.application.catalogue_service import MaintenanceCatalogueService
 from src.maintenance_management.application.evidence_service import (
     EvidenceDownload,
     MaintenanceEvidenceService,
 )
 from src.maintenance_management.application.query_service import MaintenanceQueryService
+from src.maintenance_management.application.template_service import MaintenanceTemplateService
 from src.maintenance_management.errors import (
     MaintenanceAuthorizationError,
     MaintenanceConflictError,
@@ -90,6 +86,14 @@ class MaintenancePlanningService:
             get_work_order_record=self._work_order_record,
             require_work_order_access=self._require_work_order_access,
             scope_work_order=self._scope_work_order,
+        )
+        self.templates = MaintenanceTemplateService(
+            self._repository,
+            lambda value, field: _normalized_code(value, TEMPLATE_CODE_PATTERN, field),
+            _plain_text,
+            _optional_plain_text,
+            _validate_template_items,
+            _page_values,
         )
 
     def options(self) -> dict[str, Any]:
@@ -372,20 +376,16 @@ class MaintenancePlanningService:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        page_result = self._repository().list_templates(
-            filters={"status": status, "asset_type": asset_type, "search": search},
+        return self.templates.list_templates(
+            status=status,
+            asset_type=asset_type,
+            search=search,
             page=page,
             page_size=page_size,
         )
-        return _page_values(page_result)
 
     def get_template(self, template_id: UUID) -> dict[str, Any]:
-        record = self._repository().get_template(template_id)
-        if record is None:
-            raise MaintenanceNotFoundError(
-                f"Không tìm thấy checklist template: {template_id}"
-            )
-        return dict(record.values)
+        return self.templates.get_template(template_id)
 
     def create_template(
         self,
@@ -394,29 +394,8 @@ class MaintenancePlanningService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        code = _normalized_code(request["code"], TEMPLATE_CODE_PATTERN, "code")
-        items = _validate_template_items(request["items"])
-        values = {
-            "code": code,
-            "name": _plain_text(request["name"], "name", max_length=200),
-            "asset_type": request.get("asset_type"),
-            "description": _optional_plain_text(
-                request.get("description"), "description", max_length=2000
-            ),
-            "version_number": 1,
-            "status": "active",
-            "created_by_user_id": actor.id,
-            "archived_at": None,
-        }
-        return dict(
-            self._repository()
-            .create_template(
-                values,
-                items,
-                audit_action="checklist_template.created",
-                audit_context=audit_context,
-            )
-            .values
+        return self.templates.create_template(
+            request, actor=actor, audit_context=audit_context
         )
 
     def version_template(
@@ -427,58 +406,11 @@ class MaintenancePlanningService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        source = self.get_template(template_id)
-        page = self._repository().list_templates(
-            filters={"search": source["code"]}, page=1, page_size=100
-        )
-        latest_version = max(
-            int(item.values["version_number"])
-            for item in page.items
-            if item.values["code"] == source["code"]
-        )
-        raw_items = request.get("items") or [
-            {
-                key: item[key]
-                for key in (
-                    "sequence",
-                    "instruction",
-                    "response_type",
-                    "is_required",
-                    "safety_critical",
-                    "allow_not_applicable",
-                    "expected_unit",
-                    "minimum_value",
-                    "maximum_value",
-                    "guidance",
-                )
-            }
-            for item in source["items"]
-        ]
-        values = {
-            "code": source["code"],
-            "name": _plain_text(
-                request.get("name") or source["name"], "name", max_length=200
-            ),
-            "asset_type": request.get("asset_type", source["asset_type"]),
-            "description": _optional_plain_text(
-                request.get("description", source["description"]),
-                "description",
-                max_length=2000,
-            ),
-            "version_number": latest_version + 1,
-            "status": "active",
-            "created_by_user_id": actor.id,
-            "archived_at": None,
-        }
-        return dict(
-            self._repository()
-            .create_template(
-                values,
-                _validate_template_items(raw_items),
-                audit_action="checklist_template.versioned",
-                audit_context=audit_context,
-            )
-            .values
+        return self.templates.version_template(
+            template_id,
+            request,
+            actor=actor,
+            audit_context=audit_context,
         )
 
     def archive_template(
@@ -488,17 +420,10 @@ class MaintenancePlanningService:
         expected_version: int,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        current = self.get_template(template_id)
-        if current["status"] == "archived":
-            raise MaintenanceConflictError("Checklist template đã được archive.")
-        return dict(
-            self._repository()
-            .archive_template(
-                template_id,
-                expected_version=expected_version,
-                audit_context=audit_context,
-            )
-            .values
+        return self.templates.archive_template(
+            template_id,
+            expected_version=expected_version,
+            audit_context=audit_context,
         )
 
     def list_work_orders(
@@ -1365,19 +1290,11 @@ class MaintenancePlanningService:
 
 
 def build_maintenance_planning_service() -> MaintenancePlanningService:
-    """Build the storage-neutral service from validated product configuration."""
+    """Compatibility builder delegated to the explicit composition root."""
 
-    settings = get_settings()
-    repository: MaintenancePlanningRepository | None = None
-    if settings.storage_backend == "postgresql":
-        repository = PostgresMaintenancePlanningRepository(
-            get_session_factory(settings.database_url)
-        )
-    return MaintenancePlanningService(
-        repository,
-        LocalAttachmentStorage(Path(settings.attachment_storage_root)),
-        attachment_max_size_bytes=settings.attachment_max_size_bytes,
-    )
+    from src.composition.maintenance import build_maintenance_planning_service as build
+
+    return build()
 
 
 def _recurrence_spec(values: dict[str, Any]) -> RecurrenceSpec:

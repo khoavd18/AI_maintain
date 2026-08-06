@@ -45,7 +45,8 @@ from src.repositories.contracts import (
 from src.repositories.postgres.operations.queries import OperationsQueryRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Role, permissions_for_role
-from src.security.service import CurrentUser, append_audit_event
+from src.security.principal import CurrentUser
+from src.security.service import append_audit_event
 
 ACTIVE_EXECUTION_STATUSES = {
     JobExecutionStatus.PENDING.value,

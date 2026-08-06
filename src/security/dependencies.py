@@ -1,26 +1,19 @@
 """FastAPI authentication and explicit permission dependencies."""
 
-from functools import lru_cache
 from typing import Annotated, Callable
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from src.config.settings import get_settings
-from src.database.session import get_session_factory
+from src.composition.security import get_auth_service
 from src.repositories.contracts import StorageUnavailableError
 from src.security.audit import AuditContext
 from src.security.permissions import Permission
-from src.security.service import AuthenticationError, AuthService, CurrentUser
+from src.security.principal import CurrentUser
+from src.security.service import AuthenticationError, AuthService
 
 _bearer = HTTPBearer(auto_error=False)
-
-
-@lru_cache(maxsize=1)
-def get_auth_service() -> AuthService:
-    settings = get_settings()
-    return AuthService(get_session_factory(settings.database_url), settings)
 
 
 def get_current_user(

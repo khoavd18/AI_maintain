@@ -9,7 +9,7 @@ from uuid import UUID
 from src.maintenance_management.domain import PlanStatus
 from src.repositories.contracts import MaintenancePlanningRepository, StoredPage, StoredRecord
 from src.security.permissions import Role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 class MaintenanceQueryService:

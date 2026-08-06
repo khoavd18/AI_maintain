@@ -95,7 +95,7 @@ from src.repositories.csv_writes import (
 )
 from src.security.dependencies import audit_context, require_permission
 from src.security.permissions import Permission, Role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 router = APIRouter()
 router.include_router(system_router)

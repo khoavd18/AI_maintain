@@ -15,12 +15,12 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from src.config.settings import Settings, get_settings
-from src.database.session import get_session_factory
+from src.composition.operations import build_operations_repository
 from src.operations.domain import safe_error
 from src.operations.jobs import JobRunner
 from src.operations.logging import configure_structured_logging, log_event
 from src.repositories.contracts import RepositoryError
-from src.repositories.postgres_operations import PostgresOperationsRepository
+from src.repositories.contracts import OperationsRepository
 
 logger = logging.getLogger("maintenance.worker")
 
@@ -34,7 +34,7 @@ class BackgroundWorker:
         settings: Settings,
         worker_identity: str | None = None,
         stop_event: threading.Event | None = None,
-        repository: PostgresOperationsRepository | None = None,
+        repository: OperationsRepository | None = None,
         runner: JobRunner | None = None,
     ) -> None:
         if settings.storage_backend != "postgresql":
@@ -43,9 +43,7 @@ class BackgroundWorker:
         self.worker_identity = worker_identity or _default_worker_identity()
         self.stop_event = stop_event or threading.Event()
         self.started_at = datetime.now(timezone.utc)
-        self.repository = repository or PostgresOperationsRepository(
-            get_session_factory(settings.database_url)
-        )
+        self.repository = repository or build_operations_repository(settings)
         self.runner = runner or JobRunner(
             settings=settings,
             operations_repository=self.repository,

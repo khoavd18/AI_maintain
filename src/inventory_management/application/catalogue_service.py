@@ -18,7 +18,7 @@ from src.inventory_management.domain import (
 )
 from src.repositories.contracts import InventoryRepository
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 class InventoryCatalogueService:

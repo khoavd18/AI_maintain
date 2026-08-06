@@ -192,9 +192,36 @@ The reliability implementation is otherwise owned by the modules under
 The API service package under `src/api/services/` separates snapshot loading,
 analytics projections, legacy ticket/maintenance adapters, asset context, and
 outer construction. `ProcessedDataService` remains the compatibility façade,
-and `src/application/copilot_factory.py` is the shared Copilot composition root.
+and `src/composition/copilot.py` is the shared Copilot composition root;
+`src/application/copilot_factory.py` remains a historical import facade.
 Canonical RAG orchestration is split into request analysis, retrieval/evidence,
 and generation/citation collaborators under `src/rag/application/`. The four
 current frontend hotspots preserve their old import paths while delegating to
 feature-owned operation forms, mutation-context modules, Copilot response
 views, and operations tables. Transaction-heavy repositories remain deferred.
+
+Continuation checkpoint 2026-08-06: the complete backend structural inventory
+is in [`docs/backend-structural-inventory.md`](docs/backend-structural-inventory.md).
+Phase A extracted `CurrentUser` to `src/security/principal.py` and preserved
+the historical `src.security.service.CurrentUser` import. Phase B moved the
+repository contracts into `src/repositories/contracts/`, added ticket and
+operations protocols, and preserved `src.repositories.contracts` imports.
+Focused tests, isolated PostgreSQL tests, Ruff, compileall, and diff checks
+passed. Phase C moved concrete wiring into `src/composition/` and preserved
+legacy builders and resource lifetime. Phase D extracted inventory catalogue
+master-data and stock-location orchestration while preserving repository
+transaction owners. Phase E extracted ticket SLA calendar/policy
+administration while preserving ticket lifecycle/SLA transaction owners. No
+transaction-heavy stock or ticket lifecycle family, or frontend file, has been
+changed. Phase F maintenance application-service decomposition is now complete
+for checklist templates; maintenance work-order/generation families remain
+retained. The next safe phase is Phase G security service decomposition.
+
+Final continuation checkpoint 2026-08-06: full backend validation passed
+(`390 passed, 73 skipped, 1 warning`), the latest isolated PostgreSQL run
+passed (`73 passed, 390 deselected, 1 warning`), and Alembic current/head/check
+remain clean at `20260726_0008`. Phase G was intentionally stopped after the
+safe principal extraction because further AuthService splitting would cross
+token, refresh-session, password, and audit sequencing without a dedicated
+characterization map. Remaining large transaction/reliability files are listed
+in `docs/backend-structural-inventory.md`.

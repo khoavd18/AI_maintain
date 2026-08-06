@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Any
 from uuid import UUID
 
 from src.config.settings import get_settings
-from src.database.session import get_session_factory
+from src.composition.operations import build_operations_service
 from src.operations.metrics import api_request_metrics
-from src.repositories.postgres_operations import PostgresOperationsRepository
+from src.repositories.contracts import OperationsRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 class OperationsAuthorizationError(ValueError):
     """Raised when a caller bypasses the FastAPI permission dependency."""
+
+
+__all__ = ["OperationsAuthorizationError", "OperationsService", "build_operations_service"]
 
 
 class OperationsService:
@@ -24,7 +26,7 @@ class OperationsService:
 
     def __init__(
         self,
-        repository: PostgresOperationsRepository,
+        repository: OperationsRepository,
         *,
         worker_stale_seconds: int,
         outbox_age_alert_seconds: int = 300,
@@ -237,22 +239,3 @@ class OperationsService:
             raise OperationsAuthorizationError(
                 "Bạn không có quyền thực hiện thao tác vận hành này."
             )
-
-
-@lru_cache(maxsize=1)
-def build_operations_service() -> OperationsService:
-    settings = get_settings()
-    if settings.storage_backend != "postgresql":
-        raise RuntimeError("PM7 operations require STORAGE_BACKEND=postgresql.")
-    return OperationsService(
-        PostgresOperationsRepository(
-            get_session_factory(settings.database_url)
-        ),
-        worker_stale_seconds=settings.worker_heartbeat_stale_seconds,
-        outbox_age_alert_seconds=settings.operational_outbox_age_alert_seconds,
-        repeated_job_failure_threshold=(
-            settings.operational_repeated_job_failure_threshold
-        ),
-        analytics_stale_seconds=settings.operational_analytics_stale_seconds,
-        backup_overdue_seconds=settings.operational_backup_overdue_seconds,
-    )

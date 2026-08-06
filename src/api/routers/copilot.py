@@ -16,7 +16,7 @@ from src.rag.vector_store import VectorStoreError
 from src.security.dependencies import require_permission
 from src.security.permissions import Permission
 from src.security.rate_limit import RequestRateLimiter, RequestRateLimitExceededError
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 from src.config.settings import get_settings
 
 router = APIRouter()

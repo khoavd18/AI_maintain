@@ -176,3 +176,45 @@ Troubleshooting: [troubleshooting.md](troubleshooting.md).
 ## Acceptance Sign-Off
 
 Technical handover should record commit/tag, Alembic head, frontend lockfile hash, selected provider/model, test counts, skipped/external limitations, backup evidence, and named owners. A technical document cannot substitute for company authorization or production risk acceptance.
+
+## Refactoring continuation checkpoint — 2026-08-06
+
+The backend inventory is recorded in
+[`backend-structural-inventory.md`](backend-structural-inventory.md). Phase A
+moved the immutable authenticated principal to `src/security/principal.py`;
+`src.security.service.CurrentUser` remains an identity-preserving historical
+import. Phase B moved repository contracts into the bounded package
+`src/repositories/contracts/` and preserved the historical import facade,
+including new ticket/operations protocols. Focused validation passed (`14
+passed, 43 skipped, 1 warning`) and PostgreSQL validation passed (`73 passed,
+390 deselected, 1 warning`). Phase C moved concrete service wiring into
+`src/composition/` and preserved legacy builder/dependency identities. No
+transaction-heavy stock family, API, schema, frontend, or storage behavior was
+changed. Phase D extracted inventory catalogue and stock-location orchestration
+into `application/catalogue_mutation_service.py`; focused inventory validation
+passed (`3 passed, 10 skipped, 1 warning`) and PostgreSQL validation passed
+(`73 passed, 390 deselected, 1 warning`). The next safe phase is ticket
+application-service decomposition.
+Phase E extracted SLA calendar/policy administration into
+`ticket_management/application/sla_service.py`; focused ticket validation
+passed (`20 passed, 8 skipped, 1 warning`) and PostgreSQL validation passed
+after correcting and rechecking one extraction call-shape defect (`73 passed,
+390 deselected, 1 warning`). Ticket lifecycle, SLA snapshot, escalation, and
+comment transaction families remain retained. The next safe phase is
+maintenance application-service decomposition.
+Phase F extracted checklist-template listing, immutable versioning, and archive
+orchestration into `maintenance_management/application/template_service.py`;
+focused maintenance validation passed (`15 passed, 9 skipped, 1 warning`) and
+PostgreSQL validation passed (`73 passed, 390 deselected, 1 warning`). Plan,
+generation, work-order, checklist-completion, verification, and evidence
+transaction families remain retained. The next safe phase is security service
+decomposition.
+
+The Phase G stop condition is deliberate: `CurrentUser` was already extracted
+to the principal module, but AuthService remains intact because token claims,
+refresh rotation, password changes, session revocation, and audit behavior
+need a dedicated characterization map before any split. Final full-backend
+validation passed (`390 passed, 73 skipped, 1 warning`), latest isolated
+PostgreSQL validation passed (`73 passed, 390 deselected, 1 warning`), and
+Ruff/compileall/Alembic/Compose checks passed. The next recommended backend
+phase is security characterization, not an unvalidated auth extraction.

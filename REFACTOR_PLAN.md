@@ -317,7 +317,8 @@ docs/                          Detailed product/operation contracts
   `src/repositories/csv_writes.py`; `src.api.csv_repository` preserves object
   identity for existing imports. The RAG context port now lives in
   `src/rag/adapters/asset_context.py`; concrete assembly is in
-  `src/application/copilot_factory.py`, with `src/api/composition.py` retained
+  `src/composition/copilot.py`, with `src/application/copilot_factory.py` and
+  `src/api/composition.py` retained
   as a compatibility import.
 - **Expected files:** `src/api/csv_repository.py`, `src/repositories/csv.py`,
   `src/rag/copilot.py`, `src/api/services/`, focused tests.
@@ -518,6 +519,10 @@ Not run in the untouched baseline:
 - Third-party `StarletteDeprecationWarning` for FastAPI `TestClient`/httpx; dependency
   changes should be handled separately rather than suppressed.
 
+The current file-level backend inventory, including the complete `src` register,
+dependency findings, and ranked retain/refactor decisions, is recorded in
+[`docs/backend-structural-inventory.md`](docs/backend-structural-inventory.md).
+
 ## 13. Implementation progress
 
 ### Completed in this refactoring session
@@ -668,3 +673,80 @@ The deliberately deferred mutation repositories remain
 `postgres_operations.py`; their transaction boundaries, session ownership,
 locks, idempotency, audit, and outbox behavior were not moved. The known
 reliability-settings validation-order defect remains open.
+
+## Continuation checkpoint — 2026-08-06
+
+Initial worktree was clean and the baseline completed with `390 passed, 73
+skipped, 1 warning`; isolated PostgreSQL validation completed with `73 passed,
+390 deselected, 1 warning`. Ruff, compileall, `git diff --check`, and Alembic
+`current`, `heads`, and `check` passed; the single head remains
+`20260726_0008`.
+
+Inherited refactoring remains intact. The new work in this continuation is
+Phase A: `CurrentUser` now lives in `src/security/principal.py`, all backend
+consumers use that module, and `src.security.service.CurrentUser` remains a
+historical re-export. Focused authentication/API/application tests passed with
+`25 passed, 9 skipped, 1 warning`. No frontend, API contract, schema, or
+transaction implementation changed. The complete ranked structural inventory
+is in [`docs/backend-structural-inventory.md`](docs/backend-structural-inventory.md).
+
+Phase B is now complete: the old monolithic contract module was replaced by
+`src/repositories/contracts/` with shared, asset, inventory, maintenance,
+ticket, and operations definitions. `src.repositories.contracts` continues to
+resolve to the package facade; ticket and operations application collaborators
+now type against protocols rather than concrete PostgreSQL classes. Focused
+validation passed (`14 passed, 43 skipped, 1 warning`), isolated PostgreSQL
+validation passed (`73 passed, 390 deselected, 1 warning`), and no repository
+implementation or transaction family moved. Phase C is now complete: service,
+security, asset, worker, and Copilot construction moved into `src/composition/`
+with historical builders and cache identities preserved. Focused architecture/
+API/auth validation passed (`28 passed, 9 skipped, 1 warning`), CLI help smoke
+checks passed, and isolated PostgreSQL validation passed again (`73 passed,
+390 deselected, 1 warning`). The next safe phase is Phase D, inventory
+application-service decomposition.
+
+Phase D is now complete for the safe inventory catalogue boundary. The real
+orchestration for category/unit/part master data, part lifecycle, stock-location
+lifecycle, and reorder configuration moved to
+`src/inventory_management/application/catalogue_mutation_service.py`; the
+facade signatures and callback validation order remain unchanged. Focused
+inventory validation passed (`3 passed, 10 skipped, 1 warning`) and isolated
+PostgreSQL validation passed (`73 passed, 390 deselected, 1 warning`). Stock
+receipt, transfer, adjustment, reservation, issue, consumption, return, and
+evidence transaction families remain intentionally retained. The next safe
+phase is Phase E, ticket application-service decomposition.
+
+Phase E is complete for the safe ticket SLA administration boundary. Calendar
+and policy listing/creation/update orchestration moved to
+`ticket_management/application/sla_service.py`; focused ticket validation
+passed (`20 passed, 8 skipped, 1 warning`) and isolated PostgreSQL validation
+passed after one corrected callback call-shape regression (`73 passed, 390
+deselected, 1 warning`). Ticket lifecycle, SLA snapshot, escalation, comment,
+audit, and outbox families remain retained.
+
+Phase F is complete for checklist-template application orchestration. Listing,
+creation, immutable versioning, and archive mapping moved to
+`maintenance_management/application/template_service.py`; focused maintenance
+validation passed (`15 passed, 9 skipped, 1 warning`) and isolated PostgreSQL
+validation passed (`73 passed, 390 deselected, 1 warning`). Plan lifecycle,
+generation, work-order, checklist completion, verification, and evidence
+transaction families remain retained. The next safe phase is Phase G, security
+service decomposition.
+
+## Final continuation checkpoint — 2026-08-06
+
+Phase G was reviewed but not broadened beyond the already validated principal
+extraction. Splitting `AuthService` now would couple a high-risk change across
+password verification, access-token claims/expiry, refresh rotation and CSRF,
+session revocation, user administration, and same-transaction audit behavior;
+the repository does not yet have a dedicated characterization map for those
+seams. The safe stop is therefore documented retention, not a speculative
+extraction.
+
+Final validation: full backend `390 passed, 73 skipped, 1 warning`; latest
+isolated PostgreSQL `73 passed, 390 deselected, 1 warning`; Ruff passed;
+compileall passed; Alembic current/head/check passed at `20260726_0008`; all
+three development/test/pilot Compose configurations parsed successfully. No
+frontend file changed, no API contract or database metadata changed, and no
+transaction boundary was intentionally changed. The next single recommended
+backend phase is security characterization before AuthService decomposition.

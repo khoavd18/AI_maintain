@@ -7,10 +7,10 @@ from typing import Any
 from uuid import UUID
 
 from src.repositories.contracts import StoredRecord
-from src.repositories.postgres_tickets import PostgresTicketRepository
+from src.repositories.contracts import TicketRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 from src.ticket_management.domain import CommentVisibility, TicketStatus
 from src.ticket_management.errors import TicketConflictError
 
@@ -20,7 +20,7 @@ class TicketCommentService:
 
     def __init__(
         self,
-        repository: PostgresTicketRepository,
+        repository: TicketRepository,
         *,
         require_permission: Callable[[CurrentUser, Permission], None],
         ticket_for_action: Callable[[str, CurrentUser], StoredRecord],

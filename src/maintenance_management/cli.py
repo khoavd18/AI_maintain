@@ -12,7 +12,7 @@ from src.maintenance_management.service import build_maintenance_planning_servic
 from src.security.audit import AuditContext
 from src.security.cli_context import load_cli_actor
 from src.security.permissions import Role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 def main() -> None:

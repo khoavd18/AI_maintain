@@ -91,3 +91,38 @@ and cohesive catalogue/evidence operations have been composed first. An atomic
 method remains in its current repository until focused PostgreSQL tests prove
 that the entire idempotency -> locks -> mutation -> audit/outbox -> commit
 sequence can move without changing session ownership or lock order.
+
+## Refactoring checkpoint — 2026-08-06
+
+Phase A extracted only the storage-neutral `CurrentUser` value type. No
+repository method, transaction/session owner, lock order, idempotency boundary,
+audit call, outbox write, or commit timing changed. The complete structural
+inventory and the intentionally retained transaction families are listed in
+[`backend-structural-inventory.md`](backend-structural-inventory.md). Phase B
+reorganized contract definitions into
+`src/repositories/contracts/{shared,assets,inventory,maintenance,tickets,operations}.py`
+without moving repository implementations. The historical import facade and
+all transaction-family ownership remain unchanged. Focused PostgreSQL
+validation passed (`73 passed, 390 deselected, 1 warning`). Phase C moved only
+infrastructure construction into `src/composition/`; it did not move
+transaction execution. Session factory cache/lifetime and repository method
+owners remain unchanged. Phase D extracted inventory catalogue and
+stock-location orchestration with callback-based validation/access; repository
+transaction owners, lock order, idempotency, audit, outbox, and commit timing
+remain unchanged. Inventory stock/reservation/issue families remain in the
+facade pending further characterization.
+Phase E extracted only ticket SLA calendar/policy application orchestration;
+their repository transactions remain the owner. Ticket lifecycle, SLA snapshot,
+escalation, comment, audit, and outbox mutation sequences were not moved.
+Phase F extracted checklist-template application orchestration only; template
+version/archive repository transactions and immutable snapshot behavior remain
+owned by the maintenance repository. Plan generation and work-order mutation
+families remain retained.
+
+## Final continuation checkpoint — 2026-08-06
+
+No transaction-heavy repository family was moved during this continuation.
+Latest PostgreSQL validation passed (`73 passed, 390 deselected, 1 warning`);
+Alembic remained at `20260726_0008` with no pending operations. Further security
+decomposition is deferred until authentication/session/audit characterization
+is explicit; this map remains the authority for any future repository move.

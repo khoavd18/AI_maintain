@@ -30,7 +30,7 @@ from .legacy_maintenance_adapter import LegacyMaintenanceAdapter
 from .legacy_ticket_adapter import LegacyTicketAdapter
 
 if TYPE_CHECKING:
-    from src.security.service import CurrentUser
+    from src.security.principal import CurrentUser
     from src.ticket_management.service import TicketWorkflowService
 
 

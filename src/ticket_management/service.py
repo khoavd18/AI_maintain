@@ -19,14 +19,14 @@ from src.database.models import (
     TicketIntakeSource,
     TicketSubcategory,
 )
-from src.repositories.contracts import StoredRecord
-from src.repositories.postgres_tickets import PostgresTicketRepository
+from src.repositories.contracts import StoredRecord, TicketRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission, Role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 from src.ticket_management.application.comment_service import TicketCommentService
 from src.ticket_management.application.catalogue_service import TicketCatalogueService
 from src.ticket_management.application.query_service import TicketQueryService
+from src.ticket_management.application.sla_service import TicketSlaAdministrationService
 from src.ticket_management.errors import (
     TicketAuthorizationError,
     TicketConflictError,
@@ -71,7 +71,7 @@ PRIORITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 class TicketWorkflowService:
     """Canonical boundary for PM5 ticket operations."""
 
-    def __init__(self, repository: PostgresTicketRepository) -> None:
+    def __init__(self, repository: TicketRepository) -> None:
         self.repository = repository
         self.catalogue = TicketCatalogueService(repository, self._require_permission)
         self.comments = TicketCommentService(
@@ -91,6 +91,12 @@ class TicketWorkflowService:
             queue_sort_key=_queue_sort_key,
             normalize_time=_aware_utc,
             now=_utc_now,
+        )
+        self.sla_administration = TicketSlaAdministrationService(
+            repository,
+            self._require_permission,
+            self._calendar_values,
+            self._policy_values,
         )
 
     def options(self, *, actor: CurrentUser) -> dict[str, Any]:
@@ -722,8 +728,7 @@ class TicketWorkflowService:
         )
 
     def list_calendars(self, *, actor: CurrentUser) -> list[dict[str, Any]]:
-        self._require_permission(actor, Permission.SLA_POLICIES_READ)
-        return [dict(record.values) for record in self.repository.list_calendars()]
+        return self.sla_administration.list_calendars(actor=actor)
 
     def create_calendar(
         self,
@@ -732,9 +737,9 @@ class TicketWorkflowService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.SLA_POLICIES_MANAGE)
-        values = self._calendar_values(request, actor=actor)
-        return dict(self.repository.create_calendar(values, audit_context=audit_context).values)
+        return self.sla_administration.create_calendar(
+            request, actor=actor, audit_context=audit_context
+        )
 
     def update_calendar(
         self,
@@ -745,22 +750,16 @@ class TicketWorkflowService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.SLA_POLICIES_MANAGE)
-        values = self._calendar_values(request, actor=actor)
-        values.pop("code", None)
-        values.pop("created_by_user_id", None)
-        return dict(
-            self.repository.update_calendar(
-                calendar_id,
-                values,
-                expected_version=expected_version,
-                audit_context=audit_context,
-            ).values
+        return self.sla_administration.update_calendar(
+            calendar_id,
+            request,
+            expected_version=expected_version,
+            actor=actor,
+            audit_context=audit_context,
         )
 
     def list_policies(self, *, actor: CurrentUser) -> list[dict[str, Any]]:
-        self._require_permission(actor, Permission.SLA_POLICIES_READ)
-        return [dict(record.values) for record in self.repository.list_policies()]
+        return self.sla_administration.list_policies(actor=actor)
 
     def create_policy(
         self,
@@ -769,9 +768,9 @@ class TicketWorkflowService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.SLA_POLICIES_MANAGE)
-        values = self._policy_values(request, actor=actor)
-        return dict(self.repository.create_policy(values, audit_context=audit_context).values)
+        return self.sla_administration.create_policy(
+            request, actor=actor, audit_context=audit_context
+        )
 
     def update_policy(
         self,
@@ -782,17 +781,12 @@ class TicketWorkflowService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.SLA_POLICIES_MANAGE)
-        values = self._policy_values(request, actor=actor)
-        values.pop("code", None)
-        values.pop("created_by_user_id", None)
-        return dict(
-            self.repository.update_policy(
-                policy_id,
-                values,
-                expected_version=expected_version,
-                audit_context=audit_context,
-            ).values
+        return self.sla_administration.update_policy(
+            policy_id,
+            request,
+            expected_version=expected_version,
+            actor=actor,
+            audit_context=audit_context,
         )
 
     def sla_summary(self, *, actor: CurrentUser, as_of: datetime | None = None) -> dict[str, Any]:
@@ -1567,12 +1561,8 @@ def _utc_now() -> datetime:
 
 
 def build_ticket_workflow_service() -> TicketWorkflowService:
-    """Build the canonical PostgreSQL ticket workflow service."""
+    """Compatibility builder delegated to the explicit composition root."""
 
-    from src.config.settings import get_settings
-    from src.database.session import get_session_factory
+    from src.composition.tickets import build_ticket_workflow_service as build
 
-    settings = get_settings()
-    return TicketWorkflowService(
-        PostgresTicketRepository(get_session_factory(settings.database_url))
-    )
+    return build()

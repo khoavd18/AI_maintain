@@ -27,7 +27,7 @@ from src.inventory_management.schemas import (
 )
 from src.inventory_management.service import InventoryManagementService
 from src.security.dependencies import audit_context
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 from .dependencies import (
     InventoryRead,

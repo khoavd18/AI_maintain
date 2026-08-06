@@ -12,7 +12,7 @@ from src.inventory_management.domain import INVENTORY_ATTACHMENT_CATEGORIES
 from src.repositories.contracts import InventoryRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 from src.inventory_management.errors import InventoryDomainError, InventoryNotFoundError
 

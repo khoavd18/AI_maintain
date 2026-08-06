@@ -5,6 +5,9 @@ authoritative domain and runtime detail remains in
 [`docs/architecture.md`](docs/architecture.md), while data, API, security, and
 operational contracts remain in their dedicated files under `docs/`.
 
+The current ranked backend structural inventory is maintained in
+[`docs/backend-structural-inventory.md`](docs/backend-structural-inventory.md).
+
 ## Product boundary
 
 AI Maintenance Copilot is an internal-pilot, batch analytics and decision-support
@@ -86,7 +89,8 @@ The legacy `src/api/routes.py` module remains the public route facade. System,
 analytics, and Copilot endpoints are composed from focused routers under
 `src/api/routers/`; their dependency functions are shared with the facade so
 existing test overrides and import seams remain valid. The concrete Copilot
-graph is built by `src/application/copilot_factory.py`; `src/api/composition.py`
+graph is built by `src/composition/copilot.py`; `src/application/copilot_factory.py`
+and `src/api/composition.py`
 is a compatibility import for the serving boundary.
 
 RAG orchestration consumes the narrow `AssetContextProvider` port from

@@ -11,7 +11,7 @@ from src.asset_management.storage import AttachmentStorage, AttachmentStorageErr
 from src.maintenance_management.domain import WORK_ORDER_ATTACHMENT_CATEGORIES
 from src.repositories.contracts import MaintenancePlanningRepository, StoredRecord
 from src.security.audit import AuditContext
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 from src.maintenance_management.errors import MaintenanceConflictError, MaintenanceDomainError, MaintenanceNotFoundError
 

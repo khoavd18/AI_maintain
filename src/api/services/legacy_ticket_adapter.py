@@ -24,7 +24,7 @@ from .analytics_projection import AnalyticsProjectionService
 
 if TYPE_CHECKING:
     from src.asset_management.service import AssetManagementService
-    from src.security.service import CurrentUser
+    from src.security.principal import CurrentUser
     from src.ticket_management.service import TicketWorkflowService
 
 
@@ -217,4 +217,3 @@ class LegacyTicketAdapter:
             audit_context=audit_context,
         )
         return dict(updated.values)
-

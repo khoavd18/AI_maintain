@@ -23,10 +23,10 @@ from src.inventory_management.service import build_inventory_management_service
 from src.maintenance_management.service import build_maintenance_planning_service
 from src.models.anomaly_detection import run_anomaly_detection
 from src.operations.domain import JobType
-from src.repositories.postgres_operations import PostgresOperationsRepository
+from src.repositories.contracts import OperationsRepository
 from src.risk.risk_scoring import run_risk_scoring
 from src.security.audit import AuditContext
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 from src.ticket_management.service import build_ticket_workflow_service
 
 PROCESSED_FILENAMES = (
@@ -46,7 +46,7 @@ class JobRunner:
         self,
         *,
         settings: Settings,
-        operations_repository: PostgresOperationsRepository,
+        operations_repository: OperationsRepository,
     ) -> None:
         self.settings = settings
         self.operations_repository = operations_repository

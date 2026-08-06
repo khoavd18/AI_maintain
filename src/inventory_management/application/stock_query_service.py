@@ -9,7 +9,7 @@ from uuid import UUID
 from src.inventory_management.errors import InventoryDomainError
 from src.repositories.contracts import InventoryRepository, StoredPage
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 class InventoryStockQueryService:

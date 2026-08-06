@@ -13,7 +13,7 @@ from src.inventory_management.service import (
 )
 from src.security.dependencies import get_current_user, require_permission
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 @lru_cache(maxsize=1)

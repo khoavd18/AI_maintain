@@ -22,7 +22,7 @@ from src.inventory_management.service import build_inventory_management_service
 from src.security.audit import AuditContext
 from src.security.cli_context import load_cli_actor
 from src.security.permissions import Role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 _SEED_OCCURRED_AT = datetime(2026, 7, 1, 1, 0, tzinfo=timezone.utc)
 

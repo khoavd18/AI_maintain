@@ -49,7 +49,7 @@ from src.repositories.contracts import (
 )
 from src.security.dependencies import audit_context, require_permission
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 router = APIRouter()
 

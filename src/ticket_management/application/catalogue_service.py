@@ -6,9 +6,9 @@ from collections.abc import Callable
 from typing import Any
 
 from src.config.value_mappings import FAILURE_TYPE_CODE_TO_VI
-from src.repositories.postgres_tickets import PostgresTicketRepository
+from src.repositories.contracts import TicketRepository
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 from src.ticket_management.domain import (
     COMMENT_VISIBILITY_LABELS,
     IMPACT_LABELS,
@@ -29,7 +29,7 @@ class TicketCatalogueService:
 
     def __init__(
         self,
-        repository: PostgresTicketRepository,
+        repository: TicketRepository,
         require_permission: Callable[[CurrentUser, Permission], None],
     ) -> None:
         self._repository = repository

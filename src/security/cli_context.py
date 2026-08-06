@@ -9,7 +9,7 @@ from src.config.settings import get_settings
 from src.database.models import User
 from src.database.session import get_session_factory
 from src.security.permissions import Role, permissions_for_role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 def load_cli_actor(username: str) -> CurrentUser:

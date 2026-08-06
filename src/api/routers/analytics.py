@@ -19,7 +19,7 @@ from src.api.schemas import (
 from src.api.services import ProcessedDataService
 from src.security.dependencies import require_permission
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 router = APIRouter()
 ServiceDependency = Annotated[ProcessedDataService, Depends(get_service)]

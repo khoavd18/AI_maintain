@@ -20,12 +20,12 @@ from src.security.schemas import (
     UserResponse,
     UserUpdateRequest,
 )
+from src.security.principal import CurrentUser
 from src.security.service import (
     AuthenticationError,
     AuthResult,
     AuthService,
     CsrfValidationError,
-    CurrentUser,
     DuplicateUserError,
     UserConflictError,
     UserNotFoundError,

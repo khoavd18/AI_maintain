@@ -19,7 +19,8 @@ The public `src/api/routes.py` import remains a compatibility facade. The
 system/readiness, analytics, and Copilot endpoint families now live in focused
 routers under `src/api/routers/`, while the facade preserves the existing
 dependency override and function import seams used by tests and internal
-callers. `src/application/copilot_factory.py` is the shared outer composition
+callers. `src/composition/copilot.py` is the shared outer composition root;
+`src/application/copilot_factory.py` is its historical import facade.
 root; `src/api/composition.py` remains a compatibility import.
 
 RAG does not import `src.api.services`. It consumes the narrow

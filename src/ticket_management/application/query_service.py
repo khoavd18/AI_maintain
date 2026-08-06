@@ -6,10 +6,9 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from src.repositories.contracts import StoredRecord
-from src.repositories.postgres_tickets import PostgresTicketRepository
+from src.repositories.contracts import StoredRecord, TicketRepository
 from src.security.permissions import Role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 from src.ticket_management.domain import TICKET_QUEUE_LABELS, TicketQueue
 
 
@@ -18,7 +17,7 @@ class TicketQueryService:
 
     def __init__(
         self,
-        repository: PostgresTicketRepository,
+        repository: TicketRepository,
         *,
         require_permission: Callable[..., None],
         ticket_record: Callable[..., StoredRecord],

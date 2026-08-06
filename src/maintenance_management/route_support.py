@@ -33,7 +33,7 @@ from src.repositories.contracts import (
 )
 from src.security.dependencies import require_permission
 from src.security.permissions import Permission
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 @lru_cache(maxsize=1)

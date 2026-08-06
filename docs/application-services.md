@@ -20,6 +20,56 @@ The facade methods preserve public signatures and delegate to these modules.
 Repository methods remain the transaction owner, including lock ordering,
 idempotency claims, audit rows, outbox events, and commit/rollback behavior.
 
+## Inventory capability map
+
+The inventory service was characterized before the catalogue mutation
+extraction. The public facade remains the compatibility/business boundary, but
+the capability collaborator now owns the catalogue master-data orchestration.
+
+| Capability | Public methods | Current owner | Transaction boundary |
+|---|---|---|---|
+| Catalogue reads/options | `options`, `list_categories`, `list_units`, `list_parts`, `get_part` | `application/catalogue_service.py` plus facade access checks | Repository reads only |
+| Catalogue master data | `create_category`, `create_unit`, `create_part`, `update_part`, `change_part_lifecycle` | `application/catalogue_mutation_service.py` | Each repository command remains one transaction; facade owns compatibility signature |
+| Stock locations/reorder config | `list_stock_locations`, `create_stock_location`, `update_stock_location`, `change_stock_location_lifecycle`, `upsert_reorder_configuration` | `application/catalogue_mutation_service.py` | Each repository command remains one transaction |
+| Stock reads/metrics | `list_balances`, `list_movements`, `work_order_parts`, `metrics` | `application/stock_query_service.py` | Read-only repository sessions |
+| Stock command family | `create_opening_balance`, `receive_stock`, `transfer_stock`, `adjust_stock` | `InventoryManagementService` facade | Retained until full lock/idempotency characterization |
+| Reservation/issue family | `create_requirement`, `reserve_stock`, `close_reservation`, `replace_reservation`, `issue_stock`, `consume_issue`, `return_issue` | `InventoryManagementService` facade | Retained as atomic transaction-sensitive orchestration |
+| Evidence | `list_evidence`, `upload_evidence`, `download_evidence`, `delete_evidence` | `application/evidence_service.py` | Metadata/audit repository transaction plus attachment byte cleanup contract |
+
+The extraction passes repository access, permission, validation, lookup, and
+clock callbacks into the collaborator. It does not create sessions, duplicate
+validation rules, or split atomic inventory writes.
+
+## Ticket capability map
+
+| Capability | Public methods | Current owner | Transaction boundary |
+|---|---|---|---|
+| Ticket catalogue/priority | `options`, `priority_preview` | `application/catalogue_service.py` | Read-only/domain calculation |
+| Intake and lifecycle | `intake`, `assign`, `acknowledge`, `start`, `hold`, `resume`, `resolve`, `close`, `reopen`, `cancel`, `change_priority` | `TicketWorkflowService` | Retained; ticket/SLA/audit/outbox sequencing remains together |
+| SLA administration | `list_calendars`, `create_calendar`, `update_calendar`, `list_policies`, `create_policy`, `update_policy` | `application/sla_service.py` | One repository transaction per calendar/policy command |
+| SLA snapshot/escalation | `override_sla_policy`, `sla_summary`, `evaluate_escalations` | `TicketWorkflowService` | Retained; snapshot and escalation characterization remains pending |
+| Comments and queries | `add_comment`, `list_queue`, `get_ticket` | `application/comment_service.py`, `application/query_service.py` | Repository owns comment mutation and read session |
+
+The SLA collaborator receives the existing value-building callbacks and
+repository protocol. It preserves permission checks, field removal on update,
+repository call order, and exact public service signatures.
+
+## Maintenance capability map
+
+| Capability | Public methods | Current owner | Transaction boundary |
+|---|---|---|---|
+| Plan reads/preview | `list_plans`, `get_plan`, `preview_occurrences` | `application/query_service.py`, `application/catalogue_service.py` | Read-only repository sessions |
+| Plan lifecycle | `create_plan`, `update_plan`, `pause_plan`, `resume_plan`, `archive_plan` | `MaintenancePlanningService` | Retained; schedule changes and audit sequencing remain together |
+| Checklist templates | `list_templates`, `get_template`, `create_template`, `version_template`, `archive_template` | `application/template_service.py` | One repository transaction per template command; versions remain immutable |
+| Work orders/checklists | `create_work_order`, `update_work_order`, `assign_work_order`, `transition_work_order`, `update_checklist`, `complete_work_order`, `verify_work_order`, `cancel_work_order`, `reopen_work_order` | `MaintenancePlanningService` | Retained; state machine, log linkage, asset dates, audit/outbox remain atomic |
+| Generation/metrics | `generate`, `schedule_view`, `metrics` | `MaintenancePlanningService` | Retained; recurrence and generation idempotency remain repository-owned |
+| Evidence | `list_evidence`, `upload_evidence`, `download_evidence`, `delete_evidence` | `application/evidence_service.py` | Metadata/audit transaction plus attachment byte cleanup contract |
+
+Template extraction receives the existing normalization and checklist-validation
+callbacks. It does not construct a session or alter snapshot data; work-order
+creation continues to snapshot the immutable template through the canonical
+maintenance repository.
+
 ## API analytics and compatibility services
 
 The historical `ProcessedDataService` now lives as a small façade under
@@ -34,7 +84,8 @@ The historical `ProcessedDataService` now lives as a small façade under
 - `src/api/services/factories.py` selects PostgreSQL or the explicit CSV
   compatibility adapter and constructs the service graph.
 
-`src/application/copilot_factory.py` constructs the shared RAG graph. The API
+`src/composition/copilot.py` constructs the shared RAG graph. The historical
+`src/application/copilot_factory.py` import remains available. The API
 and CLI use that root; canonical `src/rag` modules do not import API
 composition. No transaction, session, lock, idempotency, audit, or outbox
 ownership moved into these read/compatibility modules.
@@ -44,8 +95,8 @@ The reliability pilot contract follows the same compatibility pattern:
 the package modules own schemas, manifest/environment/runtime validation,
 release/evidence/decision logic, and CLI commands.
 
-Current implementation line counts are approximately 1,396 inventory, 1,578
-ticket, and 1,642 maintenance lines. They remain above the review threshold
+Current implementation line counts are approximately 1,141 inventory, 1,569
+ticket, and 1,560 maintenance lines. They remain above the review threshold
 because the remaining methods are transaction-sensitive orchestration and
 state-machine policy; splitting them without a method-level transaction map
 would obscure the existing atomic sequence. The next safe extraction is one

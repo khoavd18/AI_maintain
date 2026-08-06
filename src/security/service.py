@@ -25,6 +25,7 @@ from src.security.permissions import (
     Role,
     permissions_for_role,
 )
+from src.security.principal import CurrentUser
 from src.security.rate_limit import LoginRateLimiter, LoginRateLimitExceededError
 from src.security.tokens import (
     AccessClaims,
@@ -57,26 +58,6 @@ class UserNotFoundError(ValueError):
 
 class UserConflictError(ValueError):
     """Raised for stale or unsafe user administration changes."""
-
-
-@dataclass(frozen=True)
-class CurrentUser:
-    id: UUID
-    username: str
-    email: str | None
-    display_name: str
-    role: Role
-    permissions: frozenset[Permission]
-    technician_id: str | None
-    is_active: bool
-    version: int
-    session_id: UUID
-    created_at: datetime
-    updated_at: datetime
-    last_login_at: datetime | None
-
-    def has(self, permission: Permission) -> bool:
-        return permission in self.permissions
 
 
 @dataclass(frozen=True)

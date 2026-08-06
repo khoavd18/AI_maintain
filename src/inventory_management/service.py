@@ -4,18 +4,14 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from pathlib import Path
 import re
 from typing import Any
 from uuid import UUID
 
 from src.asset_management.storage import (
     AttachmentStorage,
-    LocalAttachmentStorage,
 )
-from src.config.settings import get_settings
 from src.config.value_mappings import ASSET_TYPE_CODE_TO_VI
-from src.database.session import get_session_factory
 from src.inventory_management.domain import (
     ISSUABLE_WORK_ORDER_STATUSES,
     REQUIREMENT_EDITABLE_WORK_ORDER_STATUSES,
@@ -24,10 +20,12 @@ from src.inventory_management.domain import (
     PartLifecycleStatus,
     RequirementStatus,
     ReservationStatus,
-    StockLocationStatus,
 )
 from src.inventory_management.application.catalogue_service import (
     InventoryCatalogueService,
+)
+from src.inventory_management.application.catalogue_mutation_service import (
+    InventoryCatalogueMutationService,
 )
 from src.inventory_management.application.evidence_service import (
     InventoryEvidenceDownload,
@@ -48,10 +46,9 @@ from src.repositories.contracts import (
     StoredRecord,
     UnsupportedStorageOperationError,
 )
-from src.repositories.postgres_inventory import PostgresInventoryRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission, Role
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 _CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._-]*$")
 _IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,99}$")
@@ -74,6 +71,20 @@ class InventoryManagementService:
             self._repository,
             self._require_permission,
             self._require_any_read,
+        )
+        self.catalogue_mutations = InventoryCatalogueMutationService(
+            self._repository,
+            self._require_permission,
+            self._part_record,
+            self._stock_location_record,
+            _normalized_code,
+            _plain_text,
+            _optional_text,
+            _uuid,
+            _asset_types,
+            _thresholds,
+            _cost_values,
+            _utc_now,
         )
         self.evidence = InventoryEvidenceService(
             self._repository,
@@ -108,22 +119,8 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_PARTS_MANAGE)
-        values = {
-            "code": _normalized_code(request["code"], "code", maximum=50),
-            "name_vi": _plain_text(request["name_vi"], "name_vi", maximum=200),
-            "name_en": _optional_text(request.get("name_en"), maximum=200),
-            "description": _optional_text(
-                request.get("description"), maximum=1000
-            ),
-            "is_active": True,
-            "created_by_user_id": actor.id,
-            "updated_by_user_id": actor.id,
-        }
-        return dict(
-            self._repository()
-            .create_category(values, audit_context=audit_context)
-            .values
+        return self.catalogue_mutations.create_category(
+            request, actor=actor, audit_context=audit_context
         )
 
     def list_units(
@@ -141,24 +138,8 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_PARTS_MANAGE)
-        precision = int(request["quantity_precision"])
-        if precision < 0 or precision > 3:
-            raise InventoryDomainError(
-                "quantity_precision phải nằm trong khoảng 0 đến 3."
-            )
-        values = {
-            "code": _normalized_code(request["code"], "code", maximum=20),
-            "name_vi": _plain_text(request["name_vi"], "name_vi", maximum=120),
-            "name_en": _optional_text(request.get("name_en"), maximum=120),
-            "symbol": _plain_text(request["symbol"], "symbol", maximum=20),
-            "quantity_precision": precision,
-            "is_active": True,
-            "created_by_user_id": actor.id,
-            "updated_by_user_id": actor.id,
-        }
-        return dict(
-            self._repository().create_unit(values, audit_context=audit_context).values
+        return self.catalogue_mutations.create_unit(
+            request, actor=actor, audit_context=audit_context
         )
 
     def list_parts(
@@ -206,40 +187,9 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_PARTS_MANAGE)
-        minimum, reorder, maximum = _thresholds(request)
-        unit_cost, currency = _cost_values(request)
-        asset_types = _asset_types(request.get("compatible_asset_types", []))
-        values = {
-            "part_number": _normalized_code(
-                request["part_number"], "part_number", maximum=80
-            ),
-            "name_vi": _plain_text(request["name_vi"], "name_vi", maximum=200),
-            "name_en": _optional_text(request.get("name_en"), maximum=200),
-            "category_id": _uuid(request["category_id"], "category_id"),
-            "unit_of_measure_id": _uuid(
-                request["unit_of_measure_id"], "unit_of_measure_id"
-            ),
-            "manufacturer_reference": _optional_text(
-                request.get("manufacturer_reference"), maximum=200
-            ),
-            "compatible_asset_types": asset_types,
-            "lifecycle_status": PartLifecycleStatus.ACTIVE,
-            "lifecycle_status_before_archive": None,
-            "minimum_stock": minimum,
-            "reorder_point": reorder,
-            "maximum_stock": maximum,
-            "unit_cost": unit_cost,
-            "currency_code": currency,
-            "archived_at": None,
-            "archive_reason": None,
-            "created_by_user_id": actor.id,
-            "updated_by_user_id": actor.id,
-        }
-        result = self._repository().create_part(
-            values, audit_context=audit_context
+        return self.catalogue_mutations.create_part(
+            request, actor=actor, audit_context=audit_context
         )
-        return dict(result.values)
 
     def update_part(
         self,
@@ -249,49 +199,8 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_PARTS_MANAGE)
-        current = dict(self._part_record(part_id).values)
-        if current["lifecycle_status"] == PartLifecycleStatus.ARCHIVED:
-            raise InventoryConflictError(
-                "Hãy restore spare part trước khi cập nhật master data."
-            )
-        updates: dict[str, Any] = {}
-        if request.get("name_vi") is not None:
-            updates["name_vi"] = _plain_text(
-                request["name_vi"], "name_vi", maximum=200
-            )
-        for field, maximum in (
-            ("name_en", 200),
-            ("manufacturer_reference", 200),
-        ):
-            if field in request:
-                updates[field] = _optional_text(request.get(field), maximum=maximum)
-        if request.get("category_id") is not None:
-            updates["category_id"] = _uuid(request["category_id"], "category_id")
-        if request.get("compatible_asset_types") is not None:
-            updates["compatible_asset_types"] = _asset_types(
-                request["compatible_asset_types"]
-            )
-        if "unit_cost" in request or "currency_code" in request:
-            cost_request = {
-                "unit_cost": request.get("unit_cost"),
-                "currency_code": request.get("currency_code"),
-            }
-            updates["unit_cost"], updates["currency_code"] = _cost_values(
-                cost_request
-            )
-        if not updates:
-            raise InventoryDomainError("Không có field spare part nào để cập nhật.")
-        return dict(
-            self._repository()
-            .update_part(
-                part_id,
-                updates,
-                expected_version=int(request["expected_version"]),
-                audit_action="inventory.part_updated",
-                audit_context=audit_context,
-            )
-            .values
+        return self.catalogue_mutations.update_part(
+            part_id, request, actor=actor, audit_context=audit_context
         )
 
     def change_part_lifecycle(
@@ -304,70 +213,21 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_PARTS_MANAGE)
-        current = dict(self._part_record(part_id).values)
-        current_status = PartLifecycleStatus(current["lifecycle_status"])
-        now = _utc_now()
-        if action == "activate":
-            if current_status is not PartLifecycleStatus.INACTIVE:
-                raise InventoryConflictError(
-                    "Chỉ spare part inactive mới có thể activate."
-                )
-            updates = {"lifecycle_status": PartLifecycleStatus.ACTIVE}
-        elif action == "deactivate":
-            if current_status is not PartLifecycleStatus.ACTIVE:
-                raise InventoryConflictError(
-                    "Chỉ spare part active mới có thể deactivate."
-                )
-            updates = {"lifecycle_status": PartLifecycleStatus.INACTIVE}
-        elif action == "archive":
-            if current_status is PartLifecycleStatus.ARCHIVED:
-                raise InventoryConflictError("Spare part đã được archive.")
-            archive_reason = _plain_text(
-                reason, "archive_reason", minimum=3, maximum=1000
-            )
-            updates = {
-                "lifecycle_status": PartLifecycleStatus.ARCHIVED,
-                "lifecycle_status_before_archive": current_status.value,
-                "archived_at": now,
-                "archive_reason": archive_reason,
-            }
-        elif action == "restore":
-            if current_status is not PartLifecycleStatus.ARCHIVED:
-                raise InventoryConflictError(
-                    "Chỉ spare part archived mới có thể restore."
-                )
-            restore_status = current.get("lifecycle_status_before_archive") or "inactive"
-            updates = {
-                "lifecycle_status": restore_status,
-                "lifecycle_status_before_archive": None,
-                "archived_at": None,
-                "archive_reason": None,
-            }
-        else:
-            raise InventoryDomainError("Inventory lifecycle action không hợp lệ.")
-        return dict(
-            self._repository()
-            .update_part(
-                part_id,
-                updates,
-                expected_version=expected_version,
-                audit_action=f"inventory.part_{action}d",
-                audit_context=audit_context,
-            )
-            .values
+        return self.catalogue_mutations.change_part_lifecycle(
+            part_id,
+            action=action,
+            expected_version=expected_version,
+            reason=reason,
+            actor=actor,
+            audit_context=audit_context,
         )
 
     def list_stock_locations(
         self, *, actor: CurrentUser, include_archived: bool
     ) -> list[dict[str, Any]]:
-        self._require_permission(actor, Permission.INVENTORY_READ)
-        return [
-            dict(record.values)
-            for record in self._repository().list_stock_locations(
-                include_archived=include_archived
-            )
-        ]
+        return self.catalogue_mutations.list_stock_locations(
+            actor=actor, include_archived=include_archived
+        )
 
     def create_stock_location(
         self,
@@ -376,25 +236,8 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_LOCATIONS_MANAGE)
-        values = {
-            "code": _normalized_code(request["code"], "code", maximum=50),
-            "name": _plain_text(request["name"], "name", maximum=200),
-            "location_type": request["location_type"],
-            "description": _optional_text(
-                request.get("description"), maximum=1000
-            ),
-            "lifecycle_status": StockLocationStatus.ACTIVE,
-            "lifecycle_status_before_archive": None,
-            "archived_at": None,
-            "archive_reason": None,
-            "created_by_user_id": actor.id,
-            "updated_by_user_id": actor.id,
-        }
-        return dict(
-            self._repository()
-            .create_stock_location(values, audit_context=audit_context)
-            .values
+        return self.catalogue_mutations.create_stock_location(
+            request, actor=actor, audit_context=audit_context
         )
 
     def update_stock_location(
@@ -405,35 +248,8 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_LOCATIONS_MANAGE)
-        current = dict(self._stock_location_record(location_id).values)
-        if current["lifecycle_status"] == StockLocationStatus.ARCHIVED:
-            raise InventoryConflictError(
-                "Hãy restore stock location trước khi cập nhật."
-            )
-        updates: dict[str, Any] = {}
-        if request.get("name") is not None:
-            updates["name"] = _plain_text(
-                request["name"], "name", maximum=200
-            )
-        if request.get("location_type") is not None:
-            updates["location_type"] = request["location_type"]
-        if "description" in request:
-            updates["description"] = _optional_text(
-                request.get("description"), maximum=1000
-            )
-        if not updates:
-            raise InventoryDomainError("Không có field stock location để cập nhật.")
-        return dict(
-            self._repository()
-            .update_stock_location(
-                location_id,
-                updates,
-                expected_version=int(request["expected_version"]),
-                audit_action="inventory.stock_location_updated",
-                audit_context=audit_context,
-            )
-            .values
+        return self.catalogue_mutations.update_stock_location(
+            location_id, request, actor=actor, audit_context=audit_context
         )
 
     def change_stock_location_lifecycle(
@@ -446,59 +262,13 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_LOCATIONS_MANAGE)
-        current = dict(self._stock_location_record(location_id).values)
-        current_status = StockLocationStatus(current["lifecycle_status"])
-        now = _utc_now()
-        if action == "activate":
-            if current_status is not StockLocationStatus.INACTIVE:
-                raise InventoryConflictError(
-                    "Chỉ stock location inactive mới có thể activate."
-                )
-            updates = {"lifecycle_status": StockLocationStatus.ACTIVE}
-        elif action == "deactivate":
-            if current_status is not StockLocationStatus.ACTIVE:
-                raise InventoryConflictError(
-                    "Chỉ stock location active mới có thể deactivate."
-                )
-            updates = {"lifecycle_status": StockLocationStatus.INACTIVE}
-        elif action == "archive":
-            if current_status is StockLocationStatus.ARCHIVED:
-                raise InventoryConflictError("Stock location đã được archive.")
-            updates = {
-                "lifecycle_status": StockLocationStatus.ARCHIVED,
-                "lifecycle_status_before_archive": current_status.value,
-                "archived_at": now,
-                "archive_reason": _plain_text(
-                    reason, "archive_reason", minimum=3, maximum=1000
-                ),
-            }
-        elif action == "restore":
-            if current_status is not StockLocationStatus.ARCHIVED:
-                raise InventoryConflictError(
-                    "Chỉ stock location archived mới có thể restore."
-                )
-            updates = {
-                "lifecycle_status": current.get(
-                    "lifecycle_status_before_archive"
-                )
-                or "inactive",
-                "lifecycle_status_before_archive": None,
-                "archived_at": None,
-                "archive_reason": None,
-            }
-        else:
-            raise InventoryDomainError("Stock-location lifecycle action không hợp lệ.")
-        return dict(
-            self._repository()
-            .update_stock_location(
-                location_id,
-                updates,
-                expected_version=expected_version,
-                audit_action=f"inventory.stock_location_{action}d",
-                audit_context=audit_context,
-            )
-            .values
+        return self.catalogue_mutations.change_stock_location_lifecycle(
+            location_id,
+            action=action,
+            expected_version=expected_version,
+            reason=reason,
+            actor=actor,
+            audit_context=audit_context,
         )
 
     def upsert_reorder_configuration(
@@ -509,26 +279,8 @@ class InventoryManagementService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.INVENTORY_PARTS_MANAGE)
-        self._part_record(part_id)
-        minimum, reorder, maximum = _thresholds(request)
-        values = {
-            "part_id": part_id,
-            "stock_location_id": _uuid(
-                request["stock_location_id"], "stock_location_id"
-            ),
-            "minimum_stock": minimum,
-            "reorder_point": reorder,
-            "maximum_stock": maximum,
-        }
-        return dict(
-            self._repository()
-            .upsert_reorder_configuration(
-                values,
-                expected_version=request.get("expected_version"),
-                audit_context=audit_context,
-            )
-            .values
+        return self.catalogue_mutations.upsert_reorder_configuration(
+            part_id, request, actor=actor, audit_context=audit_context
         )
 
     def list_balances(
@@ -1203,19 +955,11 @@ class InventoryManagementService:
 
 
 def build_inventory_management_service() -> InventoryManagementService:
-    """Build the canonical inventory service from validated settings."""
+    """Compatibility builder delegated to the explicit composition root."""
 
-    settings = get_settings()
-    repository: InventoryRepository | None = None
-    if settings.storage_backend == "postgresql":
-        repository = PostgresInventoryRepository(
-            get_session_factory(settings.database_url)
-        )
-    return InventoryManagementService(
-        repository,
-        LocalAttachmentStorage(Path(settings.attachment_storage_root)),
-        attachment_max_size_bytes=settings.attachment_max_size_bytes,
-    )
+    from src.composition.inventory import build_inventory_management_service as build
+
+    return build()
 
 
 def _page_values(page: StoredPage) -> dict[str, Any]:

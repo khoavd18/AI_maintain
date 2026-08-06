@@ -28,7 +28,7 @@ from src.repositories.contracts import (
     RecordNotFoundError,
     StorageUnavailableError,
 )
-from src.security.service import CurrentUser
+from src.security.principal import CurrentUser
 
 
 class OperationsQueryRepository:
