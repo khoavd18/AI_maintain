@@ -801,3 +801,11 @@ isolated PostgreSQL passed 87 with 421 deselected and the same warning. Ruff,
 compileall, Alembic current/heads/check at 20260726_0008, all three Compose
 config checks, and git diff --check passed. No frontend, API, RBAC, schema,
 migration, transaction/session/lock, or audit/outbox behavior changed.
+
+## Ticket SLA runtime characterization - 2026-08-08
+
+Completed the bounded SLA-runtime phase. `TicketSlaRuntimeService` owns override orchestration, immutable SLA snapshots/deadlines, first-response event intent, and clock presentation; the facade delegates while preserving public contracts. Escalation was not changed, and repository transaction ownership remains unchanged. Do not continue automatically.
+
+## Ticket application completion - 2026-08-08
+
+Ticket escalation characterization and safe extraction are complete. `TicketEscalationService` owns eligibility, bounded rule decisions, timestamp capture, dry-run, candidate mapping, and repository command construction. Durable duplicate prevention, breach SLA events, audit, outbox, rollback, and worker leasing remain in their existing PostgreSQL/PM7 owners. The remaining facade is intentionally retained compatibility/delegation plus small priority, summary, bootstrap, legacy, and mapping responsibilities. Ticket application work is complete; the next macro phase is `MAINTENANCE_APPLICATION`.

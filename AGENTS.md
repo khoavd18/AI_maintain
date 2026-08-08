@@ -274,3 +274,22 @@ recovery attempt found Docker unavailable; the subsequent isolated PostgreSQL
 run passed (`86 passed, 411 deselected, 1 warning`). No
 frontend file, API contract, schema, migration, or security transaction family
 was modified.
+
+Validation for this checkpoint: focused runtime characterization 3 passed;
+full backend 424 passed/87 skipped/1 warning; isolated PostgreSQL 87
+passed/424 deselected/1 warning; Ruff, compileall, Alembic current/heads/check,
+all three Compose config checks, and git diff --check passed. The only warning
+is the existing FastAPI/Starlette-httpx deprecation.
+
+Final Ticket application checkpoint 2026-08-08: escalation characterization is
+complete and `src/ticket_management/application/escalation_service.py` owns
+bounded eligibility/rule decisions, timestamp capture, dry-run, candidate
+mapping, and repository command construction. `record_escalations` remains the
+transaction owner for unique duplicate prevention, breach SLA events, audit,
+outbox, commit, rollback, and exception mapping; PM7 worker leasing remains in
+operations. `TicketWorkflowService` is a compatibility/delegation facade with
+retained priority, summary, bootstrap, legacy, and mapping behavior. Ticket
+application is complete; do not continue into maintenance except as the next
+explicit macro phase `MAINTENANCE_APPLICATION`.
+
+Continuation checkpoint 2026-08-08 SLA runtime: `src/ticket_management/application/sla_runtime_service.py` now owns SLA override selection, immutable policy/calendar snapshots, business-time deadline construction, first-response event intent, and read-time clock presentation. The facade preserves public compatibility; lifecycle and administration remain separate; escalation remains unmodified; and `PostgresTicketRepository` retains transaction/session/lock/version/audit/outbox/commit/rollback/error ownership. No frontend, API/RBAC, schema/migration, or transaction-family architecture changed.

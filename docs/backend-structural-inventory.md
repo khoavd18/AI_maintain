@@ -178,3 +178,9 @@ tests, 12 combined focused tests, full backend 421 passed/87
 skipped, and isolated PostgreSQL 87 passed/421 deselected. The only warning is
 the existing FastAPI/Starlette-httpx deprecation. The next bounded backend
 phase is ticket SLA-runtime characterization; escalation remains deferred.
+
+## Ticket SLA runtime boundary - 2026-08-08
+
+`src/ticket_management/application/sla_runtime_service.py` now owns SLA override intent, immutable policy/calendar snapshots and deadlines, first-response events, and read-time clock presentation. `TicketWorkflowService` remains compatible, lifecycle remains in `lifecycle_service.py`, administration remains in `sla_service.py`, escalation remains retained, and `PostgresTicketRepository` retains all transaction mechanics.
+
+Escalation is now explicitly owned by `src/ticket_management/application/escalation_service.py`; it consumes the SLA runtime projection and emits storage-neutral candidates. The historical facade remains only the compatibility entrypoint and retains priority mutation, summary aggregation, bootstrap, and legacy adapters. `service.py` is 1,002 lines/class 937 lines; it is intentionally retained because routes, composition overrides, CLI, worker, and legacy consumers all use its stable surface.

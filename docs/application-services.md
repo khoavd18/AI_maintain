@@ -120,3 +120,9 @@ the PostgreSQL lifecycle sequence/rollback assertions. The final backend
 validation is 421 passed, 87 skipped; isolated PostgreSQL is 87 passed, 421
 deselected. The repository session/lock/audit/outbox boundary remains
 unchanged.
+
+## Ticket SLA runtime application boundary - 2026-08-08
+
+`TicketSlaRuntimeService` owns SLA policy-override orchestration, immutable policy/calendar snapshot construction, first-response event intent, and derived clock presentation. It uses only the storage-neutral ticket contract plus authorization/normalization collaborators; it owns no SQLAlchemy, session, lock, flush, audit, outbox, commit, rollback, or PostgreSQL exception handling. Intake and lifecycle reuse its snapshot/event behavior, while lifecycle retains named state transitions and `PostgresTicketRepository` retains `replace_sla_policy` and `mutate_ticket` transactions.
+
+`TicketEscalationService` is the corresponding escalation application owner. It consumes the projected SLA clocks from `TicketSlaRuntimeService.present`, applies the bounded active-status/critical/reopen rules, constructs storage-neutral candidates, and delegates one execution command. It does not select recipients, lease worker jobs, write ORM rows, or own audit/outbox. `TicketWorkflowService` remains a compatibility/dependency facade for all routes, CLI, PM7 job invocation, and legacy adapters.

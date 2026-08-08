@@ -267,3 +267,9 @@ with 87 skipped, and isolated PostgreSQL passed 87 with 421 deselected. Ruff,
 compileall, Alembic 20260726_0008 current/heads/check, Compose config, and
 diff checks passed. The only warning is the existing FastAPI/Starlette-httpx
 deprecation.
+
+## Ticket SLA runtime checkpoint - 2026-08-08
+
+SLA administration, runtime, lifecycle, escalation, and persistence are explicitly separated: runtime is `TicketSlaRuntimeService`; named transitions are `TicketLifecycleService`; configuration is `TicketSlaAdministrationService`; escalation remains in `TicketWorkflowService`; and `PostgresTicketRepository` owns rows, locks, audit/outbox, and transactions. No scheduler or automatic escalation was added.
+
+Ticket application completion: escalation now lives in `TicketEscalationService`, while `TicketWorkflowService` remains the stable compatibility facade. The flow is API/PM7 → composition or job runner → capability service → `TicketRepository` contract → PostgreSQL implementation. Escalation is bounded to active statuses, SLA due-soon/breached clocks, critical priority, and repeated reopen; execution is idempotent at the database uniqueness boundary. Maintenance is the only recommended next macro phase.

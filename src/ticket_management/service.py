@@ -19,10 +19,12 @@ from src.security.permissions import Permission, Role
 from src.security.principal import CurrentUser
 from src.ticket_management.application.comment_service import TicketCommentService
 from src.ticket_management.application.catalogue_service import TicketCatalogueService
+from src.ticket_management.application.escalation_service import TicketEscalationService
 from src.ticket_management.application.query_service import TicketQueryService
 from src.ticket_management.application.assignment_service import TicketAssignmentService
 from src.ticket_management.application.intake_service import TicketIntakeService
 from src.ticket_management.application.lifecycle_service import TicketLifecycleService
+from src.ticket_management.application.sla_runtime_service import TicketSlaRuntimeService
 from src.ticket_management.application.sla_service import TicketSlaAdministrationService
 from src.ticket_management.errors import (
     TicketAuthorizationError,
@@ -32,17 +34,13 @@ from src.ticket_management.errors import (
 )
 from src.ticket_management.domain import (
     ACTIVE_TICKET_STATUSES,
-    ESCALATION_RULE_LABELS,
     IMPACT_LABELS,
     LEGACY_STATUS_LABELS,
     PRIORITY_LABELS,
-    SLA_STATUS_LABELS,
     TICKET_STATUS_LABELS,
     URGENCY_LABELS,
-    EscalationRule,
     Impact,
     SlaClockStatus,
-    SlaClockType,
     TicketPriority,
     TicketQueue,
     TicketStatus,
@@ -50,12 +48,7 @@ from src.ticket_management.domain import (
     calculate_priority,
     legacy_priority_dimensions,
 )
-from src.ticket_management.sla import (
-    BusinessCalendarDefinition,
-    WorkingPeriod,
-    derive_clock_status,
-    remaining_minutes,
-)
+from src.ticket_management.sla import BusinessCalendarDefinition, WorkingPeriod
 
 FACILITY_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 FAILURE_CATEGORIES = frozenset(FAILURE_TYPE_CODE_TO_VI)
@@ -77,12 +70,28 @@ class TicketWorkflowService:
             active_assignee=self._active_assignee,
             present=self._present,
         )
+        self.sla_runtime = TicketSlaRuntimeService(
+            repository,
+            require_permission=self._require_permission,
+            ticket_record=self._ticket_record,
+            parse_uuid=_uuid,
+            normalize_datetime=_aware_utc,
+            normalize_text=_plain_text,
+            utc_now=_utc_now,
+            facility_timezone=FACILITY_TIMEZONE,
+        )
+        self.escalation = TicketEscalationService(
+            repository,
+            require_permission=self._require_permission,
+            normalize_datetime=_aware_utc,
+            utc_now=_utc_now,
+        )
         self._lifecycle_service = TicketLifecycleService(
             repository,
             require_permission=self._require_permission,
             ticket_record=self._ticket_record,
             ticket_for_action=self._ticket_for_action,
-            sla_events_for_first_response=self._sla_events_for_first_response,
+            sla_events_for_first_response=self.sla_runtime.events_for_first_response,
             sla_event=_sla_event,
             present=self._present,
             normalize_datetime=_aware_utc,
@@ -95,7 +104,7 @@ class TicketWorkflowService:
             require_permission=self._require_permission,
             validate_references=self._validate_references,
             active_assignee=self._active_assignee,
-            sla_snapshot=self._sla_snapshot,
+            sla_snapshot=self.sla_runtime.snapshot,
             present=self._present,
             normalize_text=_plain_text,
             optional_text=_optional_text,
@@ -385,31 +394,18 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.SLA_POLICIES_MANAGE)
-        record = self._ticket_record(ticket_id)
-        current = _aware_utc(now or _utc_now())
-        policy = self.repository.find_sla_policy(
-            category_id=_uuid(record.values.get("category_id"), "category_id", required=False),
-            priority=str(record.values["priority"]),
-            effective_date=current.astimezone(FACILITY_TIMEZONE).date(),
-            policy_id=policy_id,
-        )
-        if policy is None:
-            raise TicketNotFoundError("SLA policy không hoạt động hoặc thiếu target phù hợp.")
-        current_occurrence = int((record.values.get("sla") or {}).get("occurrence_number", 0))
-        sla_values, events = self._sla_snapshot(
-            policy.values, started_at=current, occurrence_number=current_occurrence + 1
-        )
-        events[0]["details"] = {"reason": _plain_text(reason, "reason", 1000)}
-        result = self.repository.replace_sla_policy(
+        outcome = self.sla_runtime.override_policy(
             ticket_id,
-            expected_version=expected_version,
-            sla_values=sla_values,
-            sla_events=events,
-            audit_context=audit_context,
+            policy_id=policy_id,
             reason=reason,
+            expected_version=expected_version,
+            actor=actor,
+            audit_context=audit_context,
+            now=now,
         )
-        return self._present(result.values, actor=actor, as_of=current)
+        return self._present(
+            outcome.record.values, actor=actor, as_of=outcome.occurred_at
+        )
 
     def add_comment(
         self,
@@ -518,89 +514,12 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
-        permission = Permission.ESCALATIONS_EVALUATE if dry_run else Permission.ESCALATIONS_EXECUTE
-        self._require_permission(actor, permission)
-        current = _aware_utc(as_of or _utc_now())
-        candidates: list[dict[str, Any]] = []
-        for record in self.repository.list_tickets(filters={}):
-            item = self._present(record.values, actor=actor, as_of=current)
-            if TicketStatus(item["status"]) not in ACTIVE_TICKET_STATUSES:
-                continue
-            sla = item.get("sla")
-            occurrence = int((sla or {}).get("occurrence_number", 1))
-            for clock_name, rule_due, rule_breach in (
-                (
-                    "first_response",
-                    EscalationRule.FIRST_RESPONSE_DUE_SOON,
-                    EscalationRule.FIRST_RESPONSE_BREACHED,
-                ),
-                (
-                    "resolution",
-                    EscalationRule.RESOLUTION_DUE_SOON,
-                    EscalationRule.RESOLUTION_BREACHED,
-                ),
-            ):
-                clock = (sla or {}).get(clock_name)
-                if not clock:
-                    continue
-                status = SlaClockStatus(clock["status"])
-                rule = (
-                    rule_due
-                    if status is SlaClockStatus.DUE_SOON
-                    else rule_breach
-                    if status is SlaClockStatus.BREACHED
-                    else None
-                )
-                if rule:
-                    candidates.append(
-                        self._escalation_candidate(
-                            item, rule, current, occurrence, clock_name, clock.get("due_at")
-                        )
-                    )
-            if item["priority"] == TicketPriority.CRITICAL.value:
-                candidates.append(
-                    self._escalation_candidate(
-                        item,
-                        EscalationRule.CRITICAL_PRIORITY,
-                        current,
-                        occurrence,
-                        None,
-                        None,
-                    )
-                )
-            if int(item["reopen_count"]) >= 2:
-                candidates.append(
-                    self._escalation_candidate(
-                        item,
-                        EscalationRule.REPEATED_REOPEN,
-                        current,
-                        int(item["reopen_count"]),
-                        None,
-                        None,
-                    )
-                )
-        created = (
-            []
-            if dry_run
-            else self.repository.record_escalations(candidates, audit_context=audit_context)
+        return self.escalation.evaluate(
+            dry_run=dry_run,
+            actor=actor,
+            audit_context=audit_context,
+            as_of=as_of,
         )
-        return {
-            "dry_run": dry_run,
-            "as_of": current.isoformat(),
-            "candidate_count": len(candidates),
-            "created_count": len(created),
-            "candidates": [
-                {
-                    "ticket_id": item["ticket_id"],
-                    "rule_code": item["rule_code"],
-                    "rule_display": ESCALATION_RULE_LABELS[EscalationRule(item["rule_code"])],
-                    "clock_type": item["clock_type"],
-                    "occurrence_number": item["occurrence_number"],
-                    "due_at": item["due_at"].isoformat() if item["due_at"] else None,
-                }
-                for item in candidates
-            ],
-        }
 
     def seed_defaults(self, *, actor: CurrentUser, audit_context: AuditContext) -> dict[str, int]:
         self._require_permission(actor, Permission.SLA_POLICIES_MANAGE)
@@ -771,66 +690,8 @@ class TicketWorkflowService:
             ]
         sla = result.get("sla")
         if sla:
-            result["sla"] = self._present_sla(result, dict(sla), current)
+            result["sla"] = self.sla_runtime.present(result, dict(sla), current)
         return result
-
-    def _present_sla(
-        self, ticket: dict[str, Any], sla: dict[str, Any], as_of: datetime
-    ) -> dict[str, Any]:
-        calendar = BusinessCalendarDefinition.from_snapshot(sla["calendar_snapshot"])
-        paused = _parse_datetime(sla.get("paused_at"))
-        stopped = ticket["status"] == TicketStatus.CANCELLED.value
-        response_status = derive_clock_status(
-            started_at=_parse_datetime(sla["started_at"]),
-            due_at=_parse_datetime(sla["first_response_due_at"]),
-            completed_at=_parse_datetime(ticket.get("first_response_at")),
-            paused_at=paused,
-            target_minutes=int(sla["first_response_target_minutes"]),
-            as_of=as_of,
-            calendar=calendar,
-            due_soon_percent=int(sla["due_soon_percent"]),
-            stopped=stopped,
-        )
-        resolution_status = derive_clock_status(
-            started_at=_parse_datetime(sla["started_at"]),
-            due_at=_parse_datetime(sla["resolution_due_at"]),
-            completed_at=_parse_datetime(ticket.get("resolved_at")),
-            paused_at=paused,
-            target_minutes=int(sla["resolution_target_minutes"]),
-            as_of=as_of,
-            calendar=calendar,
-            due_soon_percent=int(sla["due_soon_percent"]),
-            stopped=stopped,
-        )
-        sla["first_response"] = _clock_values(
-            response_status,
-            due_at=sla["first_response_due_at"],
-            completed_at=ticket.get("first_response_at"),
-            remaining=(
-                sla.get("first_response_remaining_minutes")
-                if response_status is SlaClockStatus.PAUSED
-                else remaining_minutes(
-                    _parse_datetime(sla["first_response_due_at"]),
-                    as_of,
-                    calendar=calendar,
-                )
-            ),
-        )
-        sla["resolution"] = _clock_values(
-            resolution_status,
-            due_at=sla["resolution_due_at"],
-            completed_at=ticket.get("resolved_at"),
-            remaining=(
-                sla.get("resolution_remaining_minutes")
-                if resolution_status is SlaClockStatus.PAUSED
-                else remaining_minutes(
-                    _parse_datetime(sla["resolution_due_at"]),
-                    as_of,
-                    calendar=calendar,
-                )
-            ),
-        )
-        return sla
 
     def _validate_references(
         self,
@@ -869,96 +730,6 @@ class TicketWorkflowService:
         if record.values.get("role") not in {"chief_engineer", "technician", "helpdesk"}:
             raise TicketConflictError("Vai trò người dùng không thể nhận ticket.")
         return record
-
-    def _sla_snapshot(
-        self,
-        policy: dict[str, Any],
-        *,
-        started_at: datetime,
-        occurrence_number: int = 1,
-    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-        calendar_data = policy.get("calendar")
-        targets = policy.get("targets") or []
-        if not calendar_data or len(targets) != 1:
-            raise TicketConflictError("SLA policy thiếu calendar hoặc target.")
-        if policy["timezone"] != calendar_data["timezone"]:
-            raise TicketConflictError("Timezone của SLA policy và calendar không khớp.")
-        calendar = BusinessCalendarDefinition.from_snapshot(
-            {
-                "timezone": calendar_data["timezone"],
-                "periods": calendar_data["periods"],
-                "holidays": [item["holiday_date"] for item in calendar_data["holidays"]],
-            }
-        )
-        target = targets[0]
-        response_minutes = int(target["first_response_minutes"])
-        resolution_minutes = int(target["resolution_minutes"])
-        values = {
-            "policy_id": UUID(policy["id"]),
-            "policy_code": policy["code"],
-            "policy_name": policy["name"],
-            "calendar_id": UUID(policy["calendar_id"]),
-            "calendar_code": policy["calendar_code"],
-            "timezone": policy["timezone"],
-            "calendar_snapshot": calendar.to_snapshot(),
-            "pause_on_waiting": bool(policy["pause_on_waiting"]),
-            "due_soon_percent": int(policy["due_soon_percent"]),
-            "first_response_target_minutes": response_minutes,
-            "resolution_target_minutes": resolution_minutes,
-            "started_at": started_at,
-            "first_response_due_at": calendar.add_working_minutes(started_at, response_minutes),
-            "resolution_due_at": calendar.add_working_minutes(started_at, resolution_minutes),
-            "first_response_remaining_minutes": None,
-            "resolution_remaining_minutes": None,
-            "paused_at": None,
-            "resolution_stopped_at": None,
-            "occurrence_number": occurrence_number,
-        }
-        events = [
-            _sla_event(
-                "policy_applied",
-                started_at,
-                occurrence_number,
-                details={"policy_code": policy["code"]},
-            ),
-            _sla_event(
-                "clock_started",
-                started_at,
-                occurrence_number,
-                clock_type=SlaClockType.FIRST_RESPONSE.value,
-            ),
-            _sla_event(
-                "clock_started",
-                started_at,
-                occurrence_number,
-                clock_type=SlaClockType.RESOLUTION.value,
-            ),
-        ]
-        return values, events
-
-    def _sla_events_for_first_response(
-        self, sla: dict[str, Any] | None, current: datetime
-    ) -> list[dict[str, Any]]:
-        if not sla:
-            return []
-        events = [
-            _sla_event(
-                "first_response_recorded",
-                current,
-                sla["occurrence_number"],
-                clock_type=SlaClockType.FIRST_RESPONSE.value,
-            )
-        ]
-        if current <= _parse_datetime(sla["first_response_due_at"]):
-            events.append(
-                _sla_event(
-                    "target_met",
-                    current,
-                    sla["occurrence_number"],
-                    clock_type=SlaClockType.FIRST_RESPONSE.value,
-                )
-            )
-        return events
 
     def _calendar_values(self, request: dict[str, Any], *, actor: CurrentUser) -> dict[str, Any]:
         periods = [
@@ -1119,31 +890,6 @@ class TicketWorkflowService:
             )
         return False
 
-    @staticmethod
-    def _escalation_candidate(
-        ticket: dict[str, Any],
-        rule: EscalationRule,
-        current: datetime,
-        occurrence: int,
-        clock_type: str | None,
-        due_at: str | None,
-    ) -> dict[str, Any]:
-        sla = ticket.get("sla")
-        return {
-            "ticket_id": ticket["ticket_id"],
-            "ticket_sla_id": UUID(sla["id"]) if sla else None,
-            "rule_code": rule.value,
-            "clock_type": clock_type,
-            "occurrence_number": occurrence,
-            "detected_at": current,
-            "due_at": _parse_datetime(due_at),
-            "details": {
-                "priority": ticket["priority"],
-                "status": ticket["status"],
-            },
-        }
-
-
 def _sla_event(
     event_type: str,
     occurred_at: datetime,
@@ -1158,22 +904,6 @@ def _sla_event(
         "occurrence_number": int(occurrence_number),
         "occurred_at": occurred_at,
         "details": details,
-    }
-
-
-def _clock_values(
-    status: SlaClockStatus,
-    *,
-    due_at: str,
-    completed_at: str | None,
-    remaining: int | None,
-) -> dict[str, Any]:
-    return {
-        "status": status.value,
-        "status_display": SLA_STATUS_LABELS[status],
-        "due_at": due_at,
-        "completed_at": completed_at,
-        "remaining_business_minutes": remaining,
     }
 
 

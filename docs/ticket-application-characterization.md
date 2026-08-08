@@ -256,3 +256,74 @@ FastAPI/Starlette-httpx deprecation warning. Isolated PostgreSQL validation is
 audit-insert rollback checks. Ruff and compileall pass. Alembic current and
 heads are 20260726_0008 with no pending operations, all development/test/pilot
 Compose configurations parse, and git diff --check passes.
+
+## SLA runtime characterization (2026-08-08)
+
+### Remaining `TicketWorkflowService` inventory
+
+The public facade remains the API-compatible rich-ticket boundary. Routes, the legacy adapter, explicit CLI, and tests call it; composition remains `src/composition/tickets.py`.
+
+| Methods | Classification | Current owner | Facade decision |
+|---|---|---|---|
+| `options`, `priority_preview` | delegation/catalogue | `TicketCatalogueService` | delegate |
+| `intake` | delegation/intake | `TicketIntakeService` | delegate |
+| `list_queue`, `get_ticket` | delegation/query | `TicketQueryService` | delegate |
+| `assign` | delegation/assignment | `TicketAssignmentService` | delegate |
+| eight named lifecycle methods | delegation/lifecycle runtime state | `TicketLifecycleService` | delegate |
+| `change_priority` | priority mutation | facade | retain; applies server impact × urgency and calls `mutate_ticket` only |
+| `override_sla_policy` | SLA runtime policy selection/replacement | `TicketSlaRuntimeService` | delegate |
+| `sla_summary` | mapping/presentation | facade plus runtime clock presenter | retain; read aggregation |
+| calendar/policy CRUD | SLA administration | `TicketSlaAdministrationService` | delegate |
+| `evaluate_escalations` | escalation | facade | retain; excluded from this phase |
+| `add_comment` | delegation/comments | `TicketCommentService` | delegate |
+| `seed_defaults` | bootstrap | facade/repository | retain explicit protected command |
+| legacy methods/projection | compatibility | facade | retain narrow Vietnamese adapter |
+| private presentation/reference/access/queue/escalation helpers | helper/mapping | facade/module helpers | retain for retained capability |
+
+`TicketWorkflowService` was 1,272 lines before the SLA extraction; it is now 1,002 lines and its class is 937 lines (previously 1,080). The runtime and escalation services are separate cohesive application modules. Signatures, imports, dependency override seam, routes, RBAC checks, and response shapes are unchanged.
+
+### SLA responsibility and behavior
+
+Administration is `TicketSlaAdministrationService`; policy matching is the read-only repository query; deadlines/snapshots, first-response event intent, override orchestration, and derived clock presentation are `TicketSlaRuntimeService`; pause/resume/resolve/cancel/reopen state changes are `TicketLifecycleService`; breach consumption is the retained escalation method; and rows/events/locks/audit/outbox/commit are `PostgresTicketRepository`.
+
+At intake and override, `find_sla_policy` accepts only active policies effective on the facility-local `Asia/Ho_Chi_Minh` date. With a category it considers category-specific then default policies, ordered by `category_id DESC NULLS LAST, code`; without a category it only considers default. A candidate needs the derived-priority target; first eligible wins. An override additionally filters policy ID. No match is the existing no-policy error; inactive or edited policies never rewrite the persisted snapshot.
+
+The one override timestamp is sampled after permission and ticket lookup, normalized to UTC, and reused in state, deadlines, and every SLA event. A snapshot requires matching IANA timezones and exactly one target, preserves calendar/targets/pause/due-soon values, calculates both deadlines through the sole `ticket_management/sla.py` implementation, and emits `policy_applied`, then two `clock_started` events. Same-day non-overlapping periods, holidays, after-hours/weekend normalization, DST handling, and the ten-year bound are unchanged.
+
+`acknowledge` records first response once; `start` records it only when absent. Both append `first_response_recorded` and append `target_met` only when `current <= due_at`. Hold captures remaining business minutes only for a snapshotted pause-enabled policy; resume reconstructs due dates from its one timestamp. Resolve stops resolution and can append `target_met`; cancellation stops it; close and priority leave SLA untouched. Reopen increments occurrence and starts fresh resolution without resetting first response.
+
+`breached` is derived at read time, never writable or persisted by lifecycle commands. The untouched `evaluate_escalations` projects clocks at one `as_of` timestamp and its repository command records idempotent escalation/breach events. That is the SLA-runtime/escalation boundary.
+
+`replace_sla_policy` owns one repository session/transaction: ticket `FOR UPDATE`, expected-version check, SLA-state `FOR UPDATE`, snapshot write, flush, append-only events, second flush, audit, and commit. `mutate_ticket` retains the corresponding lifecycle sequence and existing hold/resume outbox mapping. Audit/outbox/constraint/stale/flush failures roll back atomically and are mapped at the repository. Runtime/lifecycle services own no sessions, locks, commits, rollbacks, PostgreSQL exceptions, audit UUIDs, or outbox UUIDs.
+
+Focused `test_ticket_sla_runtime_characterization.py` covers local-date policy selection, no-match no-mutation, snapshot deadline/event order, and on-time versus late first response. Existing calendar, lifecycle, policy-snapshot, rollback, and isolated PostgreSQL tests retain remaining coverage.
+
+### Extraction decision
+
+**SAFE_TO_EXTRACT.** `TicketSlaRuntimeService` is a real cohesive application boundary with no SQLAlchemy/transaction ownership. Escalation, priority, legacy compatibility, and repository transaction families remain out of scope.
+
+## Escalation characterization and extraction (2026-08-08)
+
+### Responsibility inventory
+
+`TicketEscalationService.evaluate` is the application owner for permission selection, one `as_of` timestamp capture, active-ticket eligibility, SLA clock projection, breach/due-soon rule selection, critical-priority and repeated-reopen candidates, dry-run behavior, and result mapping. Its private `_candidate` helper creates storage-neutral intent. `TicketSlaRuntimeService.present` remains the single SLA projection source; escalation does not recalculate deadlines or pause semantics. `PostgresTicketRepository.record_escalations` owns insertion, duplicate prevention, breach-event creation, audit, outbox, commit/rollback, and exception mapping. `JobRunner._sla_escalation`/`BackgroundWorker` own only PM7 job leasing and invocation; routes and CLI call the facade compatibility method. No recipient-routing decision exists in application escalation: notification recipients are resolved later by the durable outbox worker.
+
+Eligibility is exactly `ACTIVE_TICKET_STATUSES`: open, assigned, in-progress, waiting, and reopened. Resolved, closed, and cancelled tickets are excluded. A waiting ticket with a paused SLA produces no clock candidate; a ticket without SLA produces no clock candidate. For each active SLA occurrence, due-soon or breached first-response and resolution clocks produce one candidate each. Critical priority independently produces `critical_priority`; `reopen_count >= 2` independently produces `repeated_reopen`. Thus a ticket may produce multiple candidates in one evaluation, including both breached clocks plus priority/reopen rules. Assignment/support-group values are only retained in the later outbox payload; they do not affect eligibility or rule selection. Reopen uses the persisted occurrence, while repeated reopen uses the reopen count; priority changes affect only the current critical rule on the next evaluation and do not rewrite SLA state.
+
+### Time, idempotency, and side effects
+
+Permission is checked before reads. `as_of` is captured once after permission, normalized to UTC, and used for every ticket projection, candidate `detected_at`, and report timestamp. Clock status comparisons remain the runtime rules: `current > due_at` is breached, due-soon is derived from business minutes and the snapshotted calendar, and paused/stopped/completed clocks do not become breach candidates. Repeated evaluation is intentionally allowed to recompute candidates, but the repository's unique `(ticket_id, rule_code, occurrence_number)` constraint with `ON CONFLICT DO NOTHING` makes execution idempotent. No application-level idempotency key, escalation level column, progression loop, reset, or maximum level exists; each bounded rule is a one-time occurrence event.
+
+`record_escalations` opens one session/transaction, inserts each event, creates `breach_detected` SLA events for breached rules, appends `ticket.escalated` audit rows, and enqueues `ticket.sla_breach`, `ticket.sla_warning`, or `ticket.escalated` outbox events with event-specific idempotency keys. The repository creates event/audit/outbox UUIDs inside that transaction. A duplicate rule is skipped and creates no audit, breach event, or outbox record. Any integrity, operational, SQLAlchemy, audit, outbox, or flush failure rolls back the entire call. Concurrent application calls are safe through the database unique boundary; worker execution is separately protected by the persisted PM7 execution lease and is not moved.
+
+Notification routing is catalogued in `src/operations/domain.py`, not escalation application code: all three escalation event types target active administrators, property managers, and chief engineers, and additionally include an active assigned user when `assigned_user_id` is present. Missing or inactive explicit assignees contribute no recipient; duplicate role/assignee IDs are set-deduplicated. Delivery creates in-app notifications only, with recipient isolation and `(outbox_event_id, recipient_id)` uniqueness; no email, SMS, push, webhook, or external delivery exists.
+
+### Boundary decision
+
+**SAFE_TO_EXTRACT.** The new `src/ticket_management/application/escalation_service.py` contains real storage-neutral eligibility, rule decision, and mapping behavior, calls no facade method, and owns no ORM/session/lock/commit/rollback. `TicketWorkflowService` delegates `evaluate_escalations`; the repository and worker boundaries are unchanged. The new focused `tests/test_ticket_escalation_characterization.py` covers active/terminal/paused/no-SLA eligibility, multiple candidates, dry-run no-write, single timestamp propagation, and permission-before-read. Existing PostgreSQL concurrency/idempotency and background worker tests remain the persistence protection.
+
+### Final facade inventory and traceability
+
+The facade now has 29 public methods: catalogue/query/intake/assignment/lifecycle/comment/SLA administration/runtime/escalation delegation plus retained priority mutation, SLA summary mapping, bootstrap, and legacy adapters. Private helpers are reference validation, calendar/policy request mapping, access/queue projection, and compatibility presentation. There is no remaining unclassified application capability. Request flows are `API → composition → capability service → TicketRepository contract → PostgreSQL repository`; escalation is `PM7 worker → JobRunner → compatibility facade → TicketEscalationService → record_escalations`. The facade is intentionally retained for routes, dependency overrides, CLI, worker, and legacy consumers.
+
+Final validation after escalation extraction: focused ticket/SLA selection `34 passed`; full backend `427 passed, 87 skipped, 1 warning`; isolated PostgreSQL `87 passed, 427 deselected, 1 warning`; Ruff and compileall passed; Alembic current/heads are `20260726_0008` with no pending operations; all Compose configs and `git diff --check` passed. The sole warning remains the FastAPI/Starlette-httpx deprecation.

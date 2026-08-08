@@ -56,6 +56,12 @@ repository façade.
 | `create_calendar`, `update_calendar`, `create_policy`, `update_policy`, `seed_defaults` | One repository transaction | Writes versioned calendar/policy/reference data with optimistic version checks and target validation | Audit is atomic; ticket SLA policy snapshot tests protect historical immutability |
 | `record_escalations` | One repository transaction | Locks/claims each `(ticket_id, rule_code, occurrence_number)` boundary and inserts only missing escalation events | Dry-run is outside this method; execution is idempotent and notification outbox writes remain atomic; covered by escalation tests |
 
+### Ticket SLA runtime decomposition - 2026-08-08
+
+`TicketSlaRuntimeService` now provides storage-neutral override intent, snapshots, deadlines, first-response event intent, and clock presentation. It invokes `replace_sla_policy` only after application validation; it never owns a session or transaction. `replace_sla_policy` retains ticket `FOR UPDATE`, expected-version check, SLA-state `FOR UPDATE`, snapshot write, flush, append-only SLA events, audit, commit/rollback, and exception mapping. `mutate_ticket` retains its equivalent lifecycle transaction and the existing hold/resume outbox mapping. No runtime extraction changed this table's lock, audit, outbox, or transaction owner.
+
+`TicketEscalationService` invokes `record_escalations`; that repository transaction inserts the unique escalation row, optional `breach_detected` SLA event, audit row, and catalogued outbox event as one unit. `ON CONFLICT DO NOTHING` on `(ticket_id, rule_code, occurrence_number)` is the duplicate boundary. Worker execution leasing remains owned by `PostgresOperationsRepository` and is not part of the ticket application extraction.
+
 ## Maintenance: `PostgresMaintenancePlanningRepository`
 
 Read/query implementation: `src/repositories/postgres/maintenance/queries.py`.
