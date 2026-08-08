@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from src.security.audit import AuditContext
+from src.security.audit_context import AuditContext
 from src.security.principal import CurrentUser
 
 class OperationsRepository(Protocol):

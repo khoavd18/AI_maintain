@@ -22,6 +22,10 @@ from typing import Any, Literal
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from src.reliability.environment_loader import (
+    EnvironmentFileError,
+    load_environment_file as _load_environment_file,
+)
 from src.reliability.pilot_contract import (
     ValidationReport,
     validate_deployment_manifest,
@@ -41,7 +45,6 @@ _SMOKE_CREDENTIAL_ENVIRONMENTS = (
 )
 _PROJECT_PATTERN = re.compile(r"^pm9-[a-z0-9][a-z0-9-]{0,39}$")
 _COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
-_ENVIRONMENT_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _EVIDENCE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{2,99}$")
 _HOST_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{5,127}$")
 _PLACEHOLDER_MARKERS = ("REPLACE_WITH", "PLACEHOLDER", "UNSET", "UNVERIFIED")
@@ -96,39 +99,12 @@ class RehearsalReport:
 
 
 def load_environment_file(path: Path) -> dict[str, str]:
-    """Parse a simple dotenv file without expanding or returning values in errors."""
+    """Compatibility wrapper preserving the rehearsal exception type."""
 
-    if not path.is_file():
-        raise DeploymentRehearsalError("Pilot environment file is unavailable.")
-    values: dict[str, str] = {}
-    for line_number, raw_line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(),
-        start=1,
-    ):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[7:].lstrip()
-        if "=" not in line:
-            raise DeploymentRehearsalError(
-                f"Pilot environment line {line_number} is not NAME=VALUE."
-            )
-        name, raw_value = line.split("=", 1)
-        name = name.strip()
-        if not _ENVIRONMENT_NAME_PATTERN.fullmatch(name):
-            raise DeploymentRehearsalError(
-                f"Pilot environment line {line_number} has an invalid name."
-            )
-        if name in values:
-            raise DeploymentRehearsalError(
-                f"Pilot environment variable {name} is declared more than once."
-            )
-        value = raw_value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        values[name] = value
-    return values
+    try:
+        return _load_environment_file(path)
+    except EnvironmentFileError as exc:
+        raise DeploymentRehearsalError(str(exc)) from None
 
 
 def compose_command(

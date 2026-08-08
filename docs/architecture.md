@@ -721,3 +721,13 @@ Xem [pilot deployment](pilot_deployment.md),
 [pilot environment](pilot_environment.md),
 [operational ownership](operational_ownership.md) và
 [PM9 release note](releases/product_milestone_9.md).
+
+## Refactoring seam checkpoint — 2026-08-08
+
+The current backend preserves PostgreSQL as the transaction owner and keeps
+compatibility facades stable. Audit context and ticket reference contracts are
+storage-neutral; PM7 pool/release runtime values are composed outside the
+application service; Copilot and reliability environment construction have
+explicit dependency direction. Assignment and intake orchestration are
+extracted behind the ticket facade. PostgreSQL, security, worker, RAG/LLM, API, and frontend
+contracts remain unchanged.

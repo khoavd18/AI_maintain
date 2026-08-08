@@ -45,7 +45,10 @@ validation rules, or split atomic inventory writes.
 | Capability | Public methods | Current owner | Transaction boundary |
 |---|---|---|---|
 | Ticket catalogue/priority | `options`, `priority_preview` | `application/catalogue_service.py` | Read-only/domain calculation |
-| Intake and lifecycle | `intake`, `assign`, `acknowledge`, `start`, `hold`, `resume`, `resolve`, `close`, `reopen`, `cancel`, `change_priority` | `TicketWorkflowService` | Retained; ticket/SLA/audit/outbox sequencing remains together |
+| Intake | `intake` | `application/intake_service.py` | Application orchestration extracted; `create_ticket` remains one repository transaction |
+| Assignment | `assign` | `application/assignment_service.py` | Application orchestration extracted; `mutate_ticket` remains one repository transaction |
+| Lifecycle | acknowledge, start, hold, resume, resolve, close, reopen, cancel | ticket_management/application/lifecycle_service.py with TicketWorkflowService facade delegation | Application orchestration extracted; mutate_ticket remains one repository transaction |
+| Priority updates | change_priority | TicketWorkflowService | Retained; server impact/urgency matrix remains authoritative |
 | SLA administration | `list_calendars`, `create_calendar`, `update_calendar`, `list_policies`, `create_policy`, `update_policy` | `application/sla_service.py` | One repository transaction per calendar/policy command |
 | SLA snapshot/escalation | `override_sla_policy`, `sla_summary`, `evaluate_escalations` | `TicketWorkflowService` | Retained; snapshot and escalation characterization remains pending |
 | Comments and queries | `add_comment`, `list_queue`, `get_ticket` | `application/comment_service.py`, `application/query_service.py` | Repository owns comment mutation and read session |
@@ -95,10 +98,25 @@ The reliability pilot contract follows the same compatibility pattern:
 the package modules own schemas, manifest/environment/runtime validation,
 release/evidence/decision logic, and CLI commands.
 
-Current implementation line counts are approximately 1,141 inventory, 1,569
-ticket, and 1,560 maintenance lines. They remain above the review threshold
-because the remaining methods are transaction-sensitive orchestration and
-state-machine policy; splitting them without a method-level transaction map
-would obscure the existing atomic sequence. The next safe extraction is one
-fully characterized mutation family at a time, beginning with read-only
-mappers and retaining the facade.
+Current implementation line counts are approximately 1,140 inventory, 1,272
+ticket facade, 421 lifecycle collaborator, and 1,559 maintenance lines. The
+lifecycle move reduced the facade while preserving one repository mutation per
+action; the remaining ticket methods are SLA snapshot/override, escalation,
+legacy compatibility, and bootstrap responsibilities.
+
+## 2026-08-08 update
+
+Ticket assignment is now a real collaborator at
+`src/ticket_management/application/assignment_service.py`. It owns permission,
+assignee/group validation, status derivation, audit metadata, and repository
+orchestration. `TicketWorkflowService.assign` remains the stable facade method.
+Ticket lifecycle characterization is complete and the eight named transitions
+now delegate to src/ticket_management/application/lifecycle_service.py.
+SLA-runtime snapshot/override, escalation, and comment/query behavior stays
+retained or in the previously extracted collaborators.
+
+Lifecycle extraction validation passed 8 dedicated characterization tests and
+the PostgreSQL lifecycle sequence/rollback assertions. The final backend
+validation is 421 passed, 87 skipped; isolated PostgreSQL is 87 passed, 421
+deselected. The repository session/lock/audit/outbox boundary remains
+unchanged.

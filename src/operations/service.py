@@ -5,9 +5,14 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from src.config.settings import get_settings
-from src.composition.operations import build_operations_service
 from src.operations.metrics import api_request_metrics
+from src.operations.runtime import (
+    DEFAULT_OPERATIONS_RUNTIME_CONTEXT,
+    DatabasePoolMetrics,
+    DatabasePoolMetricsProvider,
+    OperationsRuntimeContext,
+)
+from src.operations.compatibility import build_operations_service
 from src.repositories.contracts import OperationsRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission
@@ -33,6 +38,8 @@ class OperationsService:
         repeated_job_failure_threshold: int = 3,
         analytics_stale_seconds: int = 172800,
         backup_overdue_seconds: int = 604800,
+        database_pool_metrics: DatabasePoolMetricsProvider | None = None,
+        runtime_context: OperationsRuntimeContext | None = None,
     ) -> None:
         self.repository = repository
         self.worker_stale_seconds = worker_stale_seconds
@@ -40,6 +47,8 @@ class OperationsService:
         self.repeated_job_failure_threshold = repeated_job_failure_threshold
         self.analytics_stale_seconds = analytics_stale_seconds
         self.backup_overdue_seconds = backup_overdue_seconds
+        self.database_pool_metrics = database_pool_metrics
+        self.runtime_context = runtime_context or DEFAULT_OPERATIONS_RUNTIME_CONTEXT
 
     def list_notifications(
         self,
@@ -207,12 +216,7 @@ class OperationsService:
     def metrics(self, *, actor: CurrentUser) -> dict[str, Any]:
         self._require(actor, Permission.JOB_OPERATIONS_READ)
         result = self.repository.operational_metrics()
-        pool = self.repository.session_factory.kw["bind"].pool
-        result["database_pool"] = {
-            "size": pool.size(),
-            "checked_out": pool.checkedout(),
-            "overflow": max(0, pool.overflow()),
-        }
+        result["database_pool"] = self._database_pool_metrics().as_dict()
         result["api_requests"] = api_request_metrics.snapshot()
         return result
 
@@ -224,14 +228,22 @@ class OperationsService:
     def readiness(self) -> dict[str, Any]:
         self.repository.check_health()
         worker = self.worker_health()
-        release = get_settings().release_identity
+        runtime_context = self._runtime_context()
         return {
             "status": "ready" if worker["ready"] else "degraded",
             "database_ready": True,
             "worker_ready": worker["ready"],
             "worker": worker,
-            "release": release.as_dict(),
+            "release": runtime_context.release_identity.as_dict(),
         }
+
+    def _database_pool_metrics(self) -> DatabasePoolMetrics:
+        if self.database_pool_metrics is None:
+            raise RuntimeError("Operations database-pool metrics provider is unavailable.")
+        return self.database_pool_metrics.snapshot()
+
+    def _runtime_context(self) -> OperationsRuntimeContext:
+        return self.runtime_context
 
     @staticmethod
     def _require(actor: CurrentUser, permission: Permission) -> None:

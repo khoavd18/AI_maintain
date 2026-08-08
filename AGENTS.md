@@ -236,3 +236,41 @@ family, API, environment, database metadata, or frontend behavior changed.
 Remaining large
 transaction/reliability files are listed in
 `docs/backend-structural-inventory.md`.
+
+Continuation checkpoint 2026-08-08 lifecycle: ticket lifecycle/state-transition
+characterization is complete. The real orchestration for acknowledge, start,
+hold, resume, resolve, close, reopen, and cancel now lives in
+src/ticket_management/application/lifecycle_service.py; the historical
+TicketWorkflowService delegates those eight public methods. The collaborator
+owns only application validation, actor/ownership checks, transition payloads,
+snapshotted SLA runtime coordination, and result projection. Every mutation
+still calls PostgresTicketRepository.mutate_ticket once, so PostgreSQL
+continues to own the single session/transaction, ticket and SLA row locks,
+expected-version check, audit/outbox writes, flush, commit, rollback, and
+exception mapping. change_priority, SLA snapshot/override, escalation,
+comments, legacy compatibility, and bootstrap remain retained. Focused
+characterization, full backend, isolated PostgreSQL, Ruff, compileall, Alembic,
+Compose, and diff checks must remain green; the next safe phase is exactly one
+separately approved ticket SLA-runtime characterization. Escalation remains
+deferred to a later bounded phase.
+
+Lifecycle validation result: 8 dedicated unit characterization tests passed;
+the combined focused ticket selection passed 12; full backend
+passed 421 with 87 skipped and the existing single TestClient/httpx warning;
+isolated PostgreSQL passed 87 with 421 deselected and the same warning. Ruff,
+compileall, Alembic current/heads/check, the three Compose config checks, and
+git diff --check passed. No frontend file, API contract, RBAC rule, database
+metadata, transaction/session/lock boundary, or audit/outbox semantic changed.
+
+Continuation checkpoint 2026-08-08: backend seam fixes completed for UTF-8
+plan validation, ORM-free audit context, bounded ticket references, explicit
+PM7 runtime providers, composition ownership, Copilot direction, and neutral
+reliability environment parsing. Ticket assignment orchestration now lives in
+`src/ticket_management/application/assignment_service.py` and
+`intake_service.py`; the rich facade and PostgreSQL transaction family remain
+intact. Intake-focused PostgreSQL validation passed (`15 focused passed` and
+the complete isolated suite `86 passed, 412 deselected, 1 warning`). The first
+recovery attempt found Docker unavailable; the subsequent isolated PostgreSQL
+run passed (`86 passed, 411 deselected, 1 warning`). No
+frontend file, API contract, schema, migration, or security transaction family
+was modified.

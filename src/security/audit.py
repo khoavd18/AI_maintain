@@ -1,20 +1,25 @@
 """Safe audit context and state projection helpers."""
 
-from dataclasses import dataclass
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from src.database.models import AuditLog, User
+from src.security.audit_context import AuditContext
 from src.security.principal import CurrentUser
 
-
-@dataclass(frozen=True)
-class AuditContext:
-    actor_user_id: UUID
-    actor_display_name: str
-    request_id: str
+__all__ = [
+    "ASSET_AUDIT_FIELDS",
+    "ATTACHMENT_AUDIT_FIELDS",
+    "AuditContext",
+    "LOCATION_AUDIT_FIELDS",
+    "LOG_AUDIT_FIELDS",
+    "TICKET_AUDIT_FIELDS",
+    "append_security_audit",
+    "safe_metadata",
+    "safe_state",
+]
 
 
 TICKET_AUDIT_FIELDS = {

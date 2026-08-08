@@ -9,7 +9,7 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select, update
+from sqlalchemy import event, func, select, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from src.api.routes import _service
 from src.api.services import ProcessedDataService
 from src.database.models import (
     Asset,
+    AuditLog,
     MaintenanceLog,
     OutboxEvent,
     TicketComment,
@@ -29,6 +30,7 @@ from src.repositories.postgres import PostgresMaintenanceRepository
 from src.repositories.postgres_tickets import PostgresTicketRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Role
+from src.ticket_management.domain import TicketStatus
 from src.ticket_management.routes import get_ticket_workflow_service
 from src.ticket_management.service import (
     TicketAuthorizationError,
@@ -217,6 +219,29 @@ def test_named_lifecycle_pause_resume_reopen_and_sla_events(
     detail = service.get_ticket(ticket["ticket_id"], actor=manager)
     event_types = [event["event_type"] for event in detail["sla_events"]]
     assert {"paused", "resumed", "resolved", "reopened"}.issubset(event_types)
+    session_factory = ticket_context["session_factory"]
+    with session_factory() as session:
+        lifecycle_audits = session.scalars(
+            select(AuditLog)
+            .where(
+                AuditLog.resource_type == "ticket",
+                AuditLog.resource_id == ticket["ticket_id"],
+            )
+            .order_by(AuditLog.occurred_at)
+        ).all()
+        lifecycle_actions = {event.action for event in lifecycle_audits}
+        assert {
+            "ticket.started",
+            "ticket.placed_on_hold",
+            "ticket.resumed",
+            "ticket.resolved",
+            "ticket.closed",
+            "ticket.reopened",
+        }.issubset(lifecycle_actions)
+        reopened_audit = next(
+            event for event in lifecycle_audits if event.action == "ticket.reopened"
+        )
+        assert reopened_audit.event_metadata["reason"]
 
 
 @pytest.mark.postgres
@@ -282,6 +307,49 @@ def test_multiple_waiting_intervals_extend_the_snapshotted_resolution_clock(
     event_types = [event["event_type"] for event in detail["sla_events"]]
     assert event_types.count("paused") == 2
     assert event_types.count("resumed") == 2
+
+
+@pytest.mark.postgres
+def test_lifecycle_mutation_rolls_back_when_audit_insert_fails(
+    ticket_context: dict[str, object],
+) -> None:
+    service = _ticket_service(ticket_context)
+    helpdesk = ticket_context["helpdesk"]
+    technician = ticket_context["technician"]
+    ticket = service.intake(
+        _intake_request(service, helpdesk, technician),
+        actor=helpdesk,
+        audit_context=_audit(helpdesk, "rollback-intake"),
+    )
+    bound_engine = ticket_context["session_factory"].kw["bind"]
+
+    def fail_audit(
+        conn,
+        cursor,
+        statement: str,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        del conn, cursor, parameters, context, executemany
+        if statement.lstrip().upper().startswith("INSERT INTO AUDIT_LOGS"):
+            raise RuntimeError("simulated lifecycle audit failure")
+
+    event.listen(bound_engine, "before_cursor_execute", fail_audit)
+    try:
+        with pytest.raises(RuntimeError, match="simulated lifecycle audit failure"):
+            service.start(
+                ticket["ticket_id"],
+                expected_version=ticket["version"],
+                actor=technician,
+                audit_context=_audit(technician, "rollback-start"),
+            )
+    finally:
+        event.remove(bound_engine, "before_cursor_execute", fail_audit)
+
+    unchanged = service.get_ticket(ticket["ticket_id"], actor=helpdesk)
+    assert unchanged["status"] == TicketStatus.ASSIGNED.value
+    assert unchanged["version"] == ticket["version"]
 
 
 @pytest.mark.postgres

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 from uuid import UUID
 
-from src.security.audit import AuditContext
+from src.security.audit_context import AuditContext
 
 from .shared import StoredPage, StoredRecord
 

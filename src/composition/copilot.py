@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from src.api.services import get_processed_data_service
+from src.application.analytics import get_asset_context_source
 from src.config.settings import get_settings
 from src.llm.provider_factory import create_llm_provider
 from src.rag.adapters.asset_context import ProcessedDataAssetContextAdapter
@@ -63,7 +63,7 @@ def get_copilot_service() -> MaintenanceCopilot:
     )
     return MaintenanceCopilot(
         asset_context_provider=ProcessedDataAssetContextAdapter(
-            get_processed_data_service()
+            get_asset_context_source()
         ),
         retriever=retriever,
         llm_provider=create_llm_provider(settings),

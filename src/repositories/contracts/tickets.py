@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 from datetime import date
+from enum import Enum
 from typing import Any, Protocol
 from uuid import UUID
 
-from src.security.audit import AuditContext
+from src.security.audit_context import AuditContext
 
 from .shared import StoredRecord
+
+
+class TicketReferenceKind(str, Enum):
+    """Bounded ticket-intake reference types understood by storage adapters."""
+
+    CATEGORY = "category"
+    SUBCATEGORY = "subcategory"
+    SUPPORT_GROUP = "support_group"
+    INTAKE_SOURCE = "intake_source"
 
 
 class TicketRepository(Protocol):
@@ -34,7 +44,9 @@ class TicketRepository(Protocol):
 
     def reference_options(self) -> dict[str, list[dict[str, Any]]]: ...
 
-    def get_reference(self, model: type[Any], identifier: UUID) -> StoredRecord | None: ...
+    def get_reference(
+        self, kind: TicketReferenceKind, identifier: UUID
+    ) -> StoredRecord | None: ...
 
     def find_sla_policy(
         self,

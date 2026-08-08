@@ -13,19 +13,16 @@ from src.config.value_mappings import (
     FAILURE_TYPE_VI_TO_CODE,
     PRIORITY_VI_TO_CODE,
 )
-from src.database.models import (
-    SupportGroup,
-    TicketCategory,
-    TicketIntakeSource,
-    TicketSubcategory,
-)
-from src.repositories.contracts import StoredRecord, TicketRepository
+from src.repositories.contracts import StoredRecord, TicketReferenceKind, TicketRepository
 from src.security.audit import AuditContext
 from src.security.permissions import Permission, Role
 from src.security.principal import CurrentUser
 from src.ticket_management.application.comment_service import TicketCommentService
 from src.ticket_management.application.catalogue_service import TicketCatalogueService
 from src.ticket_management.application.query_service import TicketQueryService
+from src.ticket_management.application.assignment_service import TicketAssignmentService
+from src.ticket_management.application.intake_service import TicketIntakeService
+from src.ticket_management.application.lifecycle_service import TicketLifecycleService
 from src.ticket_management.application.sla_service import TicketSlaAdministrationService
 from src.ticket_management.errors import (
     TicketAuthorizationError,
@@ -35,7 +32,6 @@ from src.ticket_management.errors import (
 )
 from src.ticket_management.domain import (
     ACTIVE_TICKET_STATUSES,
-    ASSIGNABLE_STATUSES,
     ESCALATION_RULE_LABELS,
     IMPACT_LABELS,
     LEGACY_STATUS_LABELS,
@@ -74,6 +70,42 @@ class TicketWorkflowService:
     def __init__(self, repository: TicketRepository) -> None:
         self.repository = repository
         self.catalogue = TicketCatalogueService(repository, self._require_permission)
+        self.assignment = TicketAssignmentService(
+            repository,
+            require_permission=self._require_permission,
+            ticket_record=self._ticket_record,
+            active_assignee=self._active_assignee,
+            present=self._present,
+        )
+        self._lifecycle_service = TicketLifecycleService(
+            repository,
+            require_permission=self._require_permission,
+            ticket_record=self._ticket_record,
+            ticket_for_action=self._ticket_for_action,
+            sla_events_for_first_response=self._sla_events_for_first_response,
+            sla_event=_sla_event,
+            present=self._present,
+            normalize_datetime=_aware_utc,
+            parse_datetime=_parse_datetime,
+            normalize_text=_plain_text,
+            utc_now=_utc_now,
+        )
+        self._intake_service = TicketIntakeService(
+            repository,
+            require_permission=self._require_permission,
+            validate_references=self._validate_references,
+            active_assignee=self._active_assignee,
+            sla_snapshot=self._sla_snapshot,
+            present=self._present,
+            normalize_text=_plain_text,
+            optional_text=_optional_text,
+            parse_uuid=_uuid,
+            normalize_datetime=_aware_utc,
+            utc_now=_utc_now,
+            facility_timezone=FACILITY_TIMEZONE,
+            failure_categories=FAILURE_CATEGORIES,
+            email_pattern=EMAIL_PATTERN,
+        )
         self.comments = TicketCommentService(
             repository,
             require_permission=self._require_permission,
@@ -113,96 +145,12 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_CREATE)
-        current = _aware_utc(now or _utc_now())
-        asset_id = _plain_text(request["asset_id"], "asset_id", 50)
-        asset = self.repository.get_asset(asset_id)
-        if asset is None:
-            raise TicketNotFoundError(f"Không tìm thấy asset: {asset_id}")
-        if asset.values.get("lifecycle_status") in {"retired", "archived"}:
-            raise TicketConflictError("Không thể tạo ticket cho asset đã ngừng hoặc lưu trữ.")
-
-        category_id = _uuid(request.get("category_id"), "category_id", required=False)
-        subcategory_id = _uuid(request.get("subcategory_id"), "subcategory_id", required=False)
-        source_id = _uuid(request.get("intake_source_id"), "intake_source_id", required=False)
-        group_id = _uuid(request.get("support_group_id"), "support_group_id", required=False)
-        assigned_user_id = _uuid(
-            request.get("assigned_user_id"), "assigned_user_id", required=False
-        )
-        self._validate_references(
-            category_id=category_id,
-            subcategory_id=subcategory_id,
-            source_id=source_id,
-            group_id=group_id,
-        )
-        assignee = None
-        if assigned_user_id is not None:
-            self._require_permission(actor, Permission.TICKETS_ASSIGN)
-            assignee = self._active_assignee(assigned_user_id)
-
-        impact = Impact(request["impact"])
-        urgency = Urgency(request["urgency"])
-        priority = calculate_priority(impact, urgency)
-        failure_category = str(request.get("failure_category") or "no_failure")
-        if failure_category not in FAILURE_CATEGORIES:
-            raise TicketDomainError("failure_category không được hỗ trợ.")
-        reporter_email = _optional_text(request.get("reporter_email"), 254)
-        if reporter_email and not EMAIL_PATTERN.fullmatch(reporter_email):
-            raise TicketDomainError("reporter_email không hợp lệ.")
-        status = TicketStatus.ASSIGNED if assignee else TicketStatus.OPEN
-        policy = self.repository.find_sla_policy(
-            category_id=category_id,
-            priority=priority.value,
-            effective_date=current.astimezone(FACILITY_TIMEZONE).date(),
-        )
-        if policy is None:
-            raise TicketConflictError(
-                "Không có SLA policy đang hiệu lực cho ticket. Hãy seed hoặc cấu hình policy."
-            )
-        sla_values, sla_events = self._sla_snapshot(policy.values, started_at=current)
-        values = {
-            "asset_id": asset_id,
-            "issue_description": _plain_text(
-                request["issue_description"], "issue_description", 4000, minimum=5
-            ),
-            "priority": priority.value,
-            "status": status.value,
-            "failure_category": failure_category,
-            "reporter_name": _optional_text(request.get("reporter_name"), 200),
-            "reporter_email": reporter_email.casefold() if reporter_email else None,
-            "reporter_phone": _optional_text(request.get("reporter_phone"), 40),
-            "category_id": category_id,
-            "subcategory_id": subcategory_id,
-            "impact": impact.value,
-            "urgency": urgency.value,
-            "intake_source_id": source_id,
-            "support_group_id": group_id,
-            "assigned_user_id": assigned_user_id,
-            "created_at": current,
-            "resolved_at": None,
-            "first_response_at": None,
-            "waiting_reason": None,
-            "waiting_previous_status": None,
-            "closed_at": None,
-            "reopened_at": None,
-            "cancelled_at": None,
-            "cancellation_reason": None,
-            "reopen_count": 0,
-            "technician_id": (
-                str(assignee.values.get("technician_id") or "UNASSIGNED")
-                if assignee
-                else "UNASSIGNED"
-            ),
-            "manager_note": _optional_text(request.get("manager_note"), 1000),
-            "note": None,
-        }
-        record = self.repository.create_ticket(
-            values,
-            sla_values=sla_values,
-            sla_events=sla_events,
+        return self._intake_service.intake(
+            request,
+            actor=actor,
             audit_context=audit_context,
+            now=now,
         )
-        return self._present(record.values, actor=actor, as_of=current)
 
     def list_queue(
         self,
@@ -242,45 +190,15 @@ class TicketWorkflowService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_ASSIGN)
-        record = self._ticket_record(ticket_id)
-        status = TicketStatus(record.values["status"])
-        if status not in ASSIGNABLE_STATUSES:
-            raise TicketConflictError("Chỉ ticket đang hoạt động mới được phân công.")
-        assignee = self._active_assignee(assigned_user_id) if assigned_user_id else None
-        if support_group_id is not None:
-            group = self.repository.get_reference(SupportGroup, support_group_id)
-            if group is None or not group.values.get("is_active"):
-                raise TicketNotFoundError("Không tìm thấy support group đang hoạt động.")
-        target_status = (
-            TicketStatus.ASSIGNED.value
-            if status in {TicketStatus.OPEN, TicketStatus.REOPENED} and assignee
-            else status.value
-        )
-        updates = {
-            "assigned_user_id": assigned_user_id,
-            "support_group_id": support_group_id,
-            "technician_id": (
-                str(assignee.values.get("technician_id") or "UNASSIGNED")
-                if assignee
-                else "UNASSIGNED"
-            ),
-            "status": target_status,
-        }
-        result = self.repository.mutate_ticket(
+        return self.assignment.assign(
             ticket_id,
+            assigned_user_id=assigned_user_id,
+            support_group_id=support_group_id,
             expected_version=expected_version,
-            ticket_updates=updates,
-            sla_updates=None,
-            sla_events=[],
-            audit_action="ticket.assigned",
+            actor=actor,
             audit_context=audit_context,
-            audit_metadata={
-                "assigned_user_id": str(assigned_user_id) if assigned_user_id else None,
-                "support_group_id": str(support_group_id) if support_group_id else None,
-            },
         )
-        return self._present(result.values, actor=actor)
+
 
     def acknowledge(
         self,
@@ -291,25 +209,13 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_ACKNOWLEDGE)
-        record = self._ticket_for_action(ticket_id, actor)
-        if TicketStatus(record.values["status"]) not in ACTIVE_TICKET_STATUSES:
-            raise TicketConflictError("Chỉ ticket đang hoạt động mới được ghi nhận phản hồi.")
-        if record.values.get("first_response_at"):
-            raise TicketConflictError("Ticket đã có first response.")
-        current = _aware_utc(now or _utc_now())
-        sla = record.values.get("sla")
-        events = self._sla_events_for_first_response(sla, current)
-        result = self.repository.mutate_ticket(
+        return self._lifecycle_service.acknowledge(
             ticket_id,
             expected_version=expected_version,
-            ticket_updates={"first_response_at": current},
-            sla_updates=None,
-            sla_events=events,
-            audit_action="ticket.first_response_recorded",
+            actor=actor,
             audit_context=audit_context,
+            now=now,
         )
-        return self._present(result.values, actor=actor, as_of=current)
 
     def start(
         self,
@@ -320,27 +226,13 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_EXECUTE)
-        record = self._ticket_for_action(ticket_id, actor)
-        status = TicketStatus(record.values["status"])
-        if status not in {TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.REOPENED}:
-            raise TicketConflictError(f"Không thể bắt đầu ticket từ trạng thái {status.value}.")
-        current = _aware_utc(now or _utc_now())
-        updates: dict[str, Any] = {"status": TicketStatus.IN_PROGRESS.value}
-        events: list[dict[str, Any]] = []
-        if not record.values.get("first_response_at"):
-            updates["first_response_at"] = current
-            events.extend(self._sla_events_for_first_response(record.values.get("sla"), current))
-        result = self.repository.mutate_ticket(
+        return self._lifecycle_service.start(
             ticket_id,
             expected_version=expected_version,
-            ticket_updates=updates,
-            sla_updates=None,
-            sla_events=events,
-            audit_action="ticket.started",
+            actor=actor,
             audit_context=audit_context,
+            now=now,
         )
-        return self._present(result.values, actor=actor, as_of=current)
 
     def hold(
         self,
@@ -352,60 +244,14 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_EXECUTE)
-        record = self._ticket_for_action(ticket_id, actor)
-        status = TicketStatus(record.values["status"])
-        if status not in {TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS}:
-            raise TicketConflictError("Chỉ ticket assigned/in_progress mới được đặt chờ.")
-        current = _aware_utc(now or _utc_now())
-        sla = record.values.get("sla")
-        sla_updates: dict[str, Any] | None = None
-        events: list[dict[str, Any]] = []
-        if sla and sla["pause_on_waiting"]:
-            calendar = BusinessCalendarDefinition.from_snapshot(sla["calendar_snapshot"])
-            sla_updates = {
-                "paused_at": current,
-                "first_response_remaining_minutes": (
-                    None
-                    if record.values.get("first_response_at")
-                    else max(
-                        0,
-                        remaining_minutes(
-                            _parse_datetime(sla["first_response_due_at"]),
-                            current,
-                            calendar=calendar,
-                        )
-                        or 0,
-                    )
-                ),
-                "resolution_remaining_minutes": max(
-                    0,
-                    remaining_minutes(
-                        _parse_datetime(sla["resolution_due_at"]),
-                        current,
-                        calendar=calendar,
-                    )
-                    or 0,
-                ),
-            }
-            events.append(
-                _sla_event("paused", current, sla["occurrence_number"], details={"reason": reason})
-            )
-        result = self.repository.mutate_ticket(
+        return self._lifecycle_service.hold(
             ticket_id,
+            reason=reason,
             expected_version=expected_version,
-            ticket_updates={
-                "status": TicketStatus.WAITING.value,
-                "waiting_reason": _plain_text(reason, "reason", 1000),
-                "waiting_previous_status": status.value,
-            },
-            sla_updates=sla_updates,
-            sla_events=events,
-            audit_action="ticket.placed_on_hold",
+            actor=actor,
             audit_context=audit_context,
-            audit_metadata={"reason": reason},
+            now=now,
         )
-        return self._present(result.values, actor=actor, as_of=current)
 
     def resume(
         self,
@@ -416,47 +262,13 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_EXECUTE)
-        record = self._ticket_for_action(ticket_id, actor)
-        if record.values["status"] != TicketStatus.WAITING.value:
-            raise TicketConflictError("Chỉ ticket waiting mới được tiếp tục.")
-        previous = TicketStatus(record.values["waiting_previous_status"])
-        current = _aware_utc(now or _utc_now())
-        sla = record.values.get("sla")
-        sla_updates: dict[str, Any] | None = None
-        events: list[dict[str, Any]] = []
-        if sla and sla.get("paused_at"):
-            calendar = BusinessCalendarDefinition.from_snapshot(sla["calendar_snapshot"])
-            response_due = _parse_datetime(sla["first_response_due_at"])
-            if not record.values.get("first_response_at"):
-                response_due = calendar.add_working_minutes(
-                    current, max(1, int(sla["first_response_remaining_minutes"] or 0))
-                )
-            resolution_due = calendar.add_working_minutes(
-                current, max(1, int(sla["resolution_remaining_minutes"] or 0))
-            )
-            sla_updates = {
-                "paused_at": None,
-                "first_response_due_at": response_due,
-                "resolution_due_at": resolution_due,
-                "first_response_remaining_minutes": None,
-                "resolution_remaining_minutes": None,
-            }
-            events.append(_sla_event("resumed", current, sla["occurrence_number"]))
-        result = self.repository.mutate_ticket(
+        return self._lifecycle_service.resume(
             ticket_id,
             expected_version=expected_version,
-            ticket_updates={
-                "status": previous.value,
-                "waiting_reason": None,
-                "waiting_previous_status": None,
-            },
-            sla_updates=sla_updates,
-            sla_events=events,
-            audit_action="ticket.resumed",
+            actor=actor,
             audit_context=audit_context,
+            now=now,
         )
-        return self._present(result.values, actor=actor, as_of=current)
 
     def resolve(
         self,
@@ -467,47 +279,13 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         resolved_at: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_RESOLVE)
-        record = self._ticket_for_action(ticket_id, actor)
-        if record.values["status"] != TicketStatus.IN_PROGRESS.value:
-            raise TicketConflictError("Ticket phải ở trạng thái in_progress trước khi resolve.")
-        if not self.repository.has_maintenance_log(ticket_id):
-            raise TicketConflictError("Ticket cần có maintenance log trước khi resolve.")
-        current = _aware_utc(resolved_at or _utc_now())
-        if current < _parse_datetime(record.values["created_at"]):
-            raise TicketDomainError("resolved_at không được sớm hơn created_at.")
-        sla = record.values.get("sla")
-        events: list[dict[str, Any]] = []
-        sla_updates = None
-        if sla:
-            sla_updates = {"resolution_stopped_at": current}
-            events.append(
-                _sla_event(
-                    "resolved",
-                    current,
-                    sla["occurrence_number"],
-                    clock_type=SlaClockType.RESOLUTION.value,
-                )
-            )
-            if current <= _parse_datetime(sla["resolution_due_at"]):
-                events.append(
-                    _sla_event(
-                        "target_met",
-                        current,
-                        sla["occurrence_number"],
-                        clock_type=SlaClockType.RESOLUTION.value,
-                    )
-                )
-        result = self.repository.mutate_ticket(
+        return self._lifecycle_service.resolve(
             ticket_id,
             expected_version=expected_version,
-            ticket_updates={"status": TicketStatus.RESOLVED.value, "resolved_at": current},
-            sla_updates=sla_updates,
-            sla_events=events,
-            audit_action="ticket.resolved",
+            actor=actor,
             audit_context=audit_context,
+            resolved_at=resolved_at,
         )
-        return self._present(result.values, actor=actor, as_of=current)
 
     def close(
         self,
@@ -518,21 +296,13 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_CLOSE)
-        record = self._ticket_record(ticket_id)
-        if record.values["status"] != TicketStatus.RESOLVED.value:
-            raise TicketConflictError("Chỉ ticket resolved mới được đóng.")
-        current = _aware_utc(now or _utc_now())
-        result = self.repository.mutate_ticket(
+        return self._lifecycle_service.close(
             ticket_id,
             expected_version=expected_version,
-            ticket_updates={"status": TicketStatus.CLOSED.value, "closed_at": current},
-            sla_updates=None,
-            sla_events=[],
-            audit_action="ticket.closed",
+            actor=actor,
             audit_context=audit_context,
+            now=now,
         )
-        return self._present(result.values, actor=actor, as_of=current)
 
     def reopen(
         self,
@@ -544,56 +314,14 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_REOPEN)
-        record = self._ticket_record(ticket_id)
-        status = TicketStatus(record.values["status"])
-        if status not in {TicketStatus.RESOLVED, TicketStatus.CLOSED}:
-            raise TicketConflictError("Chỉ ticket resolved/closed mới được mở lại.")
-        current = _aware_utc(now or _utc_now())
-        sla = record.values.get("sla")
-        sla_updates = None
-        events: list[dict[str, Any]] = []
-        if sla:
-            calendar = BusinessCalendarDefinition.from_snapshot(sla["calendar_snapshot"])
-            occurrence = int(sla["occurrence_number"]) + 1
-            sla_updates = {
-                "resolution_due_at": calendar.add_working_minutes(
-                    current, int(sla["resolution_target_minutes"])
-                ),
-                "resolution_stopped_at": None,
-                "resolution_remaining_minutes": None,
-                "first_response_remaining_minutes": None,
-                "paused_at": None,
-                "occurrence_number": occurrence,
-            }
-            events.extend(
-                [
-                    _sla_event("reopened", current, occurrence, details={"reason": reason}),
-                    _sla_event(
-                        "clock_started",
-                        current,
-                        occurrence,
-                        clock_type=SlaClockType.RESOLUTION.value,
-                    ),
-                ]
-            )
-        result = self.repository.mutate_ticket(
+        return self._lifecycle_service.reopen(
             ticket_id,
+            reason=reason,
             expected_version=expected_version,
-            ticket_updates={
-                "status": TicketStatus.REOPENED.value,
-                "resolved_at": None,
-                "closed_at": None,
-                "reopened_at": current,
-                "reopen_count": int(record.values["reopen_count"]) + 1,
-            },
-            sla_updates=sla_updates,
-            sla_events=events,
-            audit_action="ticket.reopened",
+            actor=actor,
             audit_context=audit_context,
-            audit_metadata={"reason": _plain_text(reason, "reason", 1000)},
+            now=now,
         )
-        return self._present(result.values, actor=actor, as_of=current)
 
     def cancel(
         self,
@@ -605,43 +333,14 @@ class TicketWorkflowService:
         audit_context: AuditContext,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_CANCEL)
-        record = self._ticket_record(ticket_id)
-        status = TicketStatus(record.values["status"])
-        if status not in ACTIVE_TICKET_STATUSES:
-            raise TicketConflictError("Chỉ ticket đang hoạt động mới được hủy.")
-        current = _aware_utc(now or _utc_now())
-        sla = record.values.get("sla")
-        events = (
-            [
-                _sla_event(
-                    "stopped",
-                    current,
-                    sla["occurrence_number"],
-                    clock_type=SlaClockType.RESOLUTION.value,
-                    details={"reason": reason},
-                )
-            ]
-            if sla
-            else []
-        )
-        result = self.repository.mutate_ticket(
+        return self._lifecycle_service.cancel(
             ticket_id,
+            reason=reason,
             expected_version=expected_version,
-            ticket_updates={
-                "status": TicketStatus.CANCELLED.value,
-                "cancelled_at": current,
-                "cancellation_reason": _plain_text(reason, "reason", 1000),
-                "waiting_reason": None,
-                "waiting_previous_status": None,
-            },
-            sla_updates={"resolution_stopped_at": current, "paused_at": None} if sla else None,
-            sla_events=events,
-            audit_action="ticket.cancelled",
+            actor=actor,
             audit_context=audit_context,
-            audit_metadata={"reason": reason},
+            now=now,
         )
-        return self._present(result.values, actor=actor, as_of=current)
 
     def change_priority(
         self,
@@ -1142,22 +841,24 @@ class TicketWorkflowService:
         group_id: UUID | None,
     ) -> None:
         category = (
-            self.repository.get_reference(TicketCategory, category_id) if category_id else None
+            self.repository.get_reference(TicketReferenceKind.CATEGORY, category_id)
+            if category_id
+            else None
         )
         if category_id and (category is None or not category.values.get("is_active")):
             raise TicketNotFoundError("Không tìm thấy category đang hoạt động.")
         if subcategory_id:
-            subcategory = self.repository.get_reference(TicketSubcategory, subcategory_id)
+            subcategory = self.repository.get_reference(TicketReferenceKind.SUBCATEGORY, subcategory_id)
             if subcategory is None or not subcategory.values.get("is_active"):
                 raise TicketNotFoundError("Không tìm thấy subcategory đang hoạt động.")
             if str(subcategory.values["category_id"]) != str(category_id):
                 raise TicketConflictError("Subcategory không thuộc category đã chọn.")
-        for identifier, model, label in (
-            (source_id, TicketIntakeSource, "intake source"),
-            (group_id, SupportGroup, "support group"),
+        for identifier, kind, label in (
+            (source_id, TicketReferenceKind.INTAKE_SOURCE, "intake source"),
+            (group_id, TicketReferenceKind.SUPPORT_GROUP, "support group"),
         ):
             if identifier:
-                record = self.repository.get_reference(model, identifier)
+                record = self.repository.get_reference(kind, identifier)
                 if record is None or not record.values.get("is_active"):
                     raise TicketNotFoundError(f"Không tìm thấy {label} đang hoạt động.")
 
@@ -1325,7 +1026,10 @@ class TicketWorkflowService:
         if code and not CODE_PATTERN.fullmatch(code):
             raise TicketDomainError("SLA policy code phải là mã in hoa 3-50 ký tự.")
         category_id = _uuid(request.get("category_id"), "category_id", required=False)
-        if category_id and self.repository.get_reference(TicketCategory, category_id) is None:
+        if (
+            category_id
+            and self.repository.get_reference(TicketReferenceKind.CATEGORY, category_id) is None
+        ):
             raise TicketNotFoundError("Không tìm thấy ticket category.")
         effective_from = _as_date(request["effective_from"])
         effective_to = _as_date(request["effective_to"]) if request.get("effective_to") else None
@@ -1563,6 +1267,6 @@ def _utc_now() -> datetime:
 def build_ticket_workflow_service() -> TicketWorkflowService:
     """Compatibility builder delegated to the explicit composition root."""
 
-    from src.composition.tickets import build_ticket_workflow_service as build
+    from src.ticket_management.compatibility import build_ticket_workflow_service as build
 
     return build()

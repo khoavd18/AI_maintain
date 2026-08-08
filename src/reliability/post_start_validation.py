@@ -21,7 +21,10 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from src.reliability.deployment_rehearsal import load_environment_file
+from src.reliability.environment_loader import (
+    EnvironmentFileError,
+    load_environment_file as _load_environment_file,
+)
 
 _EXECUTION_FLAG = "PM9_ALLOW_POST_START_VALIDATION"
 _HTTP_TEST_FLAG = "PM9_ALLOW_HTTP_TEST_SMOKE"
@@ -81,6 +84,15 @@ OverallStatus = Literal["passed", "failed"]
 
 class PostStartValidationError(RuntimeError):
     """Safe validation failure that never contains response bodies or secrets."""
+
+
+def load_environment_file(path: Path) -> dict[str, str]:
+    """Compatibility wrapper preserving the post-start exception type."""
+
+    try:
+        return _load_environment_file(path)
+    except EnvironmentFileError as exc:
+        raise PostStartValidationError(str(exc)) from None
 
 
 @dataclass(frozen=True, slots=True)

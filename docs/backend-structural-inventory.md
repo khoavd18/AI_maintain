@@ -12,7 +12,7 @@ compatibility seams are retained when extraction would obscure a contract.
 | Rank | Area | Evidence | Decision | Safe destination / next action |
 |---|---|---|---|---|
 | High | PostgreSQL mutation repositories | Inventory 2,747 lines; operations 1,913; maintenance 1,331; tickets 1,233. Each combines validation, row locks, idempotency, append-only history, audit/outbox, and serialization. | Retain transaction families until method-level characterization is complete. | Stage 5: extract one complete read/projection or pure mapper at a time behind the existing class. |
-| High | Domain application services | Maintenance 1,560 lines; ticket 1,569; inventory 1,141. Public facades still contain state-machine and transaction-sensitive orchestration. | Retain the canonical business boundary; existing read/evidence/catalogue collaborators remain. | Build method-to-capability and characterization maps before moving a mutation family. |
+| High | Domain application services | Maintenance 1,560 lines; ticket facade 1,272 plus lifecycle collaborator 421; inventory 1,141. Public facades still contain transaction-sensitive orchestration. | Retain canonical boundaries; the fully characterized ticket lifecycle is extracted while SLA snapshot/escalation and stock/PM state machines remain. | Build method-to-capability and transaction maps before moving another mutation family. |
 | High | Reliability procedures | Post-start validation 1,191 lines with a 534-line runner; load harness 2,248 with a 487-line runner; deployment rehearsal 1,213 with a 288-line runner. | Refactor in pure, fail-closed steps; preserve report order, exit codes, redaction, and artifact formats. | Stage 6: validators/report builders first, then orchestration. |
 | Medium | API compatibility surface | `src/api/routes.py` is 967 lines with 29 public route functions; it still owns legacy route/error/dependency seams while focused routers own selected families. | Keep the compatibility facade and route contracts. | Extract only a bounded route family after OpenAPI and dependency characterization. |
 | Medium | Security orchestration | `src/security/service.py` is 807 lines; `AuthService` is 523 lines. | Phase A principal extraction is safe; authentication, token, refresh, password, and audit remain together for now. | Phase G only after security characterization. |
@@ -34,7 +34,8 @@ bounded refactor opportunity.
 | `src/reliability/load_harness.py` | 2,248 | `SafetyThresholds` 62 / 0 | `run_profile` 487 | Bounded load safety/telemetry; high; stage 6. |
 | `src/repositories/postgres_operations.py` | 1,913 | `PostgresOperationsRepository` 1,383 / 28 | `_operational_conditions` 153 | Job/lease/outbox/notification transaction owner; high; retain; stage 5. |
 | `src/maintenance_management/service.py` | 1,560 | `MaintenancePlanningService` 1,228 / 34 | `create_work_order` 93 | PM/work-order boundary; high; retain mutation state machine; later. |
-| `src/ticket_management/service.py` | 1,569 | `TicketWorkflowService` 1,370 / 29 | `intake` 98 | Ticket lifecycle/SLA boundary; high; retain; later. |
+| `src/ticket_management/service.py` | 1,272 | `TicketWorkflowService` 1,080 / 29 | `evaluate_escalations` 92 | Ticket compatibility facade; lifecycle delegated; retain SLA snapshot/escalation/legacy/bootstrap. |
+| `src/ticket_management/application/lifecycle_service.py` | 421 | `TicketLifecycleService` 398 / 8 | `hold` 70 | Extracted cohesive lifecycle orchestration; no persistence ownership. |
 | `src/reliability/drills.py` | 1,421 | `DiskAlertCycle` 66 / 1 | `create_atomic_backup_artifact` 118 | Explicit recovery drills; medium; stage 6. |
 | `src/inventory_management/service.py` | 1,141 | `InventoryManagementService` 898 / 35 | `issue_stock` 52 | Inventory application boundary; high; retain stock transaction sequencing; later. |
 | `src/repositories/postgres_maintenance.py` | 1,331 | `PostgresMaintenancePlanningRepository` 793 / 25 | `generate_plan_occurrences` 147 | Plan/generation/work-order transaction owner; high; retain; stage 5. |
@@ -111,3 +112,69 @@ The principal extraction is complete, while auth/token/session/password/audit
 orchestration remains a critical cohesive boundary pending characterization.
 The next recommended phase is security characterization followed by one
 bounded extraction.
+
+## Regenerated current register — 2026-08-08
+
+The following register was regenerated from the current `src/**/*.py` AST after
+the seam and assignment changes. Counts include the recovered worktree and are
+the authoritative replacement for older checkpoint counts.
+
+| File | Lines | Longest class | Longest function | Public methods | Decision / ownership |
+|---|---:|---|---|---:|---|
+| `src/ticket_management/service.py` | 1,272 | `TicketWorkflowService` 1,080 | `evaluate_escalations` 92 | 29 | P0 compatibility facade; lifecycle/intake/assignment extracted, SLA/escalation/legacy retained |
+| `src/ticket_management/application/intake_service.py` | 165 | `TicketIntakeService` 147 | `intake` 147 | 1 | Extracted intake orchestration; no persistence ownership |
+| `src/ticket_management/application/lifecycle_service.py` | 421 | `TicketLifecycleService` 398 | `hold` 70 | 8 | Extracted lifecycle orchestration; mutate_ticket remains repository transaction owner |
+| `src/inventory_management/service.py` | 1,140 | `InventoryManagementService` 898 | `issue_stock` 52 | 35 | P0 facade; retain stock/reservation atomic families |
+| `src/maintenance_management/service.py` | 1,559 | `MaintenancePlanningService` 1,228 | `create_work_order` 93 | 34 | P0 facade; retain plan/work-order state machine |
+| `src/asset_management/service.py` | 865 | `AssetManagementService` 650 | `create_asset` 73 | 21 | P1 lifecycle boundary; retain |
+| `src/repositories/postgres_inventory.py` | 2,746 | `PostgresInventoryRepository` 1,468 | `issue_stock` 218 | 38 | P0 transaction owner; retain complete stock families |
+| `src/repositories/postgres_operations.py` | 1,912 | `PostgresOperationsRepository` 1,383 | `_operational_conditions` 153 | 28 | P0 durable jobs/outbox owner; retain |
+| `src/repositories/postgres_maintenance.py` | 1,330 | `PostgresMaintenancePlanningRepository` 793 | `generate_plan_occurrences` 147 | 25 | P0 PM transaction owner; retain |
+| `src/repositories/postgres_tickets.py` | 1,235 | `PostgresTicketRepository` 753 | `seed_defaults` 142 | 27 | P0 ticket transaction owner; retain |
+| `src/repositories/postgres_assets.py` | 865 | `PostgresAssetRepository` 430 | `_asset_history_events` 65 | 14 | P1 asset/location transaction owner; retain |
+| `src/api/routes.py` | 966 | declarative router facade | `asset_catalog` 32 | 29 | P1 compatibility facade; document/extract later |
+| `src/dashboard/app.py` | 1,186 | none | `render_ticket_workspace` 169 | — | P1 canonical Streamlit client/UI; document dead legacy boundaries |
+| `src/reliability/load_harness.py` | 2,247 | `SafetyThresholds` 62 | `run_profile` 487 | — | P1 reliability god function; later pure telemetry/report extraction |
+| `src/reliability/post_start_validation.py` | 1,202 | `PostStartReport` 22 | `run_post_start_validation` 534 | — | P1 ordered validator; retain until staged extraction |
+| `src/reliability/deployment_rehearsal.py` | 1,188 | `RehearsalReport` 27 | `run_deployment_rehearsal` 288 | — | P1 rehearsal runner; retain until staged extraction |
+| `src/reliability/drills.py` | 1,420 | `DiskAlertCycle` 66 | `create_atomic_backup_artifact` 118 | — | P1 recovery drills; later |
+| `src/reliability/mutation_rehearsal.py` | 1,040 | `MutationAction` 48 | `run_mutation_rehearsal` 143 | — | P1 explicit operator rehearsal; retain |
+| `src/reliability/pilot_contract/environment.py` | 468 | none | `_validate_environment` 437 | — | P1 validator; later pure checks |
+| `src/reliability/pilot_contract/manifest.py` | 777 | none | `_validate_manifest_structure` 317 | — | P1 manifest validator; later |
+| `src/reliability/pilot_contract/release.py` | 501 | none | `_validate_release_record` 338 | — | P1 release validator; later |
+| `src/repositories/postgres/inventory/queries.py` | 631 | `InventoryQueryRepository` 593 | `work_order_parts` 121 | 18 | P2 bounded read owner; retain |
+| `src/repositories/postgres/operations/queries.py` | 422 | `OperationsQueryRepository` 389 | `operational_metrics` 130 | 17 | P2 bounded read owner; retain |
+| `src/repositories/postgres/legacy.py` | 592 | `PostgresMaintenanceRepository` 234 | `create_maintenance_log` 59 | 11 | P2 compatibility repository; retain |
+| `src/api/services/compatibility.py` | 426 | `ProcessedDataService` 390 | `__init__` 52 | 21 | P2 compatibility facade; retain |
+| `src/inventory_management/application/catalogue_mutation_service.py` | 416 | `InventoryCatalogueMutationService` 394 | `change_stock_location_lifecycle` 62 | 8 | Extracted cohesive catalogue boundary; retain |
+
+Declarative model and schema collections over 400 lines remain intentionally
+retained and are not god files solely because of line count. Transaction-heavy
+repositories still own one session, lock order, idempotency, audit/outbox, and
+commit sequence per command.
+
+## Current dependency-cycle inventory
+
+Import-time smoke imports are green. The remaining directed edges are explicit
+compatibility seams only: historical builder modules delegate to composition,
+`src/application/analytics.py` bridges the legacy API query service, and
+`src/rag/compatibility.py` preserves the historical Copilot factory. No domain
+application implementation imports a composition module directly; no RAG
+implementation composes itself; deployment and post-start validation share
+only `environment_loader.py`. The API facade/routers cycle is the intentional
+compatibility router seam.
+
+## Current decisions
+
+Assignment, intake, and lifecycle are the completed ticket application
+extractions in this checkpoint. SLA runtime snapshot/override, escalation,
+legacy compatibility, and bootstrap remain retained pending separate
+characterization.
+No frontend, model metadata, Alembic revision, or PostgreSQL transaction family
+was changed.
+
+Lifecycle extraction validation is green: 8 dedicated unit characterization
+tests, 12 combined focused tests, full backend 421 passed/87
+skipped, and isolated PostgreSQL 87 passed/421 deselected. The only warning is
+the existing FastAPI/Starlette-httpx deprecation. The next bounded backend
+phase is ticket SLA-runtime characterization; escalation remains deferred.

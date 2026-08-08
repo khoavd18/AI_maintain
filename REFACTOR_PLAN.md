@@ -762,3 +762,42 @@ or database metadata changed, and no transaction boundary was intentionally
 changed. The next single recommended backend phase is a separately approved
 extraction of a complete transaction family, only if its repository/session
 contract is first made explicit.
+
+## Continuation checkpoint — 2026-08-08
+
+Recovered seam work is green: UTF-8 plan validation, ORM-free audit context and
+ticket references, explicit PM7 runtime providers, composition ownership,
+Copilot direction, and neutral reliability dotenv parsing. Assignment is the
+first real ticket application extraction and is documented in
+[`docs/ticket-application-characterization.md`](docs/ticket-application-characterization.md).
+Ticket intake is now characterized and extracted; the next exactly bounded
+phase is ticket lifecycle characterization.
+No transaction-heavy repository, API contract, migration, security family, RAG
+pipeline, or frontend file was changed. Isolated PostgreSQL validation passed
+after one direct-constructor compatibility repair.
+
+## Continuation checkpoint - 2026-08-08 lifecycle
+
+Ticket lifecycle/state-transition characterization is complete. The exact
+contracts for acknowledge, start, hold, resume, resolve, close, reopen, and
+cancel are recorded in docs/ticket-application-characterization.md, including
+validation order, RBAC/technician ownership, snapshotted SLA pause/resume and
+occurrence behavior, audit metadata, selected outbox mappings, and the
+PostgresTicketRepository.mutate_ticket transaction owner.
+
+The cohesive application orchestration moved to
+src/ticket_management/application/lifecycle_service.py. The historical
+TicketWorkflowService preserves every public signature and delegates the eight
+named lifecycle methods. change_priority, SLA snapshot/override, escalation,
+comments, legacy adapters, and bootstrap remain intentionally retained. No
+PostgreSQL transaction, session, lock, audit, outbox, API, schema, migration,
+RBAC, or frontend behavior changed. The exactly next bounded backend phase is
+ticket SLA-runtime characterization; escalation remains deferred.
+
+Final lifecycle validation: the dedicated characterization file passed 8
+tests; the focused ticket selection passed 12; full backend
+passed 421 with 87 skipped and one existing FastAPI/Starlette-httpx warning;
+isolated PostgreSQL passed 87 with 421 deselected and the same warning. Ruff,
+compileall, Alembic current/heads/check at 20260726_0008, all three Compose
+config checks, and git diff --check passed. No frontend, API, RBAC, schema,
+migration, transaction/session/lock, or audit/outbox behavior changed.

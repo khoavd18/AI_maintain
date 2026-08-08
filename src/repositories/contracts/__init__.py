@@ -9,7 +9,7 @@ from .assets import AssetRepository
 from .inventory import InventoryRepository
 from .maintenance import MaintenancePlanningRepository, MaintenanceRepository
 from .operations import OperationsRepository
-from src.security.audit import AuditContext
+from src.security.audit_context import AuditContext
 from .shared import (
     DuplicateIdentifierError,
     IntegrityViolationError,
@@ -21,7 +21,7 @@ from .shared import (
     StoredRecord,
     UnsupportedStorageOperationError,
 )
-from .tickets import TicketRepository
+from .tickets import TicketReferenceKind, TicketRepository
 
 __all__ = [
     "AssetRepository",
@@ -39,5 +39,6 @@ __all__ = [
     "StoredPage",
     "StoredRecord",
     "TicketRepository",
+    "TicketReferenceKind",
     "UnsupportedStorageOperationError",
 ]

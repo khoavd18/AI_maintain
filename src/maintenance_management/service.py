@@ -1292,7 +1292,7 @@ class MaintenancePlanningService:
 def build_maintenance_planning_service() -> MaintenancePlanningService:
     """Compatibility builder delegated to the explicit composition root."""
 
-    from src.composition.maintenance import build_maintenance_planning_service as build
+    from src.maintenance_management.compatibility import build_maintenance_planning_service as build
 
     return build()
 

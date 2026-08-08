@@ -41,6 +41,7 @@ from src.repositories.contracts import (
     StaleRecordError,
     StorageUnavailableError,
     StoredRecord,
+    TicketReferenceKind,
 )
 from src.repositories.postgres.tickets.queries import TicketQueryRepository
 from src.operations.outbox import enqueue_outbox_event
@@ -110,8 +111,10 @@ class PostgresTicketRepository:
     def reference_options(self) -> dict[str, list[dict[str, Any]]]:
         return self.queries.reference_options()
 
-    def get_reference(self, model: type[Any], identifier: UUID) -> StoredRecord | None:
-        return self.queries.get_reference(model, identifier)
+    def get_reference(
+        self, kind: TicketReferenceKind, identifier: UUID
+    ) -> StoredRecord | None:
+        return self.queries.get_reference(kind, identifier)
 
     def find_sla_policy(
         self,

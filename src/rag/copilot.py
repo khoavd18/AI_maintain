@@ -233,6 +233,6 @@ def get_copilot_service() -> MaintenanceCopilot:
     Concrete dependencies are assembled by the application composition root.
     """
 
-    from src.application.copilot_factory import get_copilot_service as compose_copilot
+    from src.rag.compatibility import get_copilot_service as compose_copilot
 
     return compose_copilot()

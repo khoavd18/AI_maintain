@@ -24,7 +24,19 @@ from src.database.models import (
     TicketSubcategory,
     User,
 )
-from src.repositories.contracts import StorageUnavailableError, StoredRecord
+from src.repositories.contracts import (
+    StorageUnavailableError,
+    StoredRecord,
+    TicketReferenceKind,
+)
+
+
+_REFERENCE_MODELS = {
+    TicketReferenceKind.CATEGORY: TicketCategory,
+    TicketReferenceKind.SUBCATEGORY: TicketSubcategory,
+    TicketReferenceKind.SUPPORT_GROUP: SupportGroup,
+    TicketReferenceKind.INTAKE_SOURCE: TicketIntakeSource,
+}
 
 
 class TicketQueryRepository:
@@ -203,17 +215,17 @@ class TicketQueryRepository:
                 "Không thể đọc cấu hình ticket intake."
             ) from exc
 
-    def get_reference(self, model: type[Any], identifier: UUID) -> StoredRecord | None:
+    def get_reference(
+        self, kind: TicketReferenceKind, identifier: UUID
+    ) -> StoredRecord | None:
         try:
             with self.session_factory() as session:
-                entity = session.get(model, identifier)
+                entity = session.get(_REFERENCE_MODELS[kind], identifier)
                 if entity is None:
                     return None
                 values = self._reference_record(entity)
                 if isinstance(entity, TicketSubcategory):
                     values["category_id"] = str(entity.category_id)
-                if isinstance(entity, User):
-                    return self._user_record(entity)
                 return StoredRecord(values, version=getattr(entity, "version", None))
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể đọc tham chiếu ticket.") from exc

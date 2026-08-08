@@ -957,7 +957,7 @@ class InventoryManagementService:
 def build_inventory_management_service() -> InventoryManagementService:
     """Compatibility builder delegated to the explicit composition root."""
 
-    from src.composition.inventory import build_inventory_management_service as build
+    from src.inventory_management.compatibility import build_inventory_management_service as build
 
     return build()
 

@@ -34,7 +34,7 @@ class MaintenancePlanFields(BaseModel):
     @model_validator(mode="after")
     def validate_dates(self) -> "MaintenancePlanFields":
         if self.end_date is not None and self.end_date < self.start_date:
-            raise ValueError("end_date khÃ´ng Ä‘Æ°á»£c sá»›m hÆ¡n start_date")
+            raise ValueError("end_date không được sớm hơn start_date")
         return self
 
 

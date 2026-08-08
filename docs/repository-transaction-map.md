@@ -41,8 +41,10 @@ the same injected session factory and owns its own transaction.
 ## Tickets: `PostgresTicketRepository`
 
 Read/query implementation: `src/repositories/postgres/tickets/queries.py`.
-Ticket lifecycle, comments, policy mutations, SLA replacement, and escalation
-remain in the façade because their transaction sequencing is coupled.
+Comments, policy mutations, SLA replacement, and escalation remain in the
+façade because their transaction sequencing is coupled. Lifecycle application
+orchestration is extracted, while its mutation transaction remains in this
+repository façade.
 
 | Methods | Session/transaction owner | Reads, writes, locks, and idempotency | Audit/outbox and tests |
 |---|---|---|---|
@@ -172,3 +174,66 @@ retained-in-`AuthService` decision are recorded in
 Further security decomposition is deferred until a complete
 transaction-family repository/session contract is explicitly approved; this
 map remains the authority for future repository moves.
+
+## 2026-08-08 seam update
+
+No PostgreSQL transaction family moved. Ticket assignment still calls the
+existing `PostgresTicketRepository.mutate_ticket` operation once, preserving
+expected-version validation, lock/flush/commit timing, audit metadata, and
+selected outbox behavior. The repository contract now accepts
+`TicketReferenceKind`; model selection is private to the PostgreSQL query
+adapter. Operations pool metrics are an outer composition concern and are not
+part of repository session ownership.
+
+## Ticket intake extraction — 2026-08-08
+
+Application validation now lives in `TicketIntakeService`: actor permission,
+asset lifecycle, storage-neutral references, optional assignee, priority,
+reporter normalization, policy selection, calendar snapshot, due timestamps,
+and initial SLA events are assembled before the repository call. The sole
+mutation remains `PostgresTicketRepository.create_ticket`, which owns sequence
+allocation, one session/transaction, flush order, SLA rows/events, audit rows,
+critical/assignment outbox events, commit, rollback, and exception mapping.
+No idempotency key was added and no notification/outbox ordering changed.
+
+## Ticket lifecycle application boundary - 2026-08-08
+
+The application orchestration for acknowledge, start, hold, resume, resolve,
+close, reopen, and cancel now lives in
+src/ticket_management/application/lifecycle_service.py. It receives the
+storage-neutral TicketRepository protocol plus authorization, ticket lookup,
+SLA-event, timestamp, normalization, and presentation callbacks. It never
+opens a SQLAlchemy session or catches PostgreSQL exceptions. The historical
+TicketWorkflowService delegates these eight methods and retains
+change_priority, SLA snapshot/override, escalation, comments, legacy adapters,
+and bootstrap.
+
+Every lifecycle command performs application validation first and then calls
+PostgresTicketRepository.mutate_ticket exactly once. That repository method
+remains the sole transaction owner:
+
+- with session_factory() as session, session.begin() owns the session,
+  transaction, commit, rollback, and SQLAlchemy-to-repository exception map;
+- session.get(Ticket, ticket_id, with_for_update=True) locks the ticket before
+  the expected-version check and before reading the before-state;
+- a TicketSlaState for the same ticket is selected with with_for_update()
+  before SLA updates/events are applied;
+- ticket fields are assigned, SLA fields are assigned, and supplied
+  append-only SLA events are inserted before the first flush;
+- the repository rebuilds the after-state, writes the allow-listed audit row,
+  and maps assignment/hold/resume actions to their in-app outbox enqueue;
+- the context exits and commits only after flush/audit/outbox success. Any
+  stale version, constraint, audit, outbox, or flush error rolls back the
+  entire mutation and is translated at this boundary.
+
+The lifecycle service therefore owns no row lock, idempotency claim, audit UUID,
+outbox UUID, notification delivery, commit, or rollback. mutate_ticket has no
+caller-supplied idempotency key; optimistic expected_version is the concurrency
+boundary. Assignment, hold, and resume retain their existing outbox mappings
+(ticket.assigned, ticket.held, ticket.resumed); the eight lifecycle methods
+themselves add no new outbox mapping. PostgreSQL workflow tests cover stale-
+version rejection, valid lock/mutation behavior, and rollback; focused
+lifecycle tests assert that rejected validation never calls the mutation.
+The final isolated PostgreSQL lifecycle run is 87 passed, 421 deselected, with
+the existing FastAPI/Starlette-httpx deprecation warning; the full backend is
+421 passed, 87 skipped.

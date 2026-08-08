@@ -216,3 +216,15 @@ Refactoring should therefore be incremental: remove demonstrated duplication,
 extract cohesive sections only after characterization tests, and keep canonical
 files and public contracts stable. The staged work and verified baseline are in
 [`REFACTOR_PLAN.md`](REFACTOR_PLAN.md).
+
+## Current seam checkpoint — 2026-08-08
+
+Repository contracts use the ORM-free `src.security.audit_context.AuditContext`
+and `TicketReferenceKind`; PostgreSQL selects reference models internally.
+`OperationsService` receives pool metrics and release identity through explicit
+application ports, while SQLAlchemy construction remains in composition.
+Historical builders delegate through bounded compatibility modules. Copilot
+construction remains in `src/composition/copilot.py`, RAG implementation does
+not compose itself, and shared dotenv parsing is owned by
+`src/reliability/environment_loader.py`. Ticket assignment and intake are
+post-seam application extractions; transaction-heavy repository families remain.

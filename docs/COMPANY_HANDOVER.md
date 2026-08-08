@@ -234,3 +234,36 @@ deselected, 1 warning`). Ruff/compileall passed, and Alembic current/heads/
 check remain clean at `20260726_0008` with no new operations.
 The next single bounded backend phase requires a separately approved complete
 transaction-family contract.
+
+## Handover checkpoint — 2026-08-08
+
+Recovered and validated: `AuditContext` storage-neutral boundary,
+`TicketReferenceKind`, explicit PM7 pool/release providers,
+composition-owned builders, RAG/Copilot direction cleanup, neutral reliability
+dotenv parsing, `TicketAssignmentService`, and `TicketIntakeService`.
+Compatibility imports remain available. Intake leaves `create_ticket` as the
+sole atomic repository operation. Full unit and isolated PostgreSQL validation
+are green; the only warning is the existing FastAPI TestClient/httpx
+deprecation. Next safe phase: characterize ticket lifecycle before moving its
+state-transition orchestration.
+
+## Handover checkpoint - 2026-08-08 lifecycle
+
+Ticket lifecycle characterization is complete and the eight named rich actions
+now delegate to src/ticket_management/application/lifecycle_service.py.
+The contract records exact transitions, permission/technician ownership rules,
+validation order, snapshotted SLA pause/resume and reopen occurrence behavior,
+audit metadata, and the selected held/resumed outbox mappings. The
+PostgresTicketRepository.mutate_ticket session, row locks, flush/commit,
+rollback, exception mapping, audit persistence, and outbox enqueue remain the
+transaction owner. The compatibility facade, API routes, schemas, RBAC,
+database metadata, and frontend are unchanged. The exactly next bounded phase
+is separately approved ticket SLA-runtime characterization; escalation remains
+deferred.
+
+Lifecycle validation at handover: 8 dedicated characterization tests passed,
+the focused ticket selection passed 12, full backend passed 421
+with 87 skipped, and isolated PostgreSQL passed 87 with 421 deselected. Ruff,
+compileall, Alembic 20260726_0008 current/heads/check, Compose config, and
+diff checks passed. The only warning is the existing FastAPI/Starlette-httpx
+deprecation.

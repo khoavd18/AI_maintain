@@ -25,7 +25,7 @@ from .analytics_snapshot import (
     AnalyticsSnapshotService,
 )
 from .asset_context import AssetContextQueryService
-from .factories import build_asset_management_service
+from src.composition.assets import build_asset_management_service
 from .legacy_maintenance_adapter import LegacyMaintenanceAdapter
 from .legacy_ticket_adapter import LegacyTicketAdapter
 
