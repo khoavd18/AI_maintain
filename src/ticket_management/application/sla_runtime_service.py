@@ -14,6 +14,7 @@ from src.security.audit_context import AuditContext
 from src.security.permissions import Permission
 from src.security.principal import CurrentUser
 from src.ticket_management.domain import SlaClockStatus, SlaClockType, TicketStatus
+from src.ticket_management.domain import ACTIVE_TICKET_STATUSES
 from src.ticket_management.errors import TicketConflictError, TicketNotFoundError
 from src.ticket_management.sla import (
     BusinessCalendarDefinition,
@@ -92,6 +93,31 @@ class TicketSlaRuntimeService:
             reason=reason,
         )
         return SlaPolicyOverrideResult(record=result, occurred_at=current)
+
+    def summary(
+        self, *, actor: CurrentUser, as_of: datetime | None = None
+    ) -> dict[str, Any]:
+        """Aggregate active SLA clock states from persisted ticket snapshots."""
+
+        self._require_permission(actor, Permission.SLA_POLICIES_READ)
+        current = self._normalize_datetime(as_of or self._utc_now())
+        items = []
+        for record in self._repository.list_tickets(filters={}):
+            ticket = dict(record.values)
+            sla = ticket.get("sla")
+            if sla:
+                ticket["sla"] = self.present(ticket, dict(sla), current)
+            items.append(ticket)
+        active = [item for item in items if TicketStatus(item["status"]) in ACTIVE_TICKET_STATUSES]
+        return {
+            "as_of": current.isoformat(),
+            "active_count": len(active),
+            "waiting_count": sum(item["status"] == "waiting" for item in active),
+            "critical_count": sum(item["priority"] == "critical" for item in active),
+            "due_soon_count": sum(_has_status(item, SlaClockStatus.DUE_SOON) for item in active),
+            "breached_count": sum(_has_status(item, SlaClockStatus.BREACHED) for item in active),
+            "without_sla_count": sum(item.get("sla") is None for item in active),
+        }
 
     @staticmethod
     def snapshot(
@@ -281,3 +307,8 @@ def _parse_datetime(value: object) -> datetime | None:
 
         raise TicketDomainError("Timestamp phải có timezone.")
     return parsed.astimezone(timezone.utc).replace(microsecond=0)
+
+
+def _has_status(ticket: dict[str, Any], status: SlaClockStatus) -> bool:
+    sla = ticket.get("sla") or {}
+    return any((sla.get(clock) or {}).get("status") == status.value for clock in ("first_response", "resolution"))

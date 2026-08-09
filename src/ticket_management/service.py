@@ -24,6 +24,7 @@ from src.ticket_management.application.query_service import TicketQueryService
 from src.ticket_management.application.assignment_service import TicketAssignmentService
 from src.ticket_management.application.intake_service import TicketIntakeService
 from src.ticket_management.application.lifecycle_service import TicketLifecycleService
+from src.ticket_management.application.mutation_service import TicketMutationService
 from src.ticket_management.application.sla_runtime_service import TicketSlaRuntimeService
 from src.ticket_management.application.sla_service import TicketSlaAdministrationService
 from src.ticket_management.errors import (
@@ -33,7 +34,6 @@ from src.ticket_management.errors import (
     TicketNotFoundError,
 )
 from src.ticket_management.domain import (
-    ACTIVE_TICKET_STATUSES,
     IMPACT_LABELS,
     LEGACY_STATUS_LABELS,
     PRIORITY_LABELS,
@@ -45,7 +45,6 @@ from src.ticket_management.domain import (
     TicketQueue,
     TicketStatus,
     Urgency,
-    calculate_priority,
     legacy_priority_dimensions,
 )
 from src.ticket_management.sla import BusinessCalendarDefinition, WorkingPeriod
@@ -85,6 +84,13 @@ class TicketWorkflowService:
             require_permission=self._require_permission,
             normalize_datetime=_aware_utc,
             utc_now=_utc_now,
+        )
+        self.mutations = TicketMutationService(
+            repository,
+            require_permission=self._require_permission,
+            ticket_record=self._ticket_record,
+            normalize_text=_plain_text,
+            present=self._present,
         )
         self._lifecycle_service = TicketLifecycleService(
             repository,
@@ -362,26 +368,10 @@ class TicketWorkflowService:
         actor: CurrentUser,
         audit_context: AuditContext,
     ) -> dict[str, Any]:
-        self._require_permission(actor, Permission.TICKETS_UPDATE)
-        self._ticket_record(ticket_id)
-        selected_impact = Impact(impact)
-        selected_urgency = Urgency(urgency)
-        priority = calculate_priority(selected_impact, selected_urgency)
-        result = self.repository.mutate_ticket(
-            ticket_id,
-            expected_version=expected_version,
-            ticket_updates={
-                "impact": selected_impact.value,
-                "urgency": selected_urgency.value,
-                "priority": priority.value,
-            },
-            sla_updates=None,
-            sla_events=[],
-            audit_action="ticket.priority_changed",
-            audit_context=audit_context,
-            audit_metadata={"reason": _plain_text(reason, "reason", 1000)},
+        return self.mutations.change_priority(
+            ticket_id, impact=impact, urgency=urgency, reason=reason,
+            expected_version=expected_version, actor=actor, audit_context=audit_context,
         )
-        return self._present(result.values, actor=actor)
 
     def override_sla_policy(
         self,
@@ -485,26 +475,7 @@ class TicketWorkflowService:
         )
 
     def sla_summary(self, *, actor: CurrentUser, as_of: datetime | None = None) -> dict[str, Any]:
-        self._require_permission(actor, Permission.SLA_POLICIES_READ)
-        current = _aware_utc(as_of or _utc_now())
-        items = [
-            self._present(record.values, actor=actor, as_of=current)
-            for record in self.repository.list_tickets(filters={})
-        ]
-        active = [item for item in items if TicketStatus(item["status"]) in ACTIVE_TICKET_STATUSES]
-        return {
-            "as_of": current.isoformat(),
-            "active_count": len(active),
-            "waiting_count": sum(item["status"] == "waiting" for item in active),
-            "critical_count": sum(item["priority"] == "critical" for item in active),
-            "due_soon_count": sum(
-                _has_sla_status(item, SlaClockStatus.DUE_SOON) for item in active
-            ),
-            "breached_count": sum(
-                _has_sla_status(item, SlaClockStatus.BREACHED) for item in active
-            ),
-            "without_sla_count": sum(item.get("sla") is None for item in active),
-        }
+        return self.sla_runtime.summary(actor=actor, as_of=as_of)
 
     def evaluate_escalations(
         self,
