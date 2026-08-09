@@ -1,32 +1,41 @@
-"""Create the structured database schema for the AI Maintenance Copilot."""
+"""Upgrade or explicitly reset the canonical PostgreSQL schema with Alembic."""
 
 import argparse
 
-from sqlalchemy import Engine
-
-from src.database import models  # noqa: F401
-from src.database.session import Base, build_engine
+from src.database.migrations import downgrade_database, upgrade_database
 
 
-def init_database(database_url: str | None = None, drop_existing: bool = False) -> None:
-    """Create database tables, optionally dropping existing tables first."""
+def init_database(
+    database_url: str | None = None,
+    drop_existing: bool = False,
+) -> None:
+    """Apply migrations; `drop_existing` remains an explicit test-tool compatibility flag."""
 
-    engine: Engine = build_engine(database_url)
     if drop_existing:
-        Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+        downgrade_database(database_url=database_url, revision="base")
+    upgrade_database(database_url=database_url, revision="head")
 
 
 def main() -> None:
-    """Run schema creation from the command line."""
+    """Run canonical migrations from the command line."""
 
-    parser = argparse.ArgumentParser(description="Initialize maintenance copilot database schema.")
-    parser.add_argument("--database-url", default=None, help="Override DATABASE_URL from the environment.")
-    parser.add_argument("--drop-existing", action="store_true", help="Drop existing tables before creation.")
+    parser = argparse.ArgumentParser(
+        description="Apply Alembic migrations for maintenance transactional storage."
+    )
+    parser.add_argument(
+        "--database-url",
+        default=None,
+        help="Override DATABASE_URL from the environment.",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Explicitly downgrade to base before upgrading; deletes transactional data.",
+    )
     args = parser.parse_args()
 
-    init_database(database_url=args.database_url, drop_existing=args.drop_existing)
-    print("Database schema is ready.")
+    init_database(database_url=args.database_url, drop_existing=args.reset)
+    print("Database migrations are at head.")
 
 
 if __name__ == "__main__":

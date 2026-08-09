@@ -14,18 +14,25 @@ DEFAULT_RISK_OUTPUT_PATH = Path("data/processed/risk_scores.csv")
 
 RISK_OUTPUT_COLUMNS = [
     "asset_id",
+    "feature_date",
     "date",
     "asset_name",
     "asset_type",
     "location",
     "anomaly_score",
     "maintenance_overdue_score",
+    "unresolved_ticket_score",
     "recent_ticket_score",
+    "recurring_issue_score",
     "criticality_score",
+    "follow_up_score",
     "runtime_score",
     "final_risk_score",
+    "risk_score",
+    "risk_level_code",
     "risk_level",
     "main_reasons",
+    "contributing_factors",
     "recommended_action",
 ]
 
@@ -38,6 +45,9 @@ REQUIRED_FEATURE_COLUMNS = {
     "days_overdue",
     "ticket_count_30d",
     "high_priority_ticket_count_30d",
+    "unresolved_ticket_count",
+    "recurring_issue_count",
+    "follow_up_required_count",
     "criticality_score",
     "runtime_delta_percent",
 }
@@ -141,6 +151,41 @@ def calculate_runtime_score(runtime_delta_percent: object) -> float:
     return 100.0
 
 
+def calculate_unresolved_ticket_score(unresolved_ticket_count: object) -> float:
+    """Convert point-in-time unresolved ticket count into a 0-100 score."""
+
+    count = _safe_float(unresolved_ticket_count)
+    if count <= 0:
+        return 0.0
+    if count == 1:
+        return 50.0
+    if count == 2:
+        return 75.0
+    return 100.0
+
+
+def calculate_recurring_issue_score(recurring_issue_count: object) -> float:
+    """Score the number of failure categories meeting the recurrence threshold."""
+
+    count = _safe_float(recurring_issue_count)
+    if count <= 0:
+        return 0.0
+    if count == 1:
+        return 70.0
+    return 100.0
+
+
+def calculate_follow_up_score(follow_up_required_count: object) -> float:
+    """Score maintenance records that still require follow-up."""
+
+    count = _safe_float(follow_up_required_count)
+    if count <= 0:
+        return 0.0
+    if count == 1:
+        return 70.0
+    return 100.0
+
+
 def normalize_criticality_score(criticality_score: object) -> float:
     """Normalize feature-engineered criticality score from 1-4 into 25-100."""
 
@@ -154,15 +199,21 @@ def calculate_final_risk_score(
     recent_ticket_score: object,
     criticality_score: object,
     runtime_score: object,
+    unresolved_ticket_score: object = 0,
+    recurring_issue_score: object = 0,
+    follow_up_score: object = 0,
 ) -> float:
     """Calculate the final weighted 0-100 maintenance risk score."""
 
     final_score = (
-        0.35 * _safe_float(anomaly_score)
-        + 0.20 * _safe_float(maintenance_overdue_score)
-        + 0.20 * _safe_float(recent_ticket_score)
-        + 0.15 * _safe_float(criticality_score)
-        + 0.10 * _safe_float(runtime_score)
+        0.20 * _safe_float(anomaly_score)
+        + 0.25 * _safe_float(maintenance_overdue_score)
+        + 0.20 * _safe_float(unresolved_ticket_score)
+        + 0.10 * _safe_float(recent_ticket_score)
+        + 0.075 * _safe_float(recurring_issue_score)
+        + 0.10 * _safe_float(criticality_score)
+        + 0.05 * _safe_float(follow_up_score)
+        + 0.025 * _safe_float(runtime_score)
     )
     return round(float(np.clip(final_score, 0, 100)), 2)
 
@@ -170,14 +221,20 @@ def calculate_final_risk_score(
 def assign_risk_level(final_risk_score: object) -> str:
     """Map a final risk score to a Vietnamese risk level."""
 
+    return RISK_LEVEL_CODE_TO_VI[assign_risk_level_code(final_risk_score)]
+
+
+def assign_risk_level_code(final_risk_score: object) -> str:
+    """Map a final risk score to the stable low/medium/high/critical code."""
+
     score = _safe_float(final_risk_score)
     if score <= 30:
-        return RISK_LEVEL_CODE_TO_VI["low"]
+        return "low"
     if score <= 60:
-        return RISK_LEVEL_CODE_TO_VI["medium"]
+        return "medium"
     if score <= 80:
-        return RISK_LEVEL_CODE_TO_VI["high"]
-    return RISK_LEVEL_CODE_TO_VI["critical"]
+        return "high"
+    return "critical"
 
 
 def generate_main_reasons(row: pd.Series) -> str:
@@ -185,23 +242,35 @@ def generate_main_reasons(row: pd.Series) -> str:
 
     candidates = [
         (
-            row["anomaly_score"] * 0.35,
+            row["anomaly_score"] * 0.20,
             _anomaly_reason(row),
         ),
         (
-            row["maintenance_overdue_score"] * 0.20,
+            row["maintenance_overdue_score"] * 0.25,
             _maintenance_reason(row),
         ),
         (
-            row["recent_ticket_score"] * 0.20,
+            row["unresolved_ticket_score"] * 0.20,
+            _unresolved_ticket_reason(row),
+        ),
+        (
+            row["recent_ticket_score"] * 0.10,
             _ticket_reason(row),
         ),
         (
-            row["criticality_score"] * 0.15,
+            row["recurring_issue_score"] * 0.075,
+            _recurring_issue_reason(row),
+        ),
+        (
+            row["criticality_score"] * 0.10,
             _criticality_reason(row),
         ),
         (
-            row["runtime_score"] * 0.10,
+            row["follow_up_score"] * 0.05,
+            _follow_up_reason(row),
+        ),
+        (
+            row["runtime_score"] * 0.025,
             _runtime_reason(row),
         ),
     ]
@@ -234,6 +303,13 @@ def build_risk_scores(features: pd.DataFrame, anomalies: pd.DataFrame) -> pd.Dat
 
     feature_frame = features.copy()
     anomaly_frame = anomalies.copy()
+    for column in [
+        "unresolved_ticket_count",
+        "recurring_issue_count",
+        "follow_up_required_count",
+    ]:
+        if column not in feature_frame.columns:
+            feature_frame[column] = 0
     feature_frame["date"] = pd.to_datetime(feature_frame["feature_date"], errors="raise").dt.date.astype(str)
     anomaly_frame["date"] = pd.to_datetime(anomaly_frame["date"], errors="raise").dt.date.astype(str)
 
@@ -246,6 +322,9 @@ def build_risk_scores(features: pd.DataFrame, anomalies: pd.DataFrame) -> pd.Dat
     risk_frame["maintenance_overdue_score"] = risk_frame["days_overdue"].map(
         calculate_maintenance_overdue_score
     )
+    risk_frame["unresolved_ticket_score"] = risk_frame[
+        "unresolved_ticket_count"
+    ].map(calculate_unresolved_ticket_score)
     risk_frame["recent_ticket_score"] = risk_frame.apply(
         lambda row: calculate_recent_ticket_score(
             row["ticket_count_30d"], row["high_priority_ticket_count_30d"]
@@ -253,6 +332,12 @@ def build_risk_scores(features: pd.DataFrame, anomalies: pd.DataFrame) -> pd.Dat
         axis=1,
     )
     risk_frame["criticality_score"] = risk_frame["criticality_score"].map(normalize_criticality_score)
+    risk_frame["recurring_issue_score"] = risk_frame["recurring_issue_count"].map(
+        calculate_recurring_issue_score
+    )
+    risk_frame["follow_up_score"] = risk_frame["follow_up_required_count"].map(
+        calculate_follow_up_score
+    )
     risk_frame["runtime_score"] = risk_frame["runtime_delta_percent"].map(calculate_runtime_score)
     risk_frame["final_risk_score"] = risk_frame.apply(
         lambda row: calculate_final_risk_score(
@@ -261,13 +346,25 @@ def build_risk_scores(features: pd.DataFrame, anomalies: pd.DataFrame) -> pd.Dat
             row["recent_ticket_score"],
             row["criticality_score"],
             row["runtime_score"],
+            row["unresolved_ticket_score"],
+            row["recurring_issue_score"],
+            row["follow_up_score"],
         ),
         axis=1,
     )
-    risk_frame["risk_level"] = risk_frame["final_risk_score"].map(assign_risk_level)
+    risk_frame["feature_date"] = risk_frame["date"]
+    risk_frame["risk_score"] = risk_frame["final_risk_score"]
+    risk_frame["risk_level_code"] = risk_frame["final_risk_score"].map(
+        assign_risk_level_code
+    )
+    risk_frame["risk_level"] = risk_frame["risk_level_code"].map(
+        RISK_LEVEL_CODE_TO_VI
+    )
     risk_frame["main_reasons"] = risk_frame.apply(generate_main_reasons, axis=1)
+    risk_frame["contributing_factors"] = risk_frame["main_reasons"]
     risk_frame["recommended_action"] = risk_frame.apply(generate_recommended_action, axis=1)
 
+    _validate_unique_asset_dates(risk_frame)
     output = risk_frame[RISK_OUTPUT_COLUMNS].copy()
     output = output.replace([np.inf, -np.inf], np.nan)
     if output.isna().any().any():
@@ -332,6 +429,27 @@ def _ticket_reason(row: pd.Series) -> str:
     return f"Có {ticket_count} ticket trong 30 ngày gần nhất."
 
 
+def _unresolved_ticket_reason(row: pd.Series) -> str:
+    if row["unresolved_ticket_score"] <= 0:
+        return ""
+    count = int(max(0, round(_safe_float(row["unresolved_ticket_count"]))))
+    return f"Có {count} ticket chưa được xử lý tại ngày đánh giá."
+
+
+def _recurring_issue_reason(row: pd.Series) -> str:
+    if row["recurring_issue_score"] <= 0:
+        return ""
+    count = int(max(0, round(_safe_float(row["recurring_issue_count"]))))
+    return f"Có {count} nhóm sự cố lặp lại đạt ngưỡng theo dõi."
+
+
+def _follow_up_reason(row: pd.Series) -> str:
+    if row["follow_up_score"] <= 0:
+        return ""
+    count = int(max(0, round(_safe_float(row["follow_up_required_count"]))))
+    return f"Có {count} kết quả bảo trì yêu cầu theo dõi thêm."
+
+
 def _criticality_reason(row: pd.Series) -> str:
     if row["criticality_score"] < 75:
         return ""
@@ -356,6 +474,16 @@ def _safe_float(value: object) -> float:
     if not np.isfinite(number):
         return 0.0
     return number
+
+
+def _validate_unique_asset_dates(results: pd.DataFrame) -> None:
+    duplicate = results.duplicated(["asset_id", "date"], keep=False)
+    if duplicate.any():
+        row = results.loc[duplicate].iloc[0]
+        raise ValueError(
+            "Risk input contains duplicate asset/date row: "
+            f"asset_id={row['asset_id']} date={row['date']}"
+        )
 
 
 def main() -> None:

@@ -6,17 +6,25 @@ import re
 from dataclasses import asdict, dataclass
 from hashlib import blake2b
 from typing import Iterable
+import unicodedata
 
 from src.rag.document_loader import MaintenanceDocument
 
 SECTION_MARKERS = [
+    "Phạm vi:",
+    "An toàn:",
     "Triệu chứng:",
     "Nguyên nhân có thể:",
     "Các bước kiểm tra:",
+    "Quy trình xử lý:",
     "Hành động khuyến nghị:",
-    "Khi nào cần escalated:",
-    "Khi nào cần escalation:",
+    "Bảo trì định kỳ:",
+    "Cảnh báo:",
+    "Điều kiện vận hành:",
+    "Tài liệu tham khảo:",
+    "Khi nào cần hỗ trợ chuyên môn:",
     "Khi nào cần chuyển cấp:",
+    "Giới hạn:",
 ]
 
 
@@ -31,17 +39,30 @@ class DocumentChunk:
     asset_type: str
     source: str
     text: str
+    failure_category: str = ""
+    version: str = "1.0"
+    effective_date: str = ""
+    language: str = "vi"
+    chunk_index: int = 0
 
-    def to_payload(self) -> dict[str, str]:
+    def to_payload(self) -> dict[str, str | int]:
         """Return a Qdrant payload for this chunk."""
 
-        return asdict(self)
+        payload: dict[str, str | int] = asdict(self)
+        payload.update(
+            {
+                "document_id": self.doc_id,
+                "document_type": self.doc_type,
+                "content": self.text,
+            }
+        )
+        return payload
 
 
 def chunk_documents(
     documents: Iterable[MaintenanceDocument],
     max_chars: int = 800,
-    overlap: int = 120,
+    overlap: int = 80,
 ) -> list[DocumentChunk]:
     """Chunk all documents while preserving metadata."""
 
@@ -54,18 +75,27 @@ def chunk_documents(
 def chunk_document(
     document: MaintenanceDocument,
     max_chars: int = 800,
-    overlap: int = 120,
+    overlap: int = 80,
 ) -> list[DocumentChunk]:
     """Chunk one document using Vietnamese section markers with fallback splitting."""
 
-    sections = _split_by_section_markers(document.clean_text)
+    if overlap >= max_chars:
+        raise ValueError("overlap must be smaller than max_chars.")
+    sections = _split_by_section_markers(document.content)
     text_chunks: list[str] = []
     for section in sections:
-        text_chunks.extend(_split_long_text(section, max_chars=max_chars, overlap=overlap))
+        text_chunks.extend(_split_section(section, max_chars=max_chars, overlap=overlap))
 
     chunks: list[DocumentChunk] = []
+    digest_occurrences: dict[str, int] = {}
     for index, text in enumerate(text_chunks, start=1):
-        chunk_id = _stable_chunk_id(document.doc_id, index, text)
+        digest = _content_digest(text)
+        digest_occurrences[digest] = digest_occurrences.get(digest, 0) + 1
+        chunk_id = _stable_chunk_id(
+            document.doc_id,
+            text,
+            occurrence=digest_occurrences[digest],
+        )
         chunks.append(
             DocumentChunk(
                 chunk_id=chunk_id,
@@ -75,13 +105,18 @@ def chunk_document(
                 asset_type=document.asset_type,
                 source=document.source,
                 text=text,
+                failure_category=document.failure_category,
+                version=document.version,
+                effective_date=document.effective_date,
+                language=document.language,
+                chunk_index=index,
             )
         )
     return chunks
 
 
 def _split_by_section_markers(text: str) -> list[str]:
-    normalized = " ".join(text.split())
+    normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip())
     if not normalized:
         return []
 
@@ -104,12 +139,18 @@ def _split_by_section_markers(text: str) -> list[str]:
 
 
 def _split_long_text(text: str, max_chars: int, overlap: int) -> list[str]:
+    if max_chars <= 0:
+        raise ValueError("max_chars must be greater than zero.")
+    if overlap < 0:
+        raise ValueError("overlap must not be negative.")
     if len(text) <= max_chars:
         return [text]
 
     chunks: list[str] = []
     start = 0
-    safe_overlap = min(overlap, max_chars // 3)
+    if overlap >= max_chars:
+        raise ValueError("overlap must be smaller than max_chars.")
+    safe_overlap = overlap
     while start < len(text):
         end = min(start + max_chars, len(text))
         if end < len(text):
@@ -127,13 +168,38 @@ def _split_long_text(text: str, max_chars: int, overlap: int) -> list[str]:
 
 def _find_boundary(text: str, start: int, end: int) -> int:
     minimum = start + ((end - start) // 2)
-    for separator in [". ", "; ", ", ", " "]:
+    for separator in ["\n", ". ", "; ", ", ", " "]:
         boundary = text.rfind(separator, minimum, end)
         if boundary != -1:
             return boundary + len(separator)
     return end
 
 
-def _stable_chunk_id(doc_id: str, index: int, text: str) -> str:
-    digest = blake2b(text.encode("utf-8"), digest_size=4).hexdigest()
-    return f"{doc_id}-chunk-{index:03d}-{digest}"
+def _split_section(text: str, *, max_chars: int, overlap: int) -> list[str]:
+    """Split one section while repeating its heading on every continuation chunk."""
+
+    if len(text) <= max_chars:
+        return [text]
+    marker_pattern = "|".join(re.escape(marker) for marker in SECTION_MARKERS)
+    heading_match = re.match(marker_pattern, text, flags=re.IGNORECASE)
+    if not heading_match:
+        return _split_long_text(text, max_chars=max_chars, overlap=overlap)
+    heading = heading_match.group(0)
+    body = text[heading_match.end() :].strip()
+    body_budget = max_chars - len(heading) - 1
+    if body_budget < 100:
+        return _split_long_text(text, max_chars=max_chars, overlap=overlap)
+    body_overlap = min(overlap, max(0, body_budget - 1))
+    return [f"{heading}\n{part}" for part in _split_long_text(body, body_budget, body_overlap)]
+
+
+def _content_digest(text: str) -> str:
+    normalized = unicodedata.normalize("NFC", " ".join(text.split()))
+    return blake2b(normalized.encode("utf-8"), digest_size=12).hexdigest()
+
+
+def _stable_chunk_id(doc_id: str, text: str, *, occurrence: int = 1) -> str:
+    """Return a stable content-derived ID independent of unrelated section ordering."""
+
+    suffix = f"-{occurrence}" if occurrence > 1 else ""
+    return f"{doc_id}-chunk-{_content_digest(text)}{suffix}"

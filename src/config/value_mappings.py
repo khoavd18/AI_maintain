@@ -18,6 +18,89 @@ ASSET_TYPE_CODE_TO_VI = {
 }
 ASSET_TYPE_VI_TO_CODE = {value: key for key, value in ASSET_TYPE_CODE_TO_VI.items()}
 
+ASSET_CATEGORY_CODE_TO_VI = {
+    "climate_control": "Điều hòa không khí",
+    "water_system": "Hệ thống cấp thoát nước",
+    "power_system": "Hệ thống điện dự phòng",
+    "other": "Khác",
+}
+ASSET_CATEGORY_VI_TO_CODE = {
+    value: key for key, value in ASSET_CATEGORY_CODE_TO_VI.items()
+}
+ASSET_TYPE_TO_CATEGORY_CODE = {
+    "hvac": "climate_control",
+    "pump": "water_system",
+    "generator": "power_system",
+}
+
+LIFECYCLE_STATUS_CODE_TO_VI = {
+    "planned": "Dự kiến",
+    "active": "Đang sử dụng",
+    "inactive": "Tạm ngưng",
+    "retired": "Đã ngừng khai thác",
+    "archived": "Đã lưu trữ",
+}
+LIFECYCLE_STATUS_VI_TO_CODE = {
+    value: key for key, value in LIFECYCLE_STATUS_CODE_TO_VI.items()
+}
+
+# ``warning`` is retained as a canonical operational observation so migrated
+# synthetic records do not lose their existing business meaning.
+OPERATIONAL_STATUS_CODE_TO_VI = {
+    "running": "Đang vận hành",
+    "warning": "Cảnh báo",
+    "fault": "Sự cố",
+    "under_maintenance": "Đang bảo trì",
+    "out_of_service": "Ngừng hoạt động",
+}
+OPERATIONAL_STATUS_VI_TO_CODE = {
+    value: key for key, value in OPERATIONAL_STATUS_CODE_TO_VI.items()
+}
+LEGACY_ASSET_STATUS_TO_OPERATIONAL = {
+    "normal": "running",
+    "warning": "warning",
+    "fault": "fault",
+}
+OPERATIONAL_TO_LEGACY_STATUS_CODE = {
+    "running": "normal",
+    "warning": "warning",
+    "fault": "fault",
+    "under_maintenance": "warning",
+    "out_of_service": "warning",
+}
+
+OWNERSHIP_TYPE_CODE_TO_VI = {
+    "owned": "Sở hữu",
+    "leased": "Thuê",
+    "managed": "Được giao quản lý",
+}
+OWNERSHIP_TYPE_VI_TO_CODE = {
+    value: key for key, value in OWNERSHIP_TYPE_CODE_TO_VI.items()
+}
+
+LOCATION_TYPE_CODE_TO_VI = {
+    "building": "Tòa nhà",
+    "floor": "Tầng",
+    "room": "Phòng",
+    "area": "Khu vực",
+    "plant": "Khu kỹ thuật",
+}
+LOCATION_TYPE_VI_TO_CODE = {
+    value: key for key, value in LOCATION_TYPE_CODE_TO_VI.items()
+}
+
+ATTACHMENT_CATEGORY_CODE_TO_VI = {
+    "asset_photo": "Ảnh thiết bị",
+    "technical_manual": "Tài liệu kỹ thuật",
+    "warranty_document": "Tài liệu bảo hành",
+    "commissioning_record": "Biên bản nghiệm thu",
+    "inspection_document": "Tài liệu kiểm tra",
+    "other": "Khác",
+}
+ATTACHMENT_CATEGORY_VI_TO_CODE = {
+    value: key for key, value in ATTACHMENT_CATEGORY_CODE_TO_VI.items()
+}
+
 PRIORITY_CODE_TO_VI = {
     "low": "Thấp",
     "medium": "Trung bình",
@@ -65,6 +148,25 @@ MAINTENANCE_TYPE_CODE_TO_VI = {
 }
 MAINTENANCE_TYPE_VI_TO_CODE = {
     value: key for key, value in MAINTENANCE_TYPE_CODE_TO_VI.items()
+}
+
+MAINTENANCE_RESULT_CODE_TO_VI = {
+    "resolved": "Đã xử lý",
+    "partially_resolved": "Đã xử lý một phần",
+    "monitoring_required": "Cần theo dõi",
+    "vendor_required": "Cần hỗ trợ chuyên môn",
+}
+MAINTENANCE_RESULT_VI_TO_CODE = {
+    value: key for key, value in MAINTENANCE_RESULT_CODE_TO_VI.items()
+}
+
+MAINTENANCE_STATUS_CODE_TO_VI = {
+    "not_due": "Chưa đến hạn",
+    "due_soon": "Sắp đến hạn",
+    "overdue": "Quá hạn",
+}
+MAINTENANCE_STATUS_VI_TO_CODE = {
+    value: key for key, value in MAINTENANCE_STATUS_CODE_TO_VI.items()
 }
 
 DOCUMENT_TYPE_CODE_TO_VI = {

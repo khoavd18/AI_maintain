@@ -1,0 +1,325 @@
+{
+  "schema_version": "1.0",
+  "record_kind": "internal_pilot_release_record",
+  "record_status": "design_complete_external_verification_blocked",
+  "implementation_status": "COMPLETE",
+  "readiness_classification": {
+    "pilot_ready_by_design": true,
+    "pilot_verified_in_practice": false,
+    "production_readiness_claim": false
+  },
+  "decision_gates": {
+    "engineering_readiness": {
+      "status": "PASS",
+      "basis": "Architecture, deployment contracts, validation tooling, recovery procedures, operational templates, tests, and release procedures are present and locally verified within the recorded scope."
+    },
+    "local_rehearsal": {
+      "status": "PARTIAL",
+      "executed_evidence": [
+        "deterministic backend and frontend regression suites",
+        "static deployment and contract validation",
+        "isolated PostgreSQL tests and connection-termination drills",
+        "synthetic disk, secret-rotation, backup-publication, and attachment archive drills"
+      ],
+      "not_executed": [
+        "live PM9 Compose deployment on this workstation",
+        "live authenticated deployed-stack smoke",
+        "900-second soak",
+        "mutation-bearing load",
+        "capacity-to-degradation load",
+        "live worker-process kill",
+        "paired PostgreSQL and attachment restore"
+      ]
+    },
+    "real_company_pilot": {
+      "status": "BLOCKED_EXTERNAL_DEPENDENCY",
+      "display_status": "BLOCKED — EXTERNAL DEPENDENCY",
+      "missing_dependencies": [
+        "sponsoring organization",
+        "approved pilot or pilot-equivalent host",
+        "company operational and business owners",
+        "incident communication path and support coverage",
+        "pilot-grade secrets",
+        "representative company data",
+        "real pilot users",
+        "organizational limitation acceptance",
+        "authorization for intended-host load and recovery drills"
+      ]
+    }
+  },
+  "overall_external_pilot_decision": "NO-GO / WAITING FOR PILOT SPONSOR",
+  "external_dependency_statement": "No sponsoring organization, approved pilot host, operational team, business owner, real pilot users, or company data currently exists. These are external dependencies, not missing application features.",
+  "generated_at_utc": null,
+  "release": {
+    "release_name": "product-milestone-9",
+    "git_commit": "PENDING_PM9_CHECKPOINT",
+    "git_tag_recommendation": "product-milestone-9-pilot-ready-by-design",
+    "migration_revision": "20260726_0008",
+    "deployment_manifest_sha256": "06bdd63dc28313ca32e5edd862fe019d421460e832dd3c6ccfda7d2d8583e9dc"
+  },
+  "application_versions": {
+    "application": "0.1.0",
+    "frontend": "0.1.0",
+    "python": "3.11.9",
+    "node": "22.20.0",
+    "postgresql": "16",
+    "qdrant": "1.10.1",
+    "nextjs": "^16.2.12"
+  },
+  "database_version": "16",
+  "enabled_jobs": [],
+  "configured_alert_thresholds": {
+    "outbox_oldest_age_seconds": 300,
+    "repeated_job_failure_count": 3,
+    "analytics_stale_seconds": 172800,
+    "backup_overdue_seconds": 604800,
+    "worker_heartbeat_stale_seconds": 60,
+    "disk_warning_free_percent": 20,
+    "disk_critical_free_percent": 10,
+    "delivery": "in_app_only"
+  },
+  "backup_validation": {
+    "status": "local_dump_publication_and_failure_boundary_only",
+    "validated_at_utc": null,
+    "evidence_links": [
+      "docs/pilot_backup_schedule.md",
+      "docs/releases/product_milestone_9.md"
+    ]
+  },
+  "restore_validation": {
+    "status": "prior_milestone_evidence_only",
+    "validated_at_utc": null,
+    "evidence_links": [
+      "docs/releases/product_milestone_8.md",
+      "docs/backup_restore.md"
+    ]
+  },
+  "load_and_soak_profiles": {
+    "status": "required_pm9_profiles_unverified",
+    "summaries": [
+      {
+        "profile": "pm8_workstation_read_only_envelope",
+        "concurrent_authenticated_users": 8,
+        "target_requests_per_second": 12,
+        "duration_seconds": 45,
+        "unexpected_errors": 0,
+        "scope": "workstation_read_heavy_only",
+        "capacity_or_sla_claim": false
+      }
+    ],
+    "evidence_links": [
+      "docs/releases/product_milestone_8.md",
+      "docs/reliability_validation.md",
+      "docs/load_test_plan.md"
+    ]
+  },
+  "attachment_restore": {
+    "status": "local_api_archive_boundary_only",
+    "validated_at_utc": null,
+    "evidence_links": [
+      "docs/pilot_attachment_recovery.md",
+      "docs/releases/product_milestone_9.md"
+    ]
+  },
+  "secret_rotation": {
+    "status": "synthetic_tests_only",
+    "validated_at_utc": null,
+    "evidence_links": [
+      "docs/security.md",
+      "docs/pilot_secret_rotation.md",
+      "docs/releases/product_milestone_9.md"
+    ]
+  },
+  "open_risks": [
+    {
+      "id": "intended_host_not_rehearsed",
+      "severity": "critical",
+      "category": "recovery",
+      "description": "Chưa có deployment và recovery rehearsal trên intended pilot host.",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
+      "status": "open"
+    },
+    {
+      "id": "operational_ownership_unassigned",
+      "severity": "critical",
+      "category": "safety",
+      "description": "Operational owners, incident path và support coverage chưa được xác nhận.",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
+      "status": "open"
+    },
+    {
+      "id": "pilot_secrets_unverified",
+      "severity": "critical",
+      "category": "authorization",
+      "description": "Pilot-grade secrets và real rotation rehearsal chưa có bằng chứng.",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
+      "status": "open"
+    },
+    {
+      "id": "pm9_load_profiles_unverified",
+      "severity": "critical",
+      "category": "recovery",
+      "description": "Soak, mutation-bearing và capacity-to-degradation profiles chưa được thực hiện.",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
+      "status": "open"
+    },
+    {
+      "id": "representative_attachment_restore_unverified",
+      "severity": "critical",
+      "category": "data_loss",
+      "description": "Backup/restore attachment không rỗng chưa được xác thực.",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
+      "status": "open"
+    },
+    {
+      "id": "release_rollback_rehearsal_unverified",
+      "severity": "critical",
+      "category": "recovery",
+      "description": "Release và rollback rehearsal trên intended environment chưa được xác thực.",
+      "owner_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "dependency_type": "external",
+      "status": "open"
+    }
+  ],
+  "ownership_status": {
+    "operational_owner": "blocked_external_dependency",
+    "backup_owner": "blocked_external_dependency",
+    "release_owner": "blocked_external_dependency",
+    "rollback_owner": "blocked_external_dependency",
+    "incident_coordinator": "blocked_external_dependency",
+    "security_contact": "blocked_external_dependency",
+    "database_recovery_contact": "blocked_external_dependency",
+    "application_support_contact": "blocked_external_dependency",
+    "pilot_business_owner": "blocked_external_dependency"
+  },
+  "technical_stewardship_status": "acknowledged_for_project_engineering_only",
+  "incident_contact_status": "blocked_external_dependency",
+  "known_limitations_acceptance_status": "documented_not_organizationally_accepted",
+  "rollback": {
+    "target_release_id": "product-milestone-8",
+    "target_git_tag": "product-milestone-8",
+    "target_git_commit": "ad4779e4e21322789e1e7b9d98b485127f1fa95f",
+    "target_alembic_revision": "20260726_0008",
+    "mode": "application_then_validated_restore_if_data_or_schema_is_incompatible",
+    "ready": false,
+    "rehearsal_status": "unverified"
+  },
+  "gates": [
+    {
+      "id": "authentication_rbac",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "backup_failure_detection",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": [
+        "docs/pilot_backup_schedule.md",
+        "docs/releases/product_milestone_9.md"
+      ]
+    },
+    {
+      "id": "backup_restore",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "capacity_degradation_boundary",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "disk_warning_recovery",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": [
+        "docs/failure_recovery.md",
+        "docs/releases/product_milestone_9.md"
+      ]
+    },
+    {
+      "id": "incident_response_path",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "intended_host_deployment_rehearsal",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "mutation_workload",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "operational_ownership",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "pilot_secret_rotation",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "release_rollback_rehearsal",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "representative_attachment_restore",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": [
+        "docs/pilot_attachment_recovery.md",
+        "docs/releases/product_milestone_9.md"
+      ]
+    },
+    {
+      "id": "sustained_soak",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": []
+    },
+    {
+      "id": "worker_termination_recovery",
+      "critical": true,
+      "status": "unverified",
+      "evidence_links": [
+        "docs/failure_recovery.md",
+        "docs/releases/product_milestone_9.md"
+      ]
+    }
+  ],
+  "conditions": [],
+  "final_decision": "NO-GO / WAITING FOR PILOT SPONSOR",
+  "evidence_links": [
+    "deployment/pilot_manifest.json",
+    "deployment/operational_ownership.json",
+    "deployment/known_limitations.json",
+    "docs/releases/product_milestone_9.md",
+    "docs/pilot_deployment.md",
+    "docs/pilot_load_results.md",
+    "docs/pilot_attachment_recovery.md",
+    "docs/testing.md",
+    "docs/releases/product_milestone_8.md",
+    "docs/reliability_validation.md"
+  ],
+  "production_readiness_claim": false
+}

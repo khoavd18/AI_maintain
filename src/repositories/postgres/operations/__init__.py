@@ -1,0 +1,1 @@
+"""Operations PostgreSQL repository capabilities."""

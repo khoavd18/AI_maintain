@@ -26,7 +26,6 @@ NUMERIC_FEATURE_COLUMNS = [
     "temperature",
     "vibration",
     "runtime_hours",
-    "pressure",
     "energy_delta_percent",
     "vibration_delta",
     "runtime_delta_percent",
@@ -58,6 +57,7 @@ REQUIRED_FEATURE_COLUMNS = {
 
 ANOMALY_OUTPUT_COLUMNS = [
     "asset_id",
+    "feature_date",
     "date",
     "asset_type",
     "location",
@@ -74,8 +74,17 @@ ANOMALY_OUTPUT_COLUMNS = [
     "anomaly_score",
     "is_anomaly",
     "anomaly_type",
+    "anomalous_metrics",
+    "contributing_signals",
     "anomaly_reasons",
 ]
+
+ANOMALY_METRIC_BY_SIGNAL = {
+    "energy_spike": "energy_kwh",
+    "vibration_increase": "vibration",
+    "runtime_abnormal": "runtime_hours",
+    "temperature_high": "temperature",
+}
 
 
 def load_feature_data(input_path: Path = DEFAULT_FEATURE_INPUT_PATH) -> pd.DataFrame:
@@ -108,16 +117,21 @@ def detect_rule_based_anomalies(features: pd.DataFrame) -> pd.DataFrame:
     rule_scores: list[float] = []
     anomaly_types: list[str] = []
     rule_reasons: list[list[str]] = []
+    anomalous_metrics: list[list[str]] = []
 
     for row in results.itertuples(index=False):
         signals = _rule_signals(row)
         rule_scores.append(max((score for _, score, _ in signals), default=0.0))
         anomaly_types.append(_primary_anomaly_type(signals))
         rule_reasons.append([reason for _, _, reason in signals])
+        anomalous_metrics.append(
+            [ANOMALY_METRIC_BY_SIGNAL[signal_code] for signal_code, _, _ in signals]
+        )
 
     results["rule_based_score"] = rule_scores
     results["rule_anomaly_type"] = anomaly_types
     results["rule_reasons"] = rule_reasons
+    results["rule_anomalous_metrics"] = anomalous_metrics
     return results
 
 
@@ -166,6 +180,8 @@ def combine_anomaly_scores(features: pd.DataFrame) -> pd.DataFrame:
         ANOMALY_TYPE_CODE_TO_VI["none"],
     )
     results["anomaly_reasons"] = generate_anomaly_reasons(results)
+    results["contributing_signals"] = results["anomaly_reasons"]
+    results["anomalous_metrics"] = results.apply(_format_anomalous_metrics, axis=1)
     return results
 
 
@@ -194,7 +210,12 @@ def build_anomaly_results(
     rule_results = detect_rule_based_anomalies(features)
     isolation_results = detect_isolation_forest_anomalies(rule_results, contamination=contamination)
     combined = combine_anomaly_scores(isolation_results)
-    output = combined.rename(columns={"feature_date": "date"})
+    output = combined.copy()
+    output["feature_date"] = pd.to_datetime(
+        output["feature_date"], errors="raise"
+    ).dt.date.astype(str)
+    output["date"] = output["feature_date"]
+    _validate_unique_asset_dates(output)
     output = output[ANOMALY_OUTPUT_COLUMNS].copy()
     output["is_anomaly"] = output["is_anomaly"].astype(bool)
     output = output.replace([np.inf, -np.inf], np.nan)
@@ -203,6 +224,23 @@ def build_anomaly_results(
         output[numeric_columns] = output[numeric_columns].fillna(0.0)
         output = output.fillna("")
     return output
+
+
+def _format_anomalous_metrics(row: pd.Series) -> str:
+    metrics = list(row.get("rule_anomalous_metrics", []) or [])
+    if row.get("isolation_forest_is_anomaly", False) and not metrics:
+        metrics.append("multivariate_profile")
+    return ", ".join(metrics) if metrics else "none"
+
+
+def _validate_unique_asset_dates(results: pd.DataFrame) -> None:
+    duplicate = results.duplicated(["asset_id", "feature_date"], keep=False)
+    if duplicate.any():
+        row = results.loc[duplicate].iloc[0]
+        raise ValueError(
+            "Anomaly input contains duplicate asset/date row: "
+            f"asset_id={row['asset_id']} feature_date={row['feature_date']}"
+        )
 
 
 def save_anomaly_results(

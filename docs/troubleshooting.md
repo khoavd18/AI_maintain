@@ -1,171 +1,609 @@
-# Troubleshooting
+# Xử Lý Sự Cố
 
-## Qdrant Not Running
+## PostgreSQL Không Chạy
 
-Symptoms:
+Triệu chứng:
 
-- `make index-documents` fails with a Qdrant connection error.
-- `/copilot/ask` returns a service unavailable error mentioning Qdrant.
+- Uvicorn fail startup với thông báo primary storage unavailable;
+- API không tự chuyển sang CSV;
+- frontend/Streamlit không kết nối được API.
 
-Fix:
+Kiểm tra:
 
-```bash
-make services-up
+```powershell
+docker compose up -d postgres
+docker compose ps
+docker compose logs postgres
 ```
 
-Check Qdrant:
+Container phải ở trạng thái `healthy`. Kiểm tra `.env`:
 
-```bash
-curl http://localhost:6333
+```dotenv
+STORAGE_BACKEND=postgresql
+DATABASE_URL=postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot
 ```
 
-## sentence-transformers Not Installed
+Không đặt `STORAGE_BACKEND=csv` để che lỗi PostgreSQL trong normal product mode. CSV mode chỉ dành cho explicit fixtures/tests.
 
-Symptoms:
+## Database Chưa Chạy Migration
 
-- `make index-documents` fails with a message saying `sentence-transformers is not installed`.
-- `make rag-query` or `/copilot/ask` cannot create the embedding provider.
+Triệu chứng: startup báo schema chưa initialized hoặc thiếu `alembic_version`.
 
-Fix:
-
-```bash
-python -m pip install -e ".[dev,rag]"
+```powershell
+python -m alembic current
+python -m alembic upgrade head
+python -m alembic check
 ```
 
-The default model is `intfloat/multilingual-e5-small`. The first run may download model files.
+API không tự tạo table. Mọi schema change phải qua Alembic.
 
-## Documents Not Indexed
+## Legacy Experimental Database Xung Đột Migration
 
-Symptoms:
+Một Docker volume từ phase cũ có thể chứa unversioned tables `assets`, `sensor_readings`, `risk_scores`, v.v. Khi chạy initial canonical migration, Alembic báo `relation "assets" already exists`.
 
-- The copilot answers that no SOP/checklist chunks were retrieved.
-- Qdrant is running, but sources are empty.
+Không stamp schema cũ thành head vì columns và constraints không khớp. Chọn một trong hai cách có chủ đích:
 
-Fix:
+1. Tạo database mới, cập nhật `DATABASE_URL`, rồi chạy migration và import.
+2. Backup dữ liệu cần giữ, sau đó drop/recreate database cũ ngoài ứng dụng.
 
-```bash
-make index-documents
+Ví dụ tạo database mới trong local Docker:
+
+```powershell
+docker exec maintenance_postgres psql -U maintenance -d postgres -c "CREATE DATABASE maintenance_copilot_product"
+$env:DATABASE_URL = "postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot_product"
+python -m alembic upgrade head
+python -m src.ingestion.load_data --dry-run
+python -m src.ingestion.load_data
 ```
 
-Then ask again:
+Old optional PostgreSQL schema không phải transactional source of truth trước milestone này; canonical CSV seed là nguồn reset được kiểm tra.
 
-```bash
-make rag-query QUESTION="Vì sao GENERATOR_002 đang rủi ro cao?" ASSET_ID=GENERATOR_002
+## CSV Import Bị Từ Chối
+
+`python -m src.ingestion.load_data` từ chối database có bất kỳ transactional row nào. Đây là protection, không phải lỗi importer.
+
+Kiểm tra trước:
+
+```powershell
+python -m src.ingestion.load_data --dry-run
 ```
 
-## API Not Reachable From Dashboard
+Chỉ khi chủ động reset demo về canonical 27/42/86:
 
-Symptoms:
-
-- Streamlit shows `Could not connect to FastAPI`.
-- Dashboard pages do not load data.
-
-Fix:
-
-Start the API in one terminal:
-
-```bash
-make run-api
+```powershell
+python -m src.ingestion.load_data --replace
 ```
 
-Start the dashboard in another terminal:
+`--replace` xóa PM4-PM7 development/runtime records theo dependency order,
+disable fixed job catalog và import lại canonical `27/42/86` trong cùng database
+transaction. Nó không xóa processed analytics, Qdrant collection hoặc private
+attachment bytes.
 
-```bash
-make run-dashboard
+## Import Vi Phạm Constraint
+
+Triệu chứng: importer báo uniqueness, foreign-key hoặc check-constraint violation và rollback.
+
+Chạy validation độc lập:
+
+```powershell
+python -m src.ingestion.validation --input-dir data/raw
 ```
 
-If the API is on another host or port, set `API_BASE_URL`:
+Không sửa riêng ID trong một file. Regenerate canonical seed nếu dữ liệu synthetic bị thay đổi ngoài contract:
 
-```bash
-API_BASE_URL=http://localhost:8000 make run-dashboard
+```powershell
+python -m src.data_generation.generate_data
+python -m src.ingestion.validation
 ```
 
-Windows PowerShell:
+Sau đó dry-run/import lại. Failed import không để partial rows.
+
+## Analytics Chưa Phản Ánh Ticket Hoặc Log Mới
+
+Đây là expected behavior. PostgreSQL write không tự chạy Risk Score/KPI.
+
+1. Export validated snapshot:
+
+```powershell
+python -m src.database.export_snapshot --replace
+```
+
+2. Chạy canonical batch từ snapshot:
+
+```powershell
+python -m src.features.build_features --input-dir data/analytics_input
+python -m src.models.anomaly_detection
+python -m src.risk.risk_scoring
+python -m src.features.build_features --input-dir data/analytics_input --analysis maintenance
+```
+
+3. Refresh dashboard/frontend.
+
+Không đổi Risk Score trên UI để giả lập batch refresh.
+
+## Analytics Snapshot Export Bị Từ Chối
+
+Nếu `data/analytics_input` đã tồn tại, dùng `--replace` có chủ đích. Export cần hai pass-through files trong `data/raw`:
+
+- `sensor_readings.csv`;
+- `documents.csv`.
+
+Nếu thiếu, chạy generator. Snapshot chỉ được publish sau khi full CSV validator pass.
+
+Nếu snapshot báo `expected ... from maintenance interval`, bảo đảm đang chạy exporter canonical thay vì tự dump table. PostgreSQL có thể giữ plan-derived next date; `src.database.export_snapshot` project ngày đó về fixed-interval contract trong staging rồi mới validation, không sửa transactional rows.
+
+## Processed Analytics CSV Bị Thiếu Hoặc Stale
+
+Triệu chứng:
+
+- `/summary`, risk hoặc maintenance report trả `503`;
+- health có `analytics_available=false`;
+- transactional asset/ticket/log storage vẫn có thể healthy.
+
+Chạy lại snapshot và batch theo phần trên. Latest dates của features, anomaly, risk, preventive và KPI phải đồng nhất.
+
+## Stale Update Trả 409
+
+PostgreSQL dùng optimistic version cho assets, rich tickets, plans, work orders, business calendars, SLA policies, spare parts, stock locations, requirements và reservations. Hai write đồng thời có thể làm request sau nhận `409`.
+
+- reload ticket hoặc asset detail;
+- kiểm tra trạng thái mới nhất;
+- gửi lại quyết định có chủ đích.
+
+Không retry blind một write có side effect.
+
+## Asset Lifecycle Hoặc Operational Status Trả 409
+
+Kiểm tra hai state riêng:
+
+- `planned -> active|inactive`;
+- `active -> inactive|retired`;
+- `inactive -> active|retired`;
+- `retired -> inactive` để review trước khi active lại;
+- archive/restore phải dùng endpoint riêng và `expected_version` mới nhất;
+- inactive/retired/archived giữ `out_of_service`; retired/archived không nhận ticket mới.
+
+Reload rich profile trước khi thao tác. Không sửa trực tiếp legacy `status` để né lifecycle rule.
+
+## Không Archive Được Location
+
+- Location cha còn child đang active: archive/reassign child trước.
+- Assigned assets không bị xóa và không chặn archive leaf; asset vẫn giữ location reference/history.
+- Location archived không nhận asset mới. Chọn active location khác rồi update profile bằng current version.
+- Cycle hoặc self-parent trả `409`; sửa parent chain thay vì can thiệp SQL trực tiếp.
+
+## Attachment Upload Hoặc Download Lỗi
+
+Backend chỉ chấp nhận PDF/PNG/JPG/JPEG khi extension, MIME và signature khớp, file không rỗng và không vượt `ATTACHMENT_MAX_SIZE_BYTES`. Tên chứa `/`, `\`, NUL hoặc traversal bị từ chối.
+
+```dotenv
+ATTACHMENT_STORAGE_BACKEND=local
+ATTACHMENT_STORAGE_ROOT=data/attachments
+ATTACHMENT_MAX_SIZE_BYTES=10485760
+```
+
+- Root phải writable bởi API process và không được public web server serve trực tiếp.
+- Download `403`: user thiếu `attachments:read`; UI visibility không thay FastAPI permission.
+- Download `503` checksum mismatch/missing bytes: giữ metadata/audit, phục hồi file từ backup hoặc upload lại qua workflow; không sửa checksum trong database để che lỗi.
+- Delete response có `storage_cleanup_pending=true`: metadata đã soft-delete nhưng physical cleanup lỗi; local pilot cần operator xử lý file/reconcile thủ công.
+- API không có inline preview cho file và không bao giờ trả storage key/local path.
+
+Local storage chỉ phù hợp một API node. Chưa có S3 implementation, malware scanner hoặc attachment backup automation.
+
+## QR Lookup Không Mở Được Asset
+
+- `401`: QR route vẫn yêu cầu login; QR không phải auth token.
+- `403`: user thiếu `assets:read`.
+- `404`: token không hợp lệ hoặc không còn khớp asset.
+- `410`: asset đã archived; Property Manager phải xác minh rồi restore explicit nếu phù hợp.
+- URL sai host: đặt `FRONTEND_BASE_URL=http://localhost:3000`, restart API và tải lại QR preview. Token/SVG vẫn deterministic cho cùng asset ID.
+
+QR payload chỉ nên có `/scan/assets/{opaque UUID}`. Nếu thấy credential, user data hoặc database URL, dừng sử dụng label và coi đó là contract/security defect.
+
+## Ticket Không Resolve Được
+
+Rich PM5 sequence tối thiểu là:
+
+```text
+open/assigned -> in_progress -> tạo maintenance log -> resolved -> closed
+```
+
+Ticket phải có linked log trước khi resolve. Dùng named endpoint `/tickets/{id}/resolve`, không gửi status tùy ý. `resolved_at` phải có timezone, không trước `created_at`, không trước maintenance date và không nằm trong tương lai.
+
+Legacy `/tickets` vẫn hiển thị `Mới tạo -> Đang xử lý -> Đã xử lý`; đây là compatibility projection, không phải toàn bộ PM5 lifecycle.
+
+## SLA Deadline Hoặc Status Không Như Mong Đợi
+
+Kiểm tra:
+
+- ticket giữ snapshot policy/calendar tại intake; sửa policy sau đó không đổi ticket cũ;
+- timestamp API là UTC nhưng working periods/holidays tính trong IANA timezone của snapshot;
+- ticket tạo ngoài giờ bắt đầu cộng tại working period tiếp theo;
+- `waiting` chỉ pause khi policy có `pause_on_waiting=true`;
+- resume tính deadline mới từ business minutes còn lại;
+- reopen tăng `occurrence_number` và khởi động resolution clock mới.
+
+Không sửa deadline, `breached` hoặc `due_soon` trực tiếp trong database/client. Nếu calendar/policy update trả `409`, tải version mới nhất rồi review trước khi gửi lại.
+
+## Escalation Có Event Nhưng Chưa Có Notification
+
+PM5 action ghi append-only escalation event. PM7 còn cần outbox event được worker
+claim thành công:
+
+```powershell
+python -m src.ticket_management.cli evaluate-escalations --dry-run
+python -m src.ticket_management.cli evaluate-escalations
+```
+
+Dry-run không write. Execute chạy lại không tạo duplicate cùng
+ticket/rule/occurrence; rule code đã phân biệt first-response và resolution.
+Kiểm tra worker heartbeat, `/operations/outbox` và recipient active state.
+Notification chỉ là in-app; không có email/SMS/push.
+
+Nếu execute trả `403`, actor thiếu `escalations:execute`. Nếu không có candidate, kiểm tra `as_of`, ticket active status, priority, reopen count và derived SLA state.
+
+## Worker Missing Hoặc Stale
+
+Triệu chứng: `/health/worker` trả `503`, `/health/ready` báo `degraded`, hoặc
+notification/outbox không tiến triển.
+
+```powershell
+python -m alembic current
+python -m src.operations.worker --once --worker-id diagnostic-worker
+python -m src.operations.cli status
+```
+
+Kiểm tra PostgreSQL, revision `20260726_0007`, active run-as user và worker logs.
+Nếu chạy Docker:
+
+```powershell
+docker compose --profile worker ps
+docker compose --profile worker logs worker
+```
+
+Worker recover expired leases ở iteration kế tiếp. Không update lease/status bằng
+SQL và không chạy một scheduler implementation khác để bù.
+
+## Job Không Chạy
+
+- Job mới được seed disabled; Administrator phải enable với latest
+  `expected_version`.
+- Enable snapshots Administrator thành run-as user; account đó phải còn active.
+- Scheduled job disabled trước claim sẽ bị `cancelled`.
+- `forbid_overlap` tạo `skipped` occurrence khi cùng job còn active.
+- Manual trigger cần caller-stable `Idempotency-Key`; API chỉ tạo execution,
+  worker mới thực thi.
+- `retry_scheduled` chỉ claim sau `available_after`.
+
+Xem `/admin/jobs` hoặc:
+
+```powershell
+python -m src.operations.cli status
+```
+
+## Job Dead-Lettered
+
+Đọc safe error code, correlation ID và structured worker log. Khắc phục database,
+source/output path, active run-as actor hoặc domain validation trước khi retry.
+
+```powershell
+python -m src.operations.cli retry <EXECUTION_UUID> `
+  --idempotency-key "retry-<EXECUTION_UUID>-01" `
+  --actor-username admin.demo
+```
+
+Retry tạo execution mới, không sửa execution cũ. Outbox dead-letter không có
+generic redrive API trong PM7; giữ lịch sử, điều tra nguyên nhân và theo
+[operations runbook](operations_runbook.md).
+
+## Notification Không Hiển Thị
+
+- User chỉ đọc notification của chính mình; cross-user ID trả `404`.
+- Recipient phải active và khớp event role/assignment tại thời điểm delivery.
+- Dismissed item không nằm trong default quick list.
+- Worker retry không tạo duplicate nhờ per-recipient deduplication key.
+- Low-stock chỉ alert một lần trong active cycle; phải recover rồi thấp lại mới
+  có cycle mới.
+- Related link vẫn chịu destination permission; notification không cấp quyền.
+
+## Analytics Refresh Failure
+
+Job dùng staging và atomic publication. Failure phải giữ output hợp lệ gần nhất.
+Kiểm tra:
+
+```dotenv
+ANALYTICS_SOURCE_DIR=data/raw
+ANALYTICS_PROCESSED_DIR=data/processed
+```
+
+Target không được là repository/filesystem root hoặc trùng source. Tests phải
+dùng temporary target; không chạy PM7 analytics test vào canonical
+`data/processed`. Terminal failure sau exhausted attempts tạo critical in-app
+notification cho Administrator/Property Manager.
+
+## Reporter PII Hoặc Comment Bị Ẩn
+
+- Reporter contact chỉ hiện với `ticket_pii:read`.
+- Technician/Chief Engineer không có PII read theo default matrix.
+- Storekeeper chỉ thấy requester-visible comments; internal notes bị lọc.
+- Requester-visible comment cần `ticket_comments:requester`.
+
+Không nới response schema hoặc đưa contact vào audit để sửa UI. Kiểm tra `/auth/me`, [RBAC matrix](rbac.md) và ticket ownership.
+
+## Maintenance Log Bị Từ Chối
+
+Kiểm tra:
+
+- ticket đang `Đang xử lý`;
+- `asset_id` khớp ticket;
+- maintenance date không trước ticket hoặc latest asset maintenance;
+- next date bằng maintenance date cộng asset interval;
+- `follow_up_required=false` chỉ với `Đã xử lý`;
+- corrective log dùng technician đang được gán.
+
+Composite foreign key cũng chặn ticket/log relationship sai ở database level.
+
+## Test Database
+
+Integration tests chỉ chạy với database name kết thúc bằng `_test`.
+
+```powershell
+python -m src.database.create_test_database
+$env:TEST_DATABASE_URL = "postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot_test"
+python -m pytest -m postgres
+```
+
+Fixture migrate và truncate test database. Không trỏ `TEST_DATABASE_URL` vào demo/developer database.
+
+## API Không Khởi Động Vì Security Configuration
+
+Ngoài `development`/`test`, API từ chối signing secret dưới 32 ký tự và cookie không có `Secure=true`:
+
+```dotenv
+APP_ENVIRONMENT=pilot
+TOKEN_SIGNING_SECRET=<inject-random-secret-outside-git>
+AUTH_COOKIE_SECURE=true
+AUTH_COOKIE_SAMESITE=lax
+```
+
+Pilot phải chạy HTTPS. Không ghi secret thật vào `.env.example`, command history, log hoặc source control. `SameSite=None` chỉ hợp lệ cùng `Secure=true`.
+
+## Không Đăng Nhập Được
+
+- Unknown user, wrong password và inactive account đều cố ý trả generic `Thông tin đăng nhập không hợp lệ.`; kiểm tra user bằng administrator UI/CLI thay vì dựa vào response để enumerate account.
+- Username/email được trim + lowercase trước lookup.
+- Basic limiter chặn tạm sau số lần thất bại cấu hình; chờ hết `LOGIN_RATE_LIMIT_WINDOW_SECONDS`. Limiter local hiện chỉ theo một API process.
+- Không có default account. Tạo admin explicit:
+
+```powershell
+python -m src.security.cli create-admin --username admin.local --display-name "Quản trị viên local"
+```
+
+Demo roles chỉ seed khi `APP_ENVIRONMENT=development` bằng `python -m src.security.cli seed-demo-users`. Cả hai command prompt password nếu temporary environment variable không được cung cấp và không in password.
+
+## Refresh Hoặc Logout Trả 401/403
+
+- Browser phải gửi cookies với `credentials: include` và frontend origin phải nằm chính xác trong `CORS_ALLOWED_ORIGINS`.
+- Refresh/logout cần `X-CSRF-Token` khớp readable CSRF cookie; `NEXT_PUBLIC_CSRF_COOKIE_NAME` phải khớp `CSRF_COOKIE_NAME`.
+- Refresh token bị rotate sau mỗi lần dùng. Reuse token cũ, logout, password change, role change hoặc account deactivation sẽ làm session không còn hợp lệ.
+- Access token chỉ ở frontend memory nên reload cần refresh session; không sửa bằng cách ghi token vào `localStorage`.
+- Xóa cookies local cũ rồi login lại khi đổi cookie name/path giữa các lần chạy.
+
+## Trả 403 Dù UI Có Hoặc Không Có Button
+
+FastAPI là authorization boundary. Kiểm tra permission từ `GET /auth/me` và role matrix trong [architecture](architecture.md). Technician còn bị giới hạn theo `technician_id`; helpdesk không được assign/resolve/ghi maintenance log. Không thêm bypass route để sửa lỗi UI.
+
+## Audit Log Không Sửa Hoặc Xóa Được
+
+Đây là behavior có chủ đích. Application chỉ có paginated read endpoint, còn PostgreSQL trigger từ chối `UPDATE`/`DELETE`. Successful workflow event phải commit cùng business mutation. Database administrator vẫn là trust boundary; backup/retention hoặc external tamper-evident archive chưa được triển khai.
+
+## Dashboard Không Kết Nối Được API
+
+Khởi động PostgreSQL/migration trước, rồi API:
+
+```powershell
+python -m uvicorn src.api.main:app --reload --port 8000
+```
+
+Streamlit chỉ kiểm tra public `/health`; protected workflows đã bị vô hiệu hóa:
 
 ```powershell
 $env:API_BASE_URL = "http://localhost:8000"
-make run-dashboard
+python -m streamlit run src/dashboard/app.py
 ```
 
-## Processed CSV Files Missing
+Next.js `frontend/.env.local`:
 
-Symptoms:
-
-- `/summary` returns a processed data file error.
-- Risk or anomaly dashboard tables are empty because files are missing.
-
-Fix:
-
-Regenerate the pipeline:
-
-```bash
-make generate-data
-make build-features
-make detect-anomalies
-make score-risk
+```dotenv
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_CSRF_COOKIE_NAME=maintenance_csrf
 ```
 
-Expected outputs:
+Nếu write timeout hoặc mất kết nối, kiểm tra list trước khi gửi lại vì response có thể bị mất sau khi transaction đã commit.
 
-- `data/processed/asset_daily_features.csv`
-- `data/processed/anomaly_results.csv`
-- `data/processed/risk_scores.csv`
+## Maintenance Plan Hoặc Work Order Table Chưa Có
 
-## Database Load Fails
+Triệu chứng: API startup báo migration cũ, hoặc `/maintenance-plans`/`/work-orders` trả lỗi storage.
 
-Symptoms:
-
-- `make load-data` cannot connect to PostgreSQL.
-- Database connection errors mention localhost port `5432`.
-
-Fix:
-
-```bash
-make services-up
-make init-db
-make load-data
+```powershell
+python -m alembic current
+python -m alembic upgrade head
+python -m alembic check
 ```
 
-For quick tests without PostgreSQL, the database scripts also support SQLite URLs:
+Canonical head hiện tại là `20260726_0007`. API không tự `create_all`; không sửa table thủ công. Với database test, tên phải kết thúc `_test`.
 
-```bash
-python -m src.database.init_db --database-url sqlite:///maintenance_demo.db --drop-existing
-python -m src.ingestion.load_data --database-url sqlite:///maintenance_demo.db --replace
+## Không Có Preventive Plan Sau Canonical Import
+
+Canonical CSV import cố ý chỉ giữ `27` assets, `42` tickets và `86` historical logs. Plan/template/work order là development seed riêng:
+
+```powershell
+python -m src.security.cli seed-demo-users
+python -m src.maintenance_management.cli seed-development
 ```
 
-## Regenerate Data And Rerun Full Pipeline
+Lệnh maintenance seed dùng existing `engineer.demo` và `technician.demo`; nó không tạo account hoặc password. `APP_ENVIRONMENT` phải là `development`/`test`.
 
-Use this when the raw or processed files are stale:
+## Generation Không Tạo Work Order
 
-```bash
-make services-up
-make generate-data
-make init-db
-make load-data
-make build-features
-make detect-anomalies
-make score-risk
-make index-documents
+Chạy dry-run trước:
+
+```powershell
+python -m src.maintenance_management.cli generate --dry-run --as-of 2026-07-20
 ```
 
-Then run the app:
+Đọc `reason` theo từng plan. Plan bị skip khi paused/archived/expired, `next_due_date` chưa đến release window, asset retired/archived, hoặc occurrence đã tồn tại. Catch-up bị giới hạn 366 ngày. Resume plan bỏ backlog trong thời gian pause theo policy.
 
-```bash
-make run-api
-make run-dashboard
+Rerun real generation cho cùng as-of trả zero/skipped là behavior đúng. Unique `(preventive_plan_id, due_date)` ngăn duplicate dưới retry/concurrency.
+
+## Plan Trả 422 Hoặc 409
+
+- `interval_value` phải 1–366; unit chỉ `day/week/month/year`.
+- `local_timezone` phải là IANA zone như `Asia/Ho_Chi_Minh`; không dùng offset tùy ý.
+- `end_date` không trước `start_date`; raw RRULE không được hỗ trợ.
+- Retired/archived asset không nhận active plan mới.
+- Assignee phải là active technician; template phải active và tương thích asset type.
+- `409` sau edit thường là optimistic stale version: reload detail rồi review thay đổi trước khi gửi lại.
+
+## Work Order Không Chuyển Trạng Thái
+
+Canonical flow: `planned -> assigned -> in_progress -> completed -> verified`; `on_hold` chỉ quay lại assigned/in-progress, cancellation/reopen dùng endpoint riêng.
+
+- Chưa assign eligible technician thì không start.
+- Technician chỉ execute assigned work order của chính họ.
+- Required checklist chưa đủ hoặc safety-critical item `fail` thì completion bị chặn.
+- Cancelled/verified work order không complete; verified record chỉ đọc.
+- Technician complete không được tự verify. Đăng nhập Chief Engineer/Property Manager khác actor để review và verify.
+- Stale `expected_version` trả `409`; không retry mù vì có thể ghi đè quyết định mới.
+
+Completion tạo đúng một MaintenanceLog. Gửi lại request cũ không được tạo log thứ hai. Reopen trước verification giữ linked append-only log; current internal-pilot chưa có full amendment/countersign workflow.
+
+## Ticket Không Tự Resolve Sau Work Order
+
+Đây là behavior chủ đích. Tạo, complete hoặc verify corrective work order không đổi ticket. Authorized actor phải mở ticket, review maintenance evidence và gọi existing resolve action explicit. Ticket vẫn yêu cầu linked maintenance log theo rule hiện có.
+
+## Work-Order Evidence Bị Từ Chối
+
+Chỉ nhận PDF/PNG/JPG/JPEG có extension, claimed MIME và signature khớp, dưới configured size. Filename traversal, executable hoặc body rỗng trả `422`. Download yêu cầu permission/resource scope và kiểm tra SHA-256; mismatch trả `503`. Evidence của verified WO không thêm/xóa được. Bytes nằm trong private attachment root, không serve trực tiếp.
+
+## Inventory Trống Sau Canonical Import
+
+Canonical `27/42/86` import cố ý không tạo inventory. Sau khi seed demo users và PM4 work orders, chạy:
+
+```powershell
+python -m src.inventory_management.cli seed-development
 ```
 
-## Ruff Or Pytest Failures
+Expected current seed: 6 categories, 3 UOM, 5 stock locations, 8 parts và 8 opening positions; eligible work orders nhận selected requirements/reservations. Lệnh yêu cầu PostgreSQL mode, development/test environment, `storekeeper.demo` và `engineer.demo`. Chạy lại không tạo duplicate movement.
 
-Run:
+## Available Không Bằng On-Hand
 
-```bash
-make lint
-make test
+Đây thường là reservation active:
+
+```text
+available = on_hand - reserved
 ```
 
-If failures reference missing optional RAG dependencies, install:
+Mở `/inventory/reservations` hoặc work-order parts panel để xem allocation. Không sửa `inventory_positions` trực tiếp. Release, expire hoặc replace reservation bằng named action và current `expected_version`.
 
-```bash
-python -m pip install -e ".[dev,rag]"
+## Receipt/Transfer/Issue Trả 409
+
+Kiểm tra:
+
+- `Idempotency-Key` đã được dùng với payload khác;
+- part/location vừa inactive hoặc archived;
+- requirement/reservation version stale;
+- work order không ở execution state được phép;
+- transfer source/destination giống nhau;
+- available không đủ sau một transaction concurrent.
+
+Nếu request timeout và chưa rõ đã commit hay chưa, **giữ nguyên key + payload** khi retry. Không tạo key mới cho cùng business intent trước khi kiểm tra movement list.
+
+## Negative Stock Hoặc Oversubscription Bị Từ Chối
+
+Behavior này có chủ đích. Backend lock position và từ chối:
+
+- reserve lớn hơn available;
+- issue lớn hơn available cộng valid reserved allocation;
+- transfer/adjustment làm on-hand âm hoặc thấp hơn reserved;
+- return lớn hơn outstanding issue;
+- consumption lớn hơn outstanding issued quantity.
+
+Request rollback toàn bộ, transfer không để một nửa movement. Reload balance/reservation trước khi quyết định quantity mới.
+
+## Issue, Consumption Và Return Không Khớp
+
+- Issue là physical stock movement và giảm on-hand.
+- Consumption xác nhận quantity đã dùng; không trừ stock lần hai.
+- Return tăng on-hand cho phần outstanding chưa consume/return.
+- Work-order completion không tự quyết toán issued stock.
+
+Nếu completion hiện warning, review shortage và outstanding issue trong work-order parts panel. Warning không phải automatic block trong current policy.
+
+## Inventory Evidence Bị Từ Chối
+
+Inventory evidence hỗ trợ PDF/PNG/JPG/JPEG theo allow-list backend, bounded size, signature/MIME/extension và checksum. Technician chỉ đọc evidence gắn với assigned work order; unlinked adjustment/receipt evidence cần Storekeeper/authorized reader. API không expose local path.
+
+## Qdrant Không Chạy
+
+Qdrant chỉ ảnh hưởng Copilot retrieval; analytics và transactional workflow không phụ thuộc Qdrant.
+
+```powershell
+docker compose up -d qdrant
+python -m src.rag.index_documents
 ```
+
+Kiểm tra `http://localhost:6333/collections`. Khi Qdrant unavailable, Copilot trả safe fallback và không dùng unrelated chunk.
+
+Nếu Windows reserve port `6333`, chọn host port khác nhưng giữ container port qua Compose:
+
+```powershell
+$env:QDRANT_HTTP_PORT = "6461"
+$env:QDRANT_URL = "http://localhost:6461"
+docker compose up -d qdrant
+python -m src.rag.index_documents
+```
+
+## Collection Thiếu, Trống Hoặc Sai Dimension
+
+Re-index canonical documents:
+
+```powershell
+python -m src.rag.index_documents
+```
+
+Indexer replace collection để loại stale chunks. Nếu đổi embedding model, phải re-index toàn bộ collection; không trộn vector dimensions.
+
+## sentence-transformers Chưa Cài
+
+```powershell
+python -m pip install -e ".[rag]"
+```
+
+Không thêm paid API fallback. Khi local embedding dependency thiếu, Copilot phải trả trạng thái unavailable an toàn.
+
+## Backup Và Reset
+
+Backup local transactional data:
+
+```powershell
+docker exec maintenance_postgres pg_dump -U maintenance -d maintenance_copilot -Fc -f /tmp/maintenance_copilot.dump
+docker cp maintenance_postgres:/tmp/maintenance_copilot.dump .\maintenance_copilot.dump
+```
+
+Canonical application reset sau khi schema đã được Alembic quản lý:
+
+```powershell
+python -m src.database.init_db --reset
+python -m src.ingestion.load_data
+python -m src.security.cli seed-demo-users
+python -m src.maintenance_management.cli seed-development
+python -m src.ticket_management.cli seed-defaults
+python -m src.inventory_management.cli seed-development
+```
+
+`--reset` và `--replace` là destructive với transactional demo data, gồm ticket/SLA extensions, plans/templates/work orders, inventory và evidence metadata. Backup database và private attachment root trước nếu cần giữ workflow đã nhập. Không dùng Docker volume deletion như routine reset.
+
+## Warnings Đã Review
+
+`StarletteDeprecationWarning` từ current FastAPI test client là test-only warning đã biết; không thay đổi runtime API contract. Qdrant client được pin cùng minor line với local Qdrant server. Không upgrade dependency tree ngoài một dependency-focused task.

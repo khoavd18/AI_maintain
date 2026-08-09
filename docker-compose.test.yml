@@ -1,0 +1,26 @@
+name: ai-maintenance-copilot-test
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: maintenance_copilot_test
+      POSTGRES_USER: maintenance_test
+      POSTGRES_PASSWORD: maintenance_test_password
+    ports:
+      - "15433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U maintenance_test -d maintenance_copilot_test",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  postgres_test_data:

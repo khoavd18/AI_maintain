@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.risk.scoring import calculate_risk_score
 from src.config.value_mappings import RISK_LEVEL_CODE_TO_VI
 from src.data_generation.generate_data import generate_dataset, save_dataset
 from src.features.build_features import build_features_from_csv
@@ -14,32 +13,18 @@ from src.models.anomaly_detection import run_anomaly_detection
 from src.risk.risk_scoring import (
     RISK_OUTPUT_COLUMNS,
     assign_risk_level,
+    assign_risk_level_code,
     build_risk_scores,
+    calculate_final_risk_score,
+    calculate_follow_up_score,
     calculate_maintenance_overdue_score,
     calculate_recent_ticket_score,
+    calculate_recurring_issue_score,
     calculate_runtime_score,
+    calculate_unresolved_ticket_score,
     normalize_criticality_score,
     run_risk_scoring,
 )
-
-
-def test_calculate_risk_score_returns_bounded_explanation() -> None:
-    """Risk scoring should return an explainable 0-100 score."""
-
-    result = calculate_risk_score(anomaly_score=0.8, criticality=0.9, open_ticket_count=2)
-
-    assert result.score == 77.0
-    assert 0 <= result.anomaly_component <= 100
-    assert 0 <= result.criticality_component <= 100
-    assert 0 <= result.ticket_component <= 100
-
-
-def test_calculate_risk_score_clamps_extreme_inputs() -> None:
-    """Out-of-range inputs should not produce out-of-range risk scores."""
-
-    result = calculate_risk_score(anomaly_score=5.0, criticality=2.0, open_ticket_count=99)
-
-    assert result.score == 100.0
 
 
 @pytest.fixture(scope="module")
@@ -86,6 +71,9 @@ def test_risk_score_output_columns(risk_fixture: dict[str, pd.DataFrame | Path])
 
     assert isinstance(risks, pd.DataFrame)
     assert list(risks.columns) == RISK_OUTPUT_COLUMNS
+    assert (risks["feature_date"] == risks["date"]).all()
+    assert (risks["risk_score"] == risks["final_risk_score"]).all()
+    assert not risks.duplicated(["asset_id", "feature_date"]).any()
 
 
 def test_risk_component_scores_are_bounded(risk_fixture: dict[str, pd.DataFrame | Path]) -> None:
@@ -95,8 +83,11 @@ def test_risk_component_scores_are_bounded(risk_fixture: dict[str, pd.DataFrame 
     component_columns = [
         "anomaly_score",
         "maintenance_overdue_score",
+        "unresolved_ticket_score",
         "recent_ticket_score",
+        "recurring_issue_score",
         "criticality_score",
+        "follow_up_score",
         "runtime_score",
         "final_risk_score",
     ]
@@ -113,6 +104,7 @@ def test_risk_level_uses_vietnamese_values_only(risk_fixture: dict[str, pd.DataF
 
     assert isinstance(risks, pd.DataFrame)
     assert set(risks["risk_level"]).issubset(set(RISK_LEVEL_CODE_TO_VI.values()))
+    assert set(risks["risk_level_code"]).issubset({"low", "medium", "high", "critical"})
 
 
 def test_risk_reasons_and_actions_are_vietnamese_and_non_empty(
@@ -125,6 +117,7 @@ def test_risk_reasons_and_actions_are_vietnamese_and_non_empty(
     assert isinstance(risks, pd.DataFrame)
     assert (risks["main_reasons"].astype(str).str.strip() != "").all()
     assert (risks["recommended_action"].astype(str).str.strip() != "").all()
+    assert (risks["contributing_factors"].astype(str).str.strip() != "").all()
     assert risks["main_reasons"].str.contains("Thiết bị|Điểm|Runtime|ticket|Tài sản").any()
     assert risks["recommended_action"].str.contains("Kiểm tra|Theo dõi|Ưu tiên|Lên lịch").any()
 
@@ -138,6 +131,35 @@ def test_higher_anomaly_score_increases_final_risk_score() -> None:
     risks = build_risk_scores(features, anomalies).sort_values("asset_id")
 
     assert risks.iloc[1]["final_risk_score"] > risks.iloc[0]["final_risk_score"]
+
+
+def test_risk_results_are_deterministic(
+    risk_fixture: dict[str, pd.DataFrame | Path],
+) -> None:
+    features = risk_fixture["features"]
+    anomalies = risk_fixture["anomalies"]
+    assert isinstance(features, pd.DataFrame)
+    assert isinstance(anomalies, pd.DataFrame)
+
+    first = build_risk_scores(features, anomalies)
+    second = build_risk_scores(features, anomalies)
+
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_canonical_risk_formula_uses_documented_weights() -> None:
+    score = calculate_final_risk_score(
+        anomaly_score=80,
+        maintenance_overdue_score=60,
+        unresolved_ticket_score=50,
+        recent_ticket_score=40,
+        recurring_issue_score=70,
+        criticality_score=100,
+        follow_up_score=70,
+        runtime_score=20,
+    )
+
+    assert score == 64.25
 
 
 def test_overdue_maintenance_increases_overdue_component() -> None:
@@ -175,6 +197,16 @@ def test_runtime_score_thresholds() -> None:
     assert calculate_runtime_score(51) == 100
 
 
+def test_new_maintenance_risk_factor_thresholds() -> None:
+    assert calculate_unresolved_ticket_score(0) == 0
+    assert calculate_unresolved_ticket_score(1) == 50
+    assert calculate_unresolved_ticket_score(3) == 100
+    assert calculate_recurring_issue_score(0) == 0
+    assert calculate_recurring_issue_score(1) == 70
+    assert calculate_follow_up_score(0) == 0
+    assert calculate_follow_up_score(2) == 100
+
+
 def test_risk_level_thresholds() -> None:
     """Risk level should follow the requested Vietnamese score bands."""
 
@@ -182,6 +214,10 @@ def test_risk_level_thresholds() -> None:
     assert assign_risk_level(60) == RISK_LEVEL_CODE_TO_VI["medium"]
     assert assign_risk_level(80) == RISK_LEVEL_CODE_TO_VI["high"]
     assert assign_risk_level(81) == RISK_LEVEL_CODE_TO_VI["critical"]
+    assert assign_risk_level_code(30) == "low"
+    assert assign_risk_level_code(31) == "medium"
+    assert assign_risk_level_code(61) == "high"
+    assert assign_risk_level_code(81) == "critical"
 
 
 def test_risk_output_has_no_nan_or_infinite_values(

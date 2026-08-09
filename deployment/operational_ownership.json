@@ -1,0 +1,128 @@
+{
+  "schema_version": "1.0",
+  "record_kind": "internal_pilot_operational_ownership",
+  "record_status": "blocked_external_dependency",
+  "technical_stewardship": {
+    "role_label": "Solo project developer",
+    "status": "acknowledged_for_project_engineering_only",
+    "organizational_authority": false,
+    "responsibilities": {
+      "release_preparation_owner": "held",
+      "rollback_procedure_owner": "held",
+      "backup_drill_operator": "held",
+      "database_recovery_drill_operator": "held",
+      "development_application_support": "held",
+      "security_implementation_contact": "held"
+    },
+    "scope_note": "Technical stewardship covers repository design, local drills, and procedure maintenance only. It does not grant company operational, incident, security-acceptance, production-support, or business authority."
+  },
+  "organizational_dependency_status": "BLOCKED_EXTERNAL_DEPENDENCY",
+  "organizational_dependency_note": "A future pilot sponsor must assign company roles and approved channels. One person may hold multiple compatible company roles; nine different people are not required.",
+  "assignments": {
+    "operational_owner": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "external_dependency": "Future pilot sponsor must assign the company operational owner.",
+      "approval_evidence_links": []
+    },
+    "backup_owner": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "technical_stewardship_ref": "backup_drill_operator",
+      "external_dependency": "Future pilot sponsor must assign authority for the company backup schedule, retention, and recovery evidence.",
+      "approval_evidence_links": []
+    },
+    "release_owner": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "technical_stewardship_ref": "release_preparation_owner",
+      "external_dependency": "Future pilot sponsor must assign authority for the company deployment window and release approval.",
+      "approval_evidence_links": []
+    },
+    "rollback_owner": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "technical_stewardship_ref": "rollback_procedure_owner",
+      "external_dependency": "Future pilot sponsor must assign authority for rollback decisions and reopening company traffic.",
+      "approval_evidence_links": []
+    },
+    "incident_coordinator": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "external_dependency": "Future pilot sponsor must provide a company incident coordinator and communication authority.",
+      "approval_evidence_links": []
+    },
+    "security_contact": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "technical_stewardship_ref": "security_implementation_contact",
+      "external_dependency": "Future pilot sponsor must assign company security authority for secrets, incidents, and acceptance.",
+      "approval_evidence_links": []
+    },
+    "database_recovery_contact": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "technical_stewardship_ref": "database_recovery_drill_operator",
+      "external_dependency": "Future pilot sponsor must assign authority for company data recovery and integrity decisions.",
+      "approval_evidence_links": []
+    },
+    "application_support_contact": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "technical_stewardship_ref": "development_application_support",
+      "external_dependency": "Future pilot sponsor must assign production-facing application support and coverage.",
+      "approval_evidence_links": []
+    },
+    "pilot_business_owner": {
+      "assigned_role": "PENDING_PILOT_SPONSOR_ASSIGNMENT",
+      "approved_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+      "status": "blocked_external_dependency",
+      "external_dependency": "Future pilot sponsor must provide a business owner with pilot-scope and limitation-acceptance authority.",
+      "approval_evidence_links": []
+    }
+  },
+  "incident_communication": {
+    "status": "blocked_external_dependency",
+    "primary_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+    "fallback_internal_channel": "PENDING_SPONSOR_APPROVED_CHANNEL",
+    "audience": "internal_pilot_operators_and_business_owner",
+    "approval_evidence_links": []
+  },
+  "support_coverage": {
+    "status": "blocked_external_dependency",
+    "support_hours": "PENDING_SPONSOR_COVERAGE_AGREEMENT",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "after_hours_assumption": "PENDING_SPONSOR_COVERAGE_AGREEMENT",
+    "approval_evidence_links": []
+  },
+  "escalation_path": {
+    "status": "blocked_external_dependency",
+    "steps": [
+      {
+        "order": 1,
+        "owner_ref": "application_support_contact",
+        "channel_ref": "primary_internal_channel"
+      },
+      {
+        "order": 2,
+        "owner_ref": "incident_coordinator",
+        "channel_ref": "fallback_internal_channel"
+      },
+      {
+        "order": 3,
+        "owner_ref": "pilot_business_owner",
+        "channel_ref": "fallback_internal_channel"
+      }
+    ],
+    "approval_evidence_links": []
+  },
+  "privacy_rule": "Chỉ ghi vai trò và kênh nội bộ đã được phê duyệt; không ghi số điện thoại hoặc dữ liệu cá nhân."
+}

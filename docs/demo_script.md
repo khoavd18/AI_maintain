@@ -1,152 +1,489 @@
-# Demo Script
+# Kịch Bản Demo Product 15–18 Phút
 
-Use this script for a recruiter, interviewer, or portfolio walkthrough. It assumes Python dependencies are installed and Docker is available.
+Kịch bản dùng PostgreSQL làm transactional source of truth cho asset, ticket/SLA, work order, inventory, background execution, outbox và in-app notification; CSV làm synthetic seed + batch analytics contract. Đây là internal pilot demo, không phải production deployment, procurement suite hoặc complete CMMS.
 
-## 1. Start Infrastructure
+## Chuẩn Bị Trước Demo
 
-```bash
-make services-up
+### 1. Cài dependency và cấu hình
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dashboard,dev,rag,postgres]"
+Copy-Item .env.example .env
 ```
 
-This starts PostgreSQL and Qdrant from `docker-compose.yml`.
+Giữ normal mode:
 
-## 2. Generate Vietnamese Synthetic Data
-
-```bash
-make generate-data
+```dotenv
+STORAGE_BACKEND=postgresql
+DATABASE_URL=postgresql+psycopg://maintenance:maintenance@localhost:5432/maintenance_copilot
+APP_ENVIRONMENT=development
+ATTACHMENT_STORAGE_BACKEND=local
+ATTACHMENT_STORAGE_ROOT=data/attachments
+FRONTEND_BASE_URL=http://localhost:3000
 ```
 
-Show `data/raw` and mention the generated assets, sensor readings, tickets, logs, risk snapshots, and Vietnamese SOP/checklist documents.
+Không commit password hoặc signing secret. Local development dùng process-ephemeral signing secret; pilot/non-local phải inject secret ngẫu nhiên và chạy HTTPS với `AUTH_COOKIE_SECURE=true`.
 
-## 3. Initialize Database
+### 2. Khởi động infrastructure
 
-```bash
-make init-db
+```powershell
+docker compose up -d postgres qdrant
+docker compose ps
 ```
 
-This creates the SQLAlchemy schema for structured maintenance data.
+PostgreSQL phải `healthy`. Qdrant chỉ cần cho Copilot.
 
-## 4. Load Data
+### 3. Generate và validate canonical data
 
-```bash
-make load-data
+```powershell
+python -m src.data_generation.generate_data
+python -m src.ingestion.validation
 ```
 
-Explain that PostgreSQL is the structured data store for assets, readings, tickets, logs, risk scores, and documents.
+Expected seed counts:
 
-## 5. Build Features
+- 27 assets;
+- 42 tickets;
+- 86 maintenance logs;
+- 77.760 sensor readings;
+- 6 documents.
 
-```bash
-make build-features
+### 4. Migrate và import PostgreSQL
+
+```powershell
+python -m alembic upgrade head
+python -m alembic current
+python -m src.ingestion.load_data --dry-run
+python -m src.ingestion.load_data
 ```
 
-Show `data/processed/asset_daily_features.csv`. Highlight rolling energy trends, vibration deltas, ticket counts, overdue maintenance days, and criticality score.
+Nếu database đã có demo data và cần reset có chủ đích, thay command cuối bằng:
 
-## 6. Detect Anomalies
-
-```bash
-make detect-anomalies
+```powershell
+python -m src.ingestion.load_data --replace
 ```
 
-Show `data/processed/anomaly_results.csv`. Explain the hybrid method:
+Không dùng `--replace` khi cần giữ ticket/log từ buổi demo trước.
 
-- rule-based thresholds for explainable maintenance patterns;
-- Isolation Forest for multivariate outliers.
+### 4.1. Bootstrap identity rõ ràng
 
-## 7. Score Risk
+Tạo administrator đầu tiên bằng password prompt:
 
-```bash
-make score-risk
+```powershell
+python -m src.security.cli create-admin --username admin.local --display-name "Quản trị viên local"
 ```
 
-Show `data/processed/risk_scores.csv`. Explain the formula:
+Tạo năm role demo bằng một password do người chạy nhập, chỉ trong development:
 
-```text
-final_risk_score =
-  35% anomaly_score
-+ 20% maintenance_overdue_score
-+ 20% recent_ticket_score
-+ 15% criticality_score
-+ 10% runtime_score
+```powershell
+python -m src.security.cli seed-demo-users
 ```
 
-## 8. Index Documents Into Qdrant
+Expected usernames: `admin.demo`, `manager.demo`, `engineer.demo`, `technician.demo`, `helpdesk.demo`, `storekeeper.demo`. Không có default password và application startup không tự tạo user.
 
-Install optional RAG dependencies if needed:
+### 4.2. Seed preventive maintenance explicit
 
-```bash
-python -m pip install -e ".[dev,rag]"
+Lệnh dùng hai user đã tồn tại, không tạo password/account và idempotent:
+
+```powershell
+python -m src.maintenance_management.cli seed-development
+python -m src.maintenance_management.cli generate --dry-run --as-of 2026-07-20
 ```
 
-Index Vietnamese SOP/checklist documents:
+Chọn `--as-of` phù hợp ngày demo. Dry-run không write. Có thể bỏ seed và tạo template/plan trực tiếp trên UI để kể đầy đủ workflow.
 
-```bash
-make index-documents
+### 4.3. Seed ticket/SLA reference data
+
+Lệnh idempotent tạo category, source, support group, default Vietnamese business calendar và SLA policy. Actor phải tồn tại và có quyền quản lý SLA:
+
+```powershell
+python -m src.ticket_management.cli seed-defaults --actor-username admin.demo
 ```
 
-Explain the RAG path: `documents.csv -> chunks -> embeddings -> Qdrant maintenance_knowledge`.
+### 4.4. Seed inventory explicit
 
-## 9. Run FastAPI
+Sau khi có demo users và work orders:
 
-Open a terminal:
-
-```bash
-make run-api
+```powershell
+python -m src.inventory_management.cli seed-development
+python -m src.inventory_management.cli seed-development
 ```
 
-Open these URLs:
+Lần đầu tạo 6 categories, 3 UOM, 5 stock locations, 8 spare parts, opening balances và selected requirements/reservations. Lần hai phải báo zero cho master/requirement/reservation mới và không tăng movement count. Seed đi qua named services, không PATCH balance.
 
-- `http://localhost:8000/health`
-- `http://localhost:8000/summary`
-- `http://localhost:8000/docs`
+### 4.5. Kiểm tra PM7 job catalog
 
-## 10. Run Streamlit Dashboard
-
-Open a second terminal:
-
-```bash
-make run-dashboard
+```powershell
+python -m src.operations.cli status
 ```
 
-Open the Streamlit URL shown in the terminal.
+Bốn job phải tồn tại và mặc định disabled. Demo có thể enable riêng
+`sla_escalation` hoặc dùng manual trigger; không enable toàn bộ nếu không muốn
+thay đổi data trong lúc trình bày.
 
-## 11. Inspect Top Risky Asset
+### 5. Tạo analytics snapshot và chạy batch
 
-In the dashboard:
+```powershell
+python -m src.database.export_snapshot --replace
+python -m src.features.build_features --input-dir data/analytics_input
+python -m src.models.anomaly_detection
+python -m src.risk.risk_scoring
+python -m src.features.build_features --input-dir data/analytics_input --analysis maintenance
+```
 
-1. Open `Overview`.
-2. Review total assets, anomalies, high-risk count, urgent-risk count, latest date, and average risk score.
-3. Inspect `Top 10 Risky Assets`.
-4. Open `Asset Risk Monitoring`.
-5. Select a high-risk `asset_id`.
-6. Show `main_reasons` and `recommended_action`.
+### 6. Index Vietnamese SOP/checklist
 
-## 12. Ask The Copilot
+```powershell
+python -m src.rag.index_documents
+```
 
-Open `Maintenance Copilot`.
+### 7. Khởi động FastAPI, worker và frontend
 
-Ask:
+Terminal 1:
+
+```powershell
+python -m uvicorn src.api.main:app --reload --port 8000
+```
+
+Terminal 2:
+
+```powershell
+python -m src.operations.worker
+```
+
+Terminal 3, Next.js manager workspace:
+
+```powershell
+Set-Location frontend
+Copy-Item .env.example .env.local -ErrorAction SilentlyContinue
+npm install
+npm run dev
+```
+
+Mở `http://localhost:3000`.
+
+Streamlit không dùng cho protected demo workflow. Nó chỉ còn là legacy development status page gọi public `/health`.
+
+## Ticket Intake, SLA Và Escalation Workflow
+
+### A. Helpdesk intake
+
+1. Đăng nhập `helpdesk.demo`, mở `/tickets`, chọn queue **Chưa phân công**.
+2. Mở `/tickets/new`, chọn `GENERATOR_002`, category/source, impact `high` và urgency `immediate`.
+3. Chỉ priority preview `critical` đến từ FastAPI; browser không có matrix riêng.
+4. Điền reporter contact cho demo, route đến Engineering và assign `technician.demo`.
+5. Submit rồi mở detail; chỉ SLA first-response/resolution, policy snapshot và Vietnamese labels.
+
+### B. Technician execution và communication
+
+1. Đăng nhập `technician.demo`, mở queue **Phân công cho tôi**.
+2. Mở ticket vừa tạo; reporter PII phải được redact.
+3. Chọn **Ghi nhận phản hồi**, sau đó **Bắt đầu**.
+4. Thêm internal comment; thử **Đặt chờ** với reason, kiểm tra resolution SLA chuyển `paused`, rồi **Tiếp tục**.
+5. Mở Copilot với asset/ticket context và xem checklist có source.
+6. Tạo hoặc mở corrective work order, thực hiện checklist/evidence và ghi maintenance result.
+7. Quay lại ticket và resolve explicit sau khi linked maintenance log tồn tại.
+
+### C. Manager oversight
+
+1. Đăng nhập `manager.demo`, mở queues **Khẩn cấp**, **Sắp đến hạn** và **Vi phạm SLA**.
+2. Mở ticket, xác nhận reporter PII hiển thị theo permission, timeline chứa intake/response/pause/resume/comment.
+3. Đóng ticket đã resolved hoặc reopen với reason để chỉ SLA occurrence mới.
+4. Mở `/admin/sla`: chỉ business calendar, policy targets và cảnh báo snapshot.
+5. Mở `/admin/escalations`: chạy **Dry run**, sau đó execute nếu có candidate. Chạy lại để chứng minh không tạo duplicate.
+
+CLI tương đương:
+
+```powershell
+python -m src.ticket_management.cli evaluate-escalations --dry-run --actor-username manager.demo
+python -m src.ticket_management.cli evaluate-escalations --actor-username manager.demo
+```
+
+**Nói:** SLA state derive từ timestamps và policy/calendar snapshot. Escalation có thể chạy explicit hoặc qua closed PM7 job, ghi append-only event/outbox và tạo in-app notification; nó không gửi email/SMS hoặc tự đổi ticket.
+
+### D. Notification Và Job Operations
+
+1. Đăng nhập `admin.demo`, mở `/admin/jobs`.
+2. Xác nhận fixed four-job catalog, worker heartbeat, queue metrics và recent
+   executions.
+3. Trigger `sla_escalation` với UI-generated stable idempotency key.
+4. Chờ worker xử lý rồi xem execution summary/outbox status.
+5. Mở bell hoặc `/notifications`; xem event phù hợp, đánh dấu read/unread rồi
+   dismiss.
+6. Chỉ ra user chỉ thấy inbox của chính mình; non-Administrator không truy cập
+   job operations.
+
+## Preventive Plan Và Work Order Workflow
+
+### A. Chief Engineer tạo preventive flow
+
+1. Đăng nhập `engineer.demo`.
+2. Mở `/maintenance/checklists`, tạo checklist máy phát có ít nhất một required item và một safety-critical `pass_fail` item.
+3. Tạo version mới và chỉ ra version cũ vẫn đọc được.
+4. Mở `/maintenance/plans/new`, chọn `GENERATOR_002`, interval tháng, `Asia/Ho_Chi_Minh`, lead/grace period, checklist vừa tạo và `technician.demo`.
+5. Mở plan detail, xem occurrence 180 ngày và warning rằng schedule change không sửa work order lịch sử.
+6. Chạy **Dry run**, sau đó **Generate**. Mở generated WO và ghi lại `work_order_number`.
+
+**Nói:** Due date là local business date. Month-end giữ anchor và clamp khi cần; execution timestamps là UTC. Generation chạy do actor explicit hoặc closed PM7 worker gọi cùng canonical service; API startup không tự generate.
+
+### B. Technician thực thi trên mobile width
+
+1. Đăng nhập `technician.demo`, mở `/work-orders` và lọc assigned technician.
+2. Mở WO trên viewport khoảng 390 px; xác nhận không có horizontal overflow.
+3. Chọn **Bắt đầu**, hoàn tất required checklist; thử đặt safety-critical item là `Không đạt` để thấy completion bị chặn, sau đó chỉ sửa thành `Đạt` khi phù hợp với demo.
+4. Upload một PDF/JPEG nhỏ ở category before/after evidence, tải lại và kiểm tra filename/checksum metadata.
+5. Nhập inspection result, action, historical `parts_replaced` text, labor, follow-up và completion summary; chọn **Hoàn tất và tạo log**.
+6. Xác nhận maintenance log ID xuất hiện đúng một lần và technician không thấy/không được phép tự verify.
+
+### C. Chief Engineer xác minh
+
+1. Đăng nhập lại `engineer.demo`, mở completed WO.
+2. Review checklist, evidence, completion summary và timeline.
+3. Chọn **Xác minh kỹ thuật**.
+4. Xác nhận status `verified`, verifier khác technician, linked MaintenanceLog giữ nguyên và asset maintenance dates được cập nhật.
+5. Mở Audit log bằng role có quyền để xem generated/started/checklist/completed/verified/asset-date events.
+
+### D. Corrective ticket flow
+
+1. Từ `GENERATOR_002`, tạo ticket hoặc mở ticket đang `Đang xử lý`.
+2. Trong ticket detail chọn **Tạo WO**, assign technician và mở linked corrective work order.
+3. Technician execute/complete; Chief Engineer verify.
+4. Quay lại ticket: status vẫn chưa tự đổi. Authorized actor resolve ticket bằng existing ticket action sau khi review evidence.
+
+**Điểm cần chứng minh:** ticket, work order và maintenance log là ba entity khác nhau; creating/completing/verifying WO không ẩn business transition.
+
+### E. Helpdesk restrictions
+
+Đăng nhập `helpdesk.demo`: xem limited WO status; thử mở create plan, submit checklist hoặc verify phải bị UI chặn và FastAPI trả `403` nếu gọi trực tiếp.
+
+### F. Generation safety
+
+Chạy cùng command hai lần:
+
+```powershell
+python -m src.maintenance_management.cli generate --as-of 2026-07-20
+python -m src.maintenance_management.cli generate --as-of 2026-07-20
+```
+
+Lần hai phải báo skipped/zero generated cho occurrence đã có. Automated PostgreSQL test còn chạy concurrent calls để chứng minh unique `(plan_id, due_date)` và sequence work-order number.
+
+## Inventory Và Work-Order Parts Workflow
+
+### A. Storekeeper kiểm tra stock
+
+1. Đăng nhập `storekeeper.demo`.
+2. Mở **Kho vật tư**: xem active parts, low/out-of-stock và work orders waiting for parts.
+3. Mở **Tồn theo kho**: chỉ ra ba cột on-hand, reserved và available.
+4. Mở **Biến động kho**: mỗi event có movement number, reference, actor và resulting balance.
+5. Mở **Nhập kho**, ghi một receipt với business reference mới; upload evidence tùy chọn.
+
+**Nói:** Client gửi named command + stable `Idempotency-Key`; backend lock position và append movement. Không có generic balance edit.
+
+### B. Requirement, reservation và issue
+
+1. Chief Engineer mở generated work order, tab **Vật tư cho công việc**.
+2. Xem planned requirement hoặc thêm requirement; quantity stock chưa đổi.
+3. Reserve một phần/toàn phần; on-hand giữ nguyên, available giảm.
+4. Storekeeper mở cùng work order, issue reserved stock cho technician.
+5. Quan sát on-hand giảm và issue/movement xuất hiện; ticket/work-order status không tự đổi.
+
+### C. Technician consumption và return
+
+1. Đăng nhập technician được gán và mở work order.
+2. Trong tab **Xuất dùng**, ghi quantity thực dùng. Consumption không trừ stock lần hai.
+3. Đăng nhập Storekeeper, return phần outstanding chưa dùng.
+4. Nếu còn shortage/unresolved issued stock, completion chỉ hiện warning. Không có hidden issue/consume/release.
+
+### D. Negative checks
+
+- Technician khác không đọc/consume inventory của work order.
+- Helpdesk không adjustment hoặc receipt.
+- Transfer quá available và return quá outstanding bị từ chối, không partial write.
+- Reuse idempotency key với payload khác trả conflict.
+
+## 0:00–0:45 — Bài Toán Và Architecture
+
+**Nói:** Đội facility phải ghép asset master, ticket, preventive schedule, operational readings và SOP. Hệ thống này là AI decision-support layer: PostgreSQL giữ transactions, batch analytics ưu tiên asset, FastAPI phục vụ hai frontend, Qdrant retrieve tài liệu. Con người vẫn chịu trách nhiệm quyết định và an toàn.
+
+**Chỉ:** Architecture diagram trong [architecture.md](architecture.md).
+
+## 0:45–1:30 — Overview
+
+1. Mở `/login`, đăng nhập `manager.demo` bằng password vừa seed.
+2. Chỉ current user/role trong authenticated shell.
+3. Mở Overview và chỉ KPI cards, risk distribution, maintenance status.
+4. Nhấn mạnh KPI/Risk là latest completed batch, không phải real-time IoT.
+5. Chọn top risky asset `GENERATOR_002`.
+
+**Nói:** Score hỗ trợ prioritization; không phải xác suất hỏng hoặc dự đoán thời điểm hỏng.
+
+## 1:30–4:00 — Asset Lifecycle Và Field QR
+
+### A. Chief Engineer
+
+1. Đăng nhập `engineer.demo`, mở `/assets` và nhấn **Đăng ký asset**.
+2. Tạo `DEMO_GENERATOR_001`, chọn location, technical identity, warranty, criticality và maintenance interval.
+3. Mở detail, tải một PDF synthetic technical manual; chỉ metadata/checksum xuất hiện, không có local path.
+4. Đổi operational status theo transition hợp lệ.
+5. Mở QR tab, chỉ opaque lookup URL, tải/in label rồi mở `/scan/assets/{lookupToken}` ở viewport gần 390 px.
+
+### B. Property Manager
+
+1. Đăng nhập `manager.demo`, xem profile/history của asset vừa tạo.
+2. Archive với lý do rõ ràng; xác nhận profile, attachment metadata và history vẫn còn, còn ticket-create bị chặn.
+3. Restore explicit về `active` hoặc `inactive`; history có cả archive và restore actor/timestamp.
+
+### C. Technician Và Helpdesk
+
+1. Technician scan QR sau login: thấy identity, operational status, open tickets và action được phép; không có archive/profile-edit.
+2. Helpdesk mở asset: chỉ đọc và có maintenance ticket entry point; không sửa technical/lifecycle/attachment.
+3. Direct API attempt vượt permission phải trả `403`; UI hiding chỉ là UX.
+
+**Nói:** Lifecycle và operational status là hai state khác nhau. QR chỉ nhận diện, không cấp quyền. Attachment bytes dùng safe local storage cho single-node pilot; đây chưa phải object storage production.
+
+## 4:00–5:00 — Asset Detail Và Risk Explanation
+
+1. Mở `GENERATOR_002`.
+2. Chỉ measured facts: asset type, criticality, location, maintenance dates, recent anomaly.
+3. Chỉ analytics explanation: contributing factors và recommended action.
+4. Tách rõ facts khỏi recommendation.
+
+**Nói:** Asset profile hiện đọc từ PostgreSQL. Risk/anomaly vẫn là snapshot từ batch gần nhất.
+
+## 5:00–7:30 — Risk-To-Action Transaction
+
+1. Nhấn **Create inspection ticket**.
+2. Giữ prefilled asset/risk context, chọn priority và technician.
+3. Lưu; chỉ ticket mới có status `Mới tạo`.
+4. Mở Ticket workspace, chuyển sang `Đang xử lý` và cập nhật assignment/note.
+5. Thêm maintenance result:
+   - inspection result;
+   - actions taken;
+   - optional parts text;
+   - maintenance result;
+   - follow-up requirement;
+   - next maintenance date.
+6. Nếu result hoàn tất, chuyển ticket sang `Đã xử lý`; nếu cần theo dõi, giữ `Đang xử lý`.
+
+**Nói:** Log insert và asset maintenance-date synchronization commit trong một PostgreSQL transaction. Ticket resolution vẫn là bước explicit của người dùng. UI không fake AI recalculation.
+
+**Chỉ thông báo:** “Maintenance data has been recorded. Risk and KPI results will update in the next analytics batch.”
+
+### Role checks trong workflow
+
+1. Đăng nhập `helpdesk.demo`: intake và route ticket, nhưng maintenance execution/result và resolve controls không xuất hiện; direct API attempt trả `403`.
+2. Đăng nhập `manager.demo`: assign ticket cho `TECH_002` và chuyển đúng status transition.
+3. Đăng nhập `technician.demo`: chỉ thấy ticket được giao và tạo maintenance log; không có control assign/priority, direct API attempt bị từ chối.
+4. Đăng nhập `admin.demo`: mở `/admin/users` và `/admin/audit`.
+5. Trong audit view, filter resource `ticket` để chỉ actor, assignment, status và maintenance-log events; không hiển thị password/token/raw sensitive JSON.
+
+## 7:30–9:00 — Copilot Có Nguồn
+
+1. Từ asset hoặc ticket, mở Copilot.
+2. Hỏi:
 
 ```text
 Vì sao GENERATOR_002 đang rủi ro cao?
 ```
 
-Use:
+3. Chỉ structured context lấy từ PostgreSQL + latest analytics.
+4. Chỉ checklist được retrieve, source title, document type, version và safety notice.
+5. Hỏi thêm:
 
-- `asset_id`: `GENERATOR_002`
-- `top_k`: `5`
+```text
+Checklist kiểm tra ắc quy và khởi động máy phát là gì?
+```
 
-Show:
+**Nói:** Qdrant retrieve chunk liên quan; deterministic composer không tự chẩn đoán. Technician phải xác minh hiện trường và ưu tiên manual/quy trình an toàn.
 
-- Vietnamese answer;
-- structured risk/anomaly context;
-- SOP/checklist sources;
-- retrieved chunks in the expander.
+## 9:00–10:30 — Inventory Từ Requirement Đến Usage
 
-## 13. Close With The Product Story
+**Thao tác:** Mở work order có requirement; chỉ ra reserve, issue, consumption và return là bốn record/action khác nhau. Mở movement timeline và low-stock view.
 
-Position the project as:
+**Nói:** Reservation giảm available nhưng không giảm on-hand. Issue tạo physical movement; consumption chỉ xác nhận usage; return hoàn outstanding stock. Completion không tự tạo inventory action.
 
-- not a CMMS replacement;
-- an AI decision-support layer over existing CMMS/sensor/SOP data;
-- a complete MVP showing data engineering, anomaly detection, explainable scoring, API serving, dashboarding, and RAG.
+## 10:30–11:30 — Batch Refresh Có Chủ Đích
+
+Không cần chạy trong demo ngắn; giải thích flow:
+
+```text
+PostgreSQL -> validated snapshot -> features -> anomaly -> risk -> reports
+```
+
+Nếu trình diễn refresh thật:
+
+```powershell
+python -m src.database.export_snapshot --replace
+python -m src.features.build_features --input-dir data/analytics_input
+python -m src.models.anomaly_detection
+python -m src.risk.risk_scoring
+python -m src.features.build_features --input-dir data/analytics_input --analysis maintenance
+```
+
+Hoặc Administrator trigger `analytics_refresh` tại `/admin/jobs`. API chỉ persist
+execution; worker chạy snapshot/pipeline trong staging rồi atomically publish cả
+output set. Ticket/inventory write vẫn không làm Risk Score/KPI đổi ngay.
+
+## Safe Fallback Optional
+
+```powershell
+docker compose stop qdrant
+```
+
+Hỏi lại Copilot. Expected: safe fallback, zero sources, nhưng assets/tickets/logs/analytics pages vẫn hoạt động. Khởi động lại:
+
+```powershell
+docker compose start qdrant
+```
+
+## API Spot Checks
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+$loginBody = @{ identifier = "manager.demo"; password = "<DEMO_PASSWORD>" } | ConvertTo-Json
+$login = Invoke-RestMethod http://localhost:8000/auth/login -Method Post `
+  -ContentType "application/json" -Body $loginBody -SessionVariable BrowserSession
+$headers = @{ Authorization = "Bearer $($login.access_token)" }
+Invoke-RestMethod http://localhost:8000/auth/me -Headers $headers
+Invoke-RestMethod "http://localhost:8000/assets/catalog?page=1&page_size=5" -Headers $headers
+Invoke-RestMethod http://localhost:8000/assets/GENERATOR_002/profile -Headers $headers
+Invoke-RestMethod http://localhost:8000/assets/GENERATOR_002/qr -Headers $headers
+Invoke-RestMethod http://localhost:8000/assets/GENERATOR_002/history -Headers $headers
+Invoke-RestMethod http://localhost:8000/assets/GENERATOR_002/details -Headers $headers
+Invoke-RestMethod "http://localhost:8000/tickets?asset_id=GENERATOR_002" -Headers $headers
+Invoke-RestMethod "http://localhost:8000/maintenance-plans?page_size=5" -Headers $headers
+Invoke-RestMethod "http://localhost:8000/work-orders?page_size=5" -Headers $headers
+Invoke-RestMethod "http://localhost:8000/work-orders/metrics?as_of_date=2026-07-20" -Headers $headers
+```
+
+OpenAPI vẫn có toàn bộ existing endpoints tại `http://localhost:8000/docs`.
+
+## Điểm Kết Luận
+
+- PostgreSQL cung cấp FK, transactions, unique sequences và optimistic conflicts cho focused workflow.
+- Asset lifecycle, hierarchy, attachment metadata và audit là PostgreSQL-backed; local attachment bytes được checksum khi download.
+- QR dùng opaque deterministic token và protected lookup, không chứa secret hoặc thay thế authorization.
+- CSV vẫn phù hợp cho deterministic synthetic seed và batch model artifacts.
+- FastAPI giữ business contract và enforce identity/permission trước service; Next.js không biết storage implementation.
+- Local auth dùng memory access token, rotating HttpOnly refresh session, CSRF binding và immediate revocation checks.
+- PostgreSQL audit append-only ghi cùng transaction với successful ticket/log mutation.
+- Plan, work order, ticket và MaintenanceLog được tách; checklist version được snapshot và generation retry không tạo duplicate.
+- Part, requirement, reservation, issue, consumption, return và movement được tách; server là nguồn quantity authoritative.
+- Inventory dùng row locks, idempotency, immutable history và atomic transfer; không có procurement hoặc accounting.
+- Completion và independent verification là hai action khác nhau; ticket resolution vẫn explicit, còn analytics refresh là bounded batch job chứ không chạy theo transaction.
+- Worker, schedule, retry/dead-letter, outbox và notification state đều durable trong PostgreSQL; event delivery chỉ in-app.
+- RAG chỉ cung cấp source-grounded guidance; không thay thế technician.
+- Remaining gaps gồm worker high availability/load testing, external notifications, SSO/MFA, distributed rate limiting, signing-key rotation, backup automation, centralized observability và deployment hardening.
+
+## Dừng Demo
+
+```powershell
+docker compose stop
+```
+
+Không xóa PostgreSQL volume nếu muốn giữ plans/work orders/tickets/logs/inventory
+và PM7 operational history. Canonical reset dùng explicit import `--replace`,
+disable PM7 job catalog và xóa runtime history trước khi chạy lại explicit
+PM4-PM6 seeds; không dùng routine volume deletion.

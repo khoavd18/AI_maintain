@@ -1,0 +1,1 @@
+"""Inventory PostgreSQL repository capabilities."""
