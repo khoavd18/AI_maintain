@@ -1,4 +1,4 @@
-"""Infrastructure-free tests for the PM9 authenticated post-start validator."""
+"""Infrastructure-free tests for the authenticated post-start runner."""
 
 from __future__ import annotations
 

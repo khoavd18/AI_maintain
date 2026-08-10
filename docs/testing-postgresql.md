@@ -61,11 +61,13 @@ package split and subsequent repository query/catalogue decomposition have
 been validated against this snapshot; no migration is generated for structural
 refactoring.
 
-The service and RAG/frontend decomposition phase uses the same isolated
-database. It must be validated with `pytest -m postgres -q` and the full suite;
-the expected existing full-suite exception is the pilot settings test whose
-release-identity validation currently precedes its development-credential
-assertion. The frontend deterministic command is:
+Service, RAG, and frontend decomposition phases use this same isolated database.
+Run `.\scripts\test-postgres.ps1 -Action test -Keep` for the PostgreSQL
+selection and add `-Full` for the complete suite in the same validated
+environment. Do not carry a historical expected failure forward: record every
+failure as current-change, pre-existing, or infrastructure-blocked. If Docker is
+unavailable, PostgreSQL tests and database-backed Alembic checks are blocked,
+not passed. The frontend deterministic command is:
 
 ```powershell
 npm --prefix frontend run test -- --run --pool=forks --no-file-parallelism --maxWorkers=1

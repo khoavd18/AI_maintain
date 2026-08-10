@@ -808,4 +808,253 @@ Completed the bounded SLA-runtime phase. `TicketSlaRuntimeService` owns override
 
 ## Ticket application completion - 2026-08-08
 
-Ticket escalation characterization and safe extraction are complete. `TicketEscalationService` owns eligibility, bounded rule decisions, timestamp capture, dry-run, candidate mapping, and repository command construction. Durable duplicate prevention, breach SLA events, audit, outbox, rollback, and worker leasing remain in their existing PostgreSQL/PM7 owners. The remaining facade is intentionally retained compatibility/delegation plus small priority, summary, bootstrap, legacy, and mapping responsibilities. Ticket application work is complete; the next macro phase is `MAINTENANCE_APPLICATION`.
+Ticket escalation characterization and safe extraction are complete. `TicketEscalationService` owns eligibility, bounded rule decisions, timestamp capture, dry-run, candidate mapping, and repository command construction. Durable duplicate prevention, breach SLA events, audit, outbox, rollback, and worker leasing remain in their existing PostgreSQL/PM7 owners. The remaining facade is intentionally retained compatibility/delegation plus small priority, summary, bootstrap, legacy, and mapping responsibilities. At that checkpoint, ticket application work was complete and the recorded next macro phase was `MAINTENANCE_APPLICATION`; the current checkpoint below supersedes that direction.
+
+## Current checkpoint — maintenance application and reliability manifest validators — 2026-08-09
+
+The `MAINTENANCE_APPLICATION` phase is complete for the current public service
+surface. `MaintenancePlanningService` remains the stable facade and delegates to
+capability owners for preventive-plan commands, work-order planning,
+lifecycle/checklists, completion/verification, preventive generation,
+calendar/metrics reporting, linked-ticket reads, templates, evidence, and
+primitive queries. All 34 public signatures and seven historical module
+bindings are characterized and preserved.
+
+No PostgreSQL transaction family moved. `PostgresMaintenancePlanningRepository`
+still owns sessions, row locks, optimistic-version checks, number/occurrence
+uniqueness, maintenance-log and asset-date coupling, audit/outbox writes,
+commit/rollback, and exception mapping. Shared validation and one private legacy
+next-maintenance-date helper remain in the facade because another generic-helper
+layer would reduce discoverability without changing capability ownership.
+
+Seven bounded reliability capabilities are now extracted from the historical manifest god file:
+the closed deployment `scheduled_jobs` validator in
+`src/reliability/pilot_contract/deployment_manifest/jobs.py` and the health-endpoint
+declaration validator in
+`src/reliability/pilot_contract/deployment_manifest/health.py`, plus the closed environment
+name/secret-flag contract in `deployment_manifest/environment.py`. Storage roots,
+logical paths, containment, container/configuration bindings, and backup
+retention now live in `deployment_manifest/storage.py`. All preserve exact findings and
+their private `manifest.py` import seams and have no environment, network,
+subprocess, worker, operations-repository, or database side effect. The storage
+validator retains its existing `Path.resolve()` containment check but reads no
+file contents and creates or changes no filesystem state. Environment
+declarations retain strict uppercase names, no whitespace normalization, strict
+boolean flags, invalid-name short-circuiting, duplicate last-flag behavior,
+required-name ordering, and secret-name ordering. The runtime environment
+validator and runtime four-job catalog remain in their existing owners.
+Checked-in Compose, Dockerfile, application/schema, and frontend package binding
+now lives in `repository_contract.py`. It retains the fixed read order and
+short-circuit/exception boundaries while `manifest.py` keeps orchestration and
+the historical private binding.
+Manifest identity/release/version/image declarations now live in
+`artifact_declarations.py`; closed service/port/volume topology lives in
+`service_topology.py`. `manifest.py` is a 31-line visible orchestrator. The two
+statement groups are AST-identical to their original blocks apart from explicit
+return seams for the validated version mapping and service-name set.
+The historical 468-line runtime environment module is now a 27-line orchestrator
+over five capability owners: `environment_security.py`,
+`environment_network.py`, `environment_identity.py`,
+`environment_runtime_settings.py`, and `environment_storage.py`. The injected
+environment timing and five-step finding order are unchanged; only the storage
+capability retains path resolution.
+
+Release-record validation is now a 163-line ordered facade over five capability
+owners: `release_record_identity.py`, `release_record_evidence.py`,
+`release_record_gates.py`, `release_record_risks.py`, and
+`release_record_governance.py`. The facade preserves the historical private
+binding and exact capability order. Observation, reachability, and final
+observation-presence checks remain in `release.py`; none of the extracted
+validators owns a transaction or performs environment, filesystem, subprocess,
+network, database, worker, audit, or outbox actions.
+
+The historical 1,420-line `src/reliability/drills.py` is now a 65-line
+compatibility facade. Injected disk-capacity classification and cycle state live
+in `disk_capacity.py`; immutable backup-pair publication, verification, index,
+and retention live in `backup_artifacts.py`; attachment assessment, bounded
+archive inspection, and staged restore live in `attachment_archives.py`.
+`artifact_io.py` owns the eleven path/sync/checksum primitives already shared by
+the two artifact capabilities, while `drill_labels.py` owns the shared opaque
+operator-label rule. No database transaction or application record moved. The
+backup filesystem atomicity boundary remains lock -> immutable pair -> verify ->
+atomic validated-index replace; attachment publication/restore retains bounded
+streaming, integrity checks, atomic replace, and staging cleanup. The facade
+keeps historical public bindings, the interrupted-rename `os` binding, and the
+private validated-index failure-injection seam.
+
+The historical `load_harness.py` is now an 81-line import/CLI facade over the
+`load/` capability package. `profile_workflow.py` owns the complete profile
+scheduling/cancellation loop; `step_workflow.py` owns the complete staged-load
+loop and monitor deadline. Request contracts, HTTP sampling, execution limits,
+report projection/storage, safety, telemetry, and CLI wiring have direct owners.
+The two stateful loops remain whole and preserve their characterized ordering.
+
+The no-network post-start preflight lives in `post_start/preflight.py`.
+`post_start_validation.py` is a 33-line import/CLI facade; `post_start/runner.py`
+retains the complete 534-line authenticated workflow, token rotation, ordered
+checks, three-client state, and unconditional logout/revocation cleanup. Report
+contracts, environment reads, HTTP helpers, response validation, evidence
+storage, and CLI wiring have separate named owners without splitting cleanup.
+
+Real PostgreSQL validation did not justify moving any transaction-heavy family.
+Inventory transfer/reserve/issue, maintenance completion/generation, ticket
+lifecycle/escalation, and PM7 execution/outbox claims still open and finish one
+repository transaction around their lock helpers, append-only records,
+audit/outbox, and exception mapping. Capability comments and
+`tests/test_repository_transaction_ownership.py` make that retained ownership
+explicit; no executable repository statement changed.
+
+Validation for this checkpoint:
+
+- the preceding focused maintenance/architecture checkpoint remains 55 passed,
+  9 PostgreSQL-gated skips, and 1 existing third-party warning; it was not
+  rerun for this reliability-only phase;
+- combined pilot-contract/deployment/mutation-rehearsal validation: 572 passed;
+- complete reliability/PM9 selection: 762 passed, 11 PostgreSQL-gated skips;
+- runtime-environment characterization passed 73 tests against the original
+  owner and 80 after decomposition. The five original/post statement AST hashes
+  are `fd49066df233a2b0cbff9116b435a5608168023c308a5704ad12ac2c2cfbc0e8`,
+  `179ffaf93dafec10fa4656d6028cca18c6d73d60ee9ff3c3211be4d5d171f890`,
+  `a9a46437a97209ea930b4596191c4265bb8b5d18eae0404cb0c4458c0afe950b`,
+  `69e27d8440c91628bc4086a089d2f71335787136325e3b717888ec3bbb343645`,
+  and `4d5c777e671ee19b0fd21ea8c300e7dbcda85dbf1465978c949aa7038aa5080c`;
+- the first runtime test-authoring run was 72 passed and 1 failed because the
+  test treated the inclusive 128-character host-identifier boundary as invalid;
+  the expectation was corrected before production edits. One intermediate
+  extraction run exposed a removed backup-retention helper import; it was
+  restored immediately and the complete runtime suite returned to green before
+  the next capability moved;
+- release-record characterization passed 41 tests against the original owner
+  and 48 after decomposition. The first authoring run was 40 passed and 1
+  failed because reversing a one-element enabled-job fixture could not produce
+  a mismatch; the fixture was corrected before production edits. The five
+  original/post statement AST hashes are
+  `5c21bd9efa33018f5ebbef34c12154b7e45ad16d764fc4710d749df1fbd2102d`,
+  `6b2606bb85ee3158916f5e6bf68c89eddbedf72e69e55abfa377ce95d633179c`,
+  `d7a16f7b0759e63154141d84571c6483bb9936a1029d4507f2c6a90832602cc9`,
+  `6d4fe1575f6168f75e1a84a3f766079e6e0915a8ef36b6c0eb26e5b5a80a64dc`,
+  and `87fe2c20e1fe7abcfadca05890e74a406ccba7b3cad0073711f0c256504acff4`;
+- disk-capacity characterization passed 35 tests against the original owner and
+  35 after extraction; its original/post AST hash is
+  `574b9b434a7247e06d297336ccc007bcefad299efa81c629c26bdb8760904092`;
+- backup-artifact characterization passed 32 tests against the original owner
+  and 33 after the owner-binding guard. Its unchanged backup subgroups and
+  shared artifact-I/O primitives match at
+  `f6bd1a33094a244536984ab620cf52dad0a5c633d4b57ea88a672ba1e99bec52`
+  and `f799ac88000498b5133ea05c431341733bab39a82e9ce22a4261084a39f58319`.
+  The first original-owner run was 31 passed and 1 failed because the test used
+  the wrong established timezone error text; the expectation was corrected
+  before production edits. A per-call collaborator is the only intentional
+  body change and preserves the existing private index-publication failure seam
+  without mutable target-module globals;
+- attachment-archive characterization passed 24 tests against the original
+  owner and 25 after the owner-binding guard; its original/post capability AST
+  hash is
+  `20eda167b595e228f654483652a4874f9c3fe127e58a965ac8c876e057fa26a8`.
+  The first original-owner run was 23 passed and 1 failed because the test
+  omitted the documented restore-label directory; the expectation was corrected
+  before production edits;
+- load-safety characterization passed 70 tests against the original owner and
+  71 after the owner-binding guard. Contracts, metrics, and safety policy match
+  their original AST hashes at
+  `8b329144c39b33ebd70ea690bdfc92e383263926ece21d7cb6a7420c198ab7ce`,
+  `b63318d0ab63a718c39faa83abbbc70c0d9c20d574fa9e47bd293dedf9c3a83c`,
+  and `d2ec287a498977a350efbd9ccb1fc6bef6b9c9b223e8531a6bf4c332f3fa1b71`;
+- load-reporting characterization passed 78 tests against the original owner
+  and 79 after the owner-binding guard. Report projection and database-pool
+  normalization match at
+  `e32a7b4893c863148cc9fd908b92d4683379eaf99c0db4fb4b361bca7189aff9`
+  and `3e3525b2fd118f998e07e93c91cd3b2fd762e9baa28b941969dabd1f2f004e16`;
+- load-telemetry characterization passed 87 tests against the original owner
+  and 88 after the owner-binding guard; the original/post AST hash is
+  `5ebd8da84d50f76560e0a0303a1d58d39cc78dfda36a3b4c831a31360aec767d`.
+  The first post-move run exposed one omitted `Counter` import still owned by
+  `_summarize`; it was restored and the complete selection returned to green;
+- post-start preflight characterization passed 31 tests against the original
+  owner and 32 after the owner-binding guard; its original/post AST hash is
+  `b03bbadc698f075ccd927593c875bf7344caa4acb74d84f7cd345de71ed5a140`;
+- artifact-declaration characterization passed 88 tests against the original
+  owner and 89 after extraction; the original/post statement AST SHA-256 is
+  `380bfad3b763e1993c821ac7cab2b37e2b6e33c8938aeb6fcafcbc1596504169`;
+- service-topology characterization passed 96 tests against the original owner
+  and 98 after extraction; the original/post statement AST SHA-256 is
+  `283a0dca6f80d3e2a89b1ae6928488fe8638d819d64d8c6b2b92ed5698c48394`;
+- the first repository-contract test-authoring run was 49 passed and 1 failed
+  because the fixture used `None` as both JSON null and its default sentinel;
+  the fixture was corrected before production edits;
+- repository-contract characterization passed 50 tests against the original
+  implementation and 51 after extraction; the pre/post function AST SHA-256 is
+  identical at
+  `7353915b5401d2df81b483054ef5b5e29b57a93d3125d608f8ae11c4084c1120`;
+- the first storage test-authoring run was 90 passed and 1 failed because the
+  test incorrectly expected `/app/./data` to be rejected; the expectation was
+  corrected before production edits to preserve the existing normalized-path
+  behavior;
+- storage-declaration characterization passed 91 tests against the original
+  implementation before extraction and 92 after the import/dependency guard;
+  the pre/post function AST SHA-256 is identical at
+  `47d241df6a0d03c1483b275416cdd4b5c1081be7eafacd3ebc2cba4758ce4ba9`;
+- environment-declaration characterization passed 32 tests against the original
+  implementation before extraction and 33 after the import/dependency guard;
+- health-endpoint characterization passed 16 tests against the original
+  implementation before extraction and 17 after the import/dependency guard;
+- architecture-boundary validation: 7 passed; repository transaction ownership:
+  2 passed; documentation links: 1 passed;
+- full backend: 1107 passed, 87 skipped, 1 warning;
+- isolated PostgreSQL: 87 passed, 1107 deselected, 1 warning against local
+  `maintenance_copilot_test`;
+- Alembic `heads`, `current`, and `check`: clean at `20260726_0008` with no new
+  upgrade operations;
+- Ruff, changed-file format check, compileall, AST equivalence, import identity,
+  CLI help, documentation links, and `git diff --check`: passed;
+- frontend: typecheck passed, ESLint passed, 23 files/137 tests passed, and the
+  Next.js production build generated 32 pages/routes successfully;
+- development, test, and pilot Compose configuration checks passed.
+
+Final audit verdict: the approved behavior-preserving refactor is complete.
+Remaining large files are classified rather than left unaudited: PostgreSQL
+repositories are retained transaction owners with real concurrency/rollback
+proof; load and post-start files are retained stateful runner boundaries;
+deployment and mutation rehearsals are cohesive operator workflows;
+maintenance/ticket/inventory/API facades preserve compatibility over focused
+collaborators; dashboard/analytics paths are canonical entrypoints; and model or
+schema collections are declarative contracts. A future move requires a separate
+whole-workflow or whole-transaction characterization, not another line-count
+split.
+
+## Package-organization completion checkpoint — 2026-08-10
+
+This checkpoint supersedes the reliability package layout described above.
+The six required capability packages are present, and two additional bounded
+pilot packages make runtime policy and operational governance discoverable.
+Historical facades remain at `drills.py`, `load_harness.py`,
+`post_start_validation.py`, `profiles.py`, and the pilot `manifest.py`,
+`environment.py`, `release.py`, `runtime.py`, and `ownership.py` seams.
+Superseded flat implementation files, `pilot_contract/support.py`, and the
+transient `load/runner.py` owner are removed.
+
+Stateful and atomic boundaries retained by design:
+
+- `load/profile_workflow.py::run_profile` owns one complete request scheduling,
+  telemetry, deadline, cancellation, and thread-pool cleanup loop;
+- `load/step_workflow.py::run_step_load` owns one complete staged-load,
+  monitoring, stop-policy, cancellation, and stage-timeout loop;
+- `post_start/runner.py::run_post_start_validation` owns ordered authenticated
+  checks and unconditional logout/revocation/three-client cleanup;
+- `operator_drills/backup_artifacts.py` keeps lock, immutable pair publication,
+  verification, index advancement, and retention together;
+- `operator_drills/attachment_archives.py` keeps bounded archive format,
+  integrity verification, atomic publication, restore staging, and cleanup
+  together;
+- all PostgreSQL session, row-lock, idempotency, audit/outbox, commit, and
+  rollback owners remain in the four protected repositories.
+
+Tests now mirror capability ownership under `tests/reliability/`. The move and
+contract-dimension split preserved exactly 719 collected tests, and all 719
+pass. Focused checkpoints also passed: load/mutation/rotation/architecture 101,
+post-start/deployment/architecture 63, and pilot/architecture/transaction 564.
+Recursive architecture enforcement now covers all eight implementation
+packages and rejects reverse facade imports, cycles, superseded flat owners,
+generic dumping-ground names, module/package collisions, and executable changes
+to protected transaction repositories. The final repository-wide validation
+matrix is recorded in `docs/COMPANY_HANDOVER.md` after execution.

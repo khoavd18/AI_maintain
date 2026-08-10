@@ -222,6 +222,7 @@ class PostgresTicketRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể tạo ticket trong PostgreSQL.") from exc
 
+    # Atomic lifecycle mutation: ticket/SLA locks, events, audit, and outbox.
     def mutate_ticket(
         self,
         ticket_id: str,
@@ -597,6 +598,7 @@ class PostgresTicketRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể cập nhật SLA policy.") from exc
 
+    # Atomic escalation recording: uniqueness, SLA events, audit, and outbox.
     def record_escalations(
         self,
         events: list[dict[str, Any]],

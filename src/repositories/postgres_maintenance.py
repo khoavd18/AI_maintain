@@ -485,6 +485,7 @@ class PostgresMaintenancePlanningRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể cập nhật checklist.") from exc
 
+    # Atomic completion: work-order state, checklist/log intent, audit, and outbox.
     def complete_work_order(
         self,
         work_order_id: UUID,
@@ -677,6 +678,7 @@ class PostgresMaintenancePlanningRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể verify work order.") from exc
 
+    # Atomic generation: plan/asset locks, occurrence uniqueness, audit, and outbox.
     def generate_plan_occurrences(
         self,
         plan_id: UUID,

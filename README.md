@@ -968,12 +968,18 @@ lại các explicit seed commands sau reset nếu cần product demo data.
 Dedicated test database:
 
 ```powershell
-python -m src.database.create_test_database
-$env:TEST_DATABASE_URL = "postgresql+psycopg://<test_user>:<test_password>@localhost:5432/<database_name>_test"
-python -m pytest -m postgres
+.\scripts\test-postgres.ps1 -Action reset
+.\scripts\test-postgres.ps1 -Action test -Keep
 ```
 
 Tests từ chối database name không kết thúc `_test` và không mutate developer/demo database.
+
+The helper uses the isolated `maintenance_copilot_test` database on loopback
+port `15433`, runs migrations and `pytest -m postgres -q`, and accepts `-Full`
+for the complete suite. Tests reject database names that do not end in `_test`
+and must never mutate the developer/demo database. See
+[`docs/testing-postgresql.md`](docs/testing-postgresql.md) for the safety
+validator and manual URL requirements.
 
 ## Verification
 
@@ -1230,13 +1236,63 @@ docs/                 Scope, architecture, process, contracts và demo docs
 
 ## Current decomposition checkpoint
 
-The reliability pilot contract, API processed-data boundary, and RAG
-orchestration now use cohesive implementations behind preserved compatibility
-imports. The shared Copilot graph is composed by
-`src/application/copilot_factory.py`; canonical RAG code has no API reverse
-dependency. The first four frontend hotspots are split into feature-owned
-operation, mutation, response, and operations-table modules. PostgreSQL
-mutation repositories remain deliberately deferred so transaction, locking,
-idempotency, audit, and outbox behavior stays unchanged. Validation details and
-the one known pilot-settings test issue are recorded in
-[`REFACTOR_PLAN.md`](REFACTOR_PLAN.md).
+The current decomposition keeps `src/composition/copilot.py` as the shared
+Copilot composition root; `src/application/copilot_factory.py` is a historical
+compatibility import. Canonical RAG code has no API reverse dependency. The
+first four frontend hotspots remain feature-owned behind their historical
+component re-export paths.
+
+Ticket application ownership is explicit under
+`src/ticket_management/application/`: intake, assignment, named lifecycle
+actions, SLA administration/runtime, and escalation are collaborators behind
+the stable `TicketWorkflowService` facade.
+
+Maintenance application intent is now capability-owned under
+`src/maintenance_management/application/`: preventive plans, work-order
+planning, lifecycle/checklists, completion/verification, preventive generation,
+calendar/metrics reporting, templates, evidence, and read queries. The stable
+`MaintenancePlanningService` facade preserves all 34 public signatures and its
+historical module bindings. `PostgresMaintenancePlanningRepository` remains the
+sole transaction owner for row locks, optimistic versions, occurrence
+uniqueness, maintenance-log/asset-date coupling, audit/outbox writes,
+commit/rollback, and exception mapping. Inventory stock-changing families and
+the transaction-heavy PostgreSQL repository methods remain deliberately intact.
+
+The reliability pilot contract is organized by capability. Deployment
+declarations live under `pilot_contract/deployment_manifest/`; runtime
+environment checks live under `runtime_environment/`; release-record checks
+live under `release_record/`; deployment runtime/retry/recovery policy lives
+under `runtime_policy/`; and ownership, escalation, and limitation validation
+lives under `operational_governance/`. `manifest.py`, `environment.py`,
+`release.py`, `runtime.py`, and `ownership.py` preserve ordered orchestration or
+historical private bindings. The former broad `support.py` owner is gone;
+finding, document-shape/value/safety, path, and evidence contracts now have
+narrow names. FastAPI health routes, the PM7 runtime catalog, worker, and durable
+operations state are unchanged.
+
+The historical `src/reliability/drills.py` import surface is a 65-line facade
+over `operator_drills/`. The backup publication lock/index atomicity and
+attachment archive/restore integrity boundaries remain intact; no database or
+application record mutation moved.
+
+`load_harness.py` is an 81-line historical facade. Under `reliability/load/`,
+profile and step workflows each retain one complete scheduling/cancellation
+loop; request contracts, HTTP sampling, telemetry, safety, report projection,
+report storage, execution limits, and CLI wiring have explicit owners. Live
+stop state, deadlines, sampling, and HTTP order are unchanged.
+
+`post_start_validation.py` is a 33-line historical facade. The `post_start/`
+package separates no-network preflight, environment input, report contracts,
+HTTP/session helpers, response contracts, atomic evidence storage, and CLI
+wiring. Its 534-line runner deliberately retains the exact ordered checks and
+unconditional three-client logout/revocation cleanup as one stateful boundary.
+Transaction-heavy repositories remain complete atomic owners.
+
+Capability tests now mirror production under `tests/reliability/`; the
+organization/split preserved exactly 719 collected tests. Current validation
+evidence, including full backend and isolated PostgreSQL results, is recorded
+in `docs/COMPANY_HANDOVER.md`. See
+[`docs/application-services.md`](docs/application-services.md) and
+[`docs/backend-structural-inventory.md`](docs/backend-structural-inventory.md)
+for the ownership map; do not treat older milestone paragraphs as current
+validation evidence.

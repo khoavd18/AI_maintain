@@ -15,8 +15,10 @@ from .constants import (
 )
 
 from .decision import evaluate_pilot_decision, _has_external_pilot_blocked_classification
+from .document_safety import _validate_safe_document
 from .documents import load_json_document, manifest_sha256
 from .environment import _validate_environment
+from .findings import _add, _has_blocker, _ordered_findings
 from .manifest import _validate_manifest_structure
 from .ownership import _validate_limitations, _validate_ownership
 from .release import (
@@ -26,12 +28,6 @@ from .release import (
     _validate_service_reachability,
 )
 from .schemas import Finding, ValidationReport
-from .support import (
-    _validate_safe_document,
-    _add,
-    _has_blocker,
-    _ordered_findings,
-)
 
 
 def validate_deployment_manifest(
@@ -171,4 +167,3 @@ def validate_pilot_contract(
         else semantic_decision
     )
     return ValidationReport(decision, digest, ordered)
-

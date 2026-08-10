@@ -65,8 +65,11 @@ repository façade.
 ## Maintenance: `PostgresMaintenancePlanningRepository`
 
 Read/query implementation: `src/repositories/postgres/maintenance/queries.py`.
-Plan, checklist, work-order lifecycle, generation, completion, verification,
-and evidence mutations remain in the façade.
+Application validation and intent are composed by capability under
+`src/maintenance_management/application/`; the facade keeps the public seam and
+the PostgreSQL repository keeps every transaction seam. Extraction did not move
+any session, lock, optimistic version, idempotency, audit/outbox, commit,
+rollback, or exception-mapping responsibility.
 
 | Methods | Session/transaction owner | Reads, writes, locks, and idempotency | Audit/outbox and tests |
 |---|---|---|---|
@@ -78,11 +81,115 @@ and evidence mutations remain in the façade.
 | `generate_plan_occurrences` | One repository transaction | Locks the plan, checks the unique `(preventive_plan_id, due_date)` occurrence boundary, snapshots checklist items, advances the plan, and skips paused/retired cases under the documented policy | Generation is idempotent and audit/outbox remain atomic; concurrent generation tests cover it |
 | `create_work_order_attachment`, `delete_work_order_attachment` | One repository transaction | Writes/soft-deletes evidence metadata for an authorized work order; byte cleanup remains outside PostgreSQL | Audit is atomic; evidence security tests cover checksums, MIME/signature, soft deletion, and path secrecy |
 
+### Maintenance application boundary — 2026-08-09
+
+`MaintenancePlanningService` preserves all historical public methods and
+delegates application intent to these storage-neutral collaborators:
+
+- `PreventivePlanService`: create/update/pause/resume/archive plans;
+- `WorkOrderPlanningService`: create/corrective-create/update/assign;
+- `WorkOrderLifecycleService`: named transitions, checklist responses, cancel,
+  and reopen;
+- `WorkOrderCompletionService`: atomic-completion intent and independent
+  verification checks;
+- `PreventiveGenerationService`: bounded recurrence, dry-run, and per-plan
+  generation commands;
+- `WorkOrderReportingService`: read-only calendar and operational metrics;
+- `MaintenanceQueryService`: primitive reads, actor scoping, and linked-ticket
+  work orders.
+
+Template and evidence collaborators remain as previously extracted. Each
+collaborator receives explicit lookup, eligibility, normalization, recurrence,
+clock, and presentation callbacks; none imports FastAPI, SQLAlchemy, concrete
+PostgreSQL repositories, or composition modules. Static architecture tests
+enforce this direction.
+
+No PostgreSQL transaction moved. `create_plan` still calls
+`PostgresMaintenancePlanningRepository.create_plan` once, where the insert,
+flush, `maintenance_plan.created` audit, commit, rollback, and exception map
+remain together. Each update/pause/resume/archive command still calls
+`PostgresMaintenancePlanningRepository.update_plan` once, where the plan row is
+locked with `FOR UPDATE`, the expected version is checked, fields are flushed,
+ordered audit rows are written, and the transaction commits or rolls back as one
+unit. These plan commands create no outbox event. Work-order planning,
+lifecycle/checklist, completion/verification, and generation collaborators each
+still call the same single repository mutation used before extraction. Their
+work-order number allocation, plan/work-order/checklist locks, expected-version
+checks, maintenance-log and asset-date writes, occurrence uniqueness, audit and
+catalogued outbox writes, commit, rollback, and error mapping remain together.
+Preliminary application reads remain outside those mutation transactions exactly
+as before; reporting intentionally remains a composition of independent reads.
+
+Characterization lives in
+`tests/test_maintenance_plan_application_characterization.py`,
+`tests/test_work_order_planning_application_characterization.py`,
+`tests/test_work_order_lifecycle_characterization.py`,
+`tests/test_work_order_completion_characterization.py`,
+`tests/test_preventive_generation_characterization.py`, and
+`tests/test_work_order_reporting_characterization.py`. The isolated PostgreSQL
+selection passed 87 tests with 471 deselected and continues to cover stale
+versions, concurrent/idempotent generation, and atomic audit/outbox rollback.
+
 ## Operations: `PostgresOperationsRepository`
 
 Read/query implementation: `src/repositories/postgres/operations/queries.py`.
 Claim, lease renewal/recovery, delivery, retry/dead-letter, alert-cycle,
 notification mutation, and heartbeat writes remain in the façade.
+
+The deployment-manifest validators in
+`src/reliability/pilot_contract/deployment_manifest/jobs.py` and
+`deployment_manifest/health.py`, plus `deployment_manifest/environment.py` and
+`deployment_manifest/storage.py`, are explicitly non-transactional. They append
+deterministic findings to an in-memory list and do not read runtime environment
+values or mutate files, scheduled-job rows, leases, outbox events,
+notifications, worker heartbeats, or FastAPI route state. Storage containment
+retains the existing path-resolution check. Their extraction does not move any
+operation listed below.
+
+`src/reliability/pilot_contract/deployment_manifest/repository.py` is also
+non-transactional. It reads checked-in Compose, Dockerfile, and frontend package
+metadata plus application/schema constants in the existing order; it performs
+no file write, Git/subprocess/environment/network/database action, audit, or
+outbox operation.
+
+`deployment_manifest/artifacts.py` and the modules behind
+`deployment_manifest/topology.py` are deterministic and
+non-transactional. They return only copied declaration context needed by the
+next validator and do not access runtime environment, files, processes,
+networks, databases, workers, audit, or outbox state.
+
+The runtime environment capability modules are also non-transactional. They
+consume the caller-injected mapping and manifest in a fixed order. Storage path
+validation may resolve host paths for containment; none writes files, reads
+`os.environ`, or owns database, worker, audit, or outbox state.
+
+The five `release_record_*` capability modules are likewise non-transactional.
+They consume already loaded release/manifest/ownership/limitations values and
+append findings in the existing order. Runtime observation and reachability
+remain in `release.py`; no release-record capability mutates environment,
+filesystem, process, network, database, worker, audit, or outbox state.
+
+The focused reliability drill modules own filesystem safety boundaries, not
+database transactions. `backup_artifacts.py` retains one exclusive publication
+lock across immutable artifact/metadata creation, verification, and atomic
+validated-index replacement. `attachment_archives.py` retains bounded reads,
+checksummed archive publication, pre-restore verification, atomic staging
+publication, and failure cleanup. Neither changes attachment metadata,
+application records, scheduled jobs, audit rows, or outbox events.
+
+The extracted load contracts, metrics, safety, reporting, and telemetry modules
+own no database transaction. Telemetry performs the same fixed read-only HTTP
+observations; operations metrics are consumed as observations and never mutate
+jobs, executions, leases, outbox events, notifications, audit rows, or worker
+heartbeats. Deadline/cancellation and stop-state ownership remains in
+`load_harness.py`.
+
+Final retained-owner proof on 2026-08-09 passed 87 PostgreSQL tests with 1107
+deselected and the existing warning. Alembic `heads`, `current`, and `check`
+were clean at `20260726_0008`. Static ownership guards also assert that ten
+representative transaction-heavy commands still open their repository session
+and transaction alongside required lock/history/audit/outbox calls, while
+application capability modules acquire no sessions or row locks.
 
 | Methods | Session/transaction owner | Locks and durable state |
 |---|---|---|

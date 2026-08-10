@@ -293,3 +293,78 @@ application is complete; do not continue into maintenance except as the next
 explicit macro phase `MAINTENANCE_APPLICATION`.
 
 Continuation checkpoint 2026-08-08 SLA runtime: `src/ticket_management/application/sla_runtime_service.py` now owns SLA override selection, immutable policy/calendar snapshots, business-time deadline construction, first-response event intent, and read-time clock presentation. The facade preserves public compatibility; lifecycle and administration remain separate; escalation remains unmodified; and `PostgresTicketRepository` retains transaction/session/lock/version/audit/outbox/commit/rollback/error ownership. No frontend, API/RBAC, schema/migration, or transaction-family architecture changed.
+
+Continuation checkpoint 2026-08-09 maintenance/reliability: maintenance
+application decomposition is complete for the current public surface.
+`MaintenancePlanningService` preserves all 34 signatures, dependency seams, and
+historical module bindings while delegating preventive-plan commands,
+work-order planning, lifecycle/checklists, completion/verification, preventive
+generation, reporting, linked-ticket reads, templates, evidence, and primitive
+queries to capability-named collaborators under
+`src/maintenance_management/application/`. `PostgresMaintenancePlanningRepository`
+still owns every session, lock, optimistic version, number/occurrence uniqueness
+boundary, maintenance-log/asset-date write, audit/outbox write, commit/rollback,
+and exception map. Do not move a partial mutation family out of that repository.
+
+Pure reliability splits now own the closed deployment job catalog in
+`src/reliability/pilot_contract/deployment_manifest/jobs.py`, health endpoint declarations in
+`deployment_manifest/health.py`, and environment name/secret declarations in
+`deployment_manifest/environment.py`; `deployment_manifest/storage.py` owns allowed roots,
+logical paths, containment, container/configuration bindings, and backup
+retention. They do not replace runtime environment or storage ownership,
+FastAPI health routes, `src/operations/domain.py`, the PM7 worker, or durable
+PostgreSQL operations state. Checked-in Compose/Dockerfile/package binding lives
+in `deployment_manifest/repository.py`, artifact identity/release/version/image declarations
+live in `deployment_manifest/artifacts.py`, and closed service/port/volume topology lives
+under `deployment_manifest/topology.py`; `manifest.py` is the 31-line visible orchestrator.
+Artifact/topology characterization passed 184 tests against the original and
+187 after extraction. Runtime environment validation is a 27-line facade over
+security/database, network, release/image identity, bounded settings, and
+storage-path capability modules; its characterization passed 73 before and 80
+after decomposition. Release-record validation is a 163-line ordered facade
+over identity, evidence, gates, risks, and governance capability modules; its
+characterization passed 41 before and 48 after decomposition. Combined
+pilot/deployment/mutation-rehearsal passed 572; architecture boundaries passed
+3; full backend passed 979 with 87 skipped and
+one existing warning. Ruff,
+formatting, compileall, AST/import identity, CLI help, documentation links, and
+diff checks passed. PostgreSQL, Alembic, Compose, and frontend were not
+applicable to the manifest-only phase; do not re-label their preceding results
+as newly executed. The next phase is evidence-ranked characterization of the
+remaining reliability hotspots, and all transaction-heavy repository families
+remain deferred until separately protected.
+
+Continuation checkpoint 2026-08-09 reliability drills: the historical
+`src/reliability/drills.py` is a 65-line compatibility facade.
+`disk_capacity.py` owns injected capacity classification and cycle state;
+`backup_artifacts.py` owns immutable backup pair/index/retention behavior;
+`attachment_archives.py` owns bounded archive assessment/inspection/restore;
+`artifact_io.py` owns their shared path/sync/checksum primitives. Existing
+public imports, interrupted-rename binding, and validated-index failure
+injection remain compatible. The complete reliability/PM9 selection passed 688
+with 11 skips, architecture passed 4, and the full backend passed 1028 with 87
+skipped and the one existing warning. No database transaction, application
+record, worker, audit, or outbox ownership changed. The next safe capability is
+pure load-harness safety/telemetry characterization; both live runners remain
+retained until stage timing and stop-order tests prove a move.
+
+Package-organization checkpoint 2026-08-10: reliability implementation lives
+under `operator_drills/`, `load/`, `post_start/`, and the pilot-contract
+`deployment_manifest/`, `runtime_environment/`, `release_record/`,
+`runtime_policy/`, and `operational_governance/` packages. Historical modules
+remain thin import, orchestration, or CLI facades. The broad pilot
+`support.py` and transient `load/runner.py` owners are removed. Load profile
+and step scheduling loops remain whole in `load/profile_workflow.py` and
+`load/step_workflow.py`; the ordered authenticated workflow and unconditional
+three-client cleanup remain whole in `post_start/runner.py`. Do not split a
+partial scheduling, cancellation, filesystem-publication, or cleanup boundary.
+
+Reliability tests mirror these packages under `tests/reliability/`; the moved
+and split capability collection remains exactly 719 tests. Recursive
+architecture guards include all implementation packages, reject facade reverse
+imports, cycles, superseded flat owners, generic dumping-ground names, and
+module/package collisions, and pin executable ASTs for the four protected
+transaction repositories. Final full validation for this checkpoint must be
+read from `docs/COMPANY_HANDOVER.md`; do not relabel older dated results as a
+new run. Future transaction or stateful-runner moves require a separately
+characterized whole-boundary change.

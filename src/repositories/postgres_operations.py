@@ -431,6 +431,7 @@ class PostgresOperationsRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể khôi phục execution lease.") from exc
 
+    # Lease claim transaction: skip-locked selection and durable ownership transition.
     def claim_execution(
         self,
         *,
@@ -501,6 +502,7 @@ class PostgresOperationsRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể claim background job.") from exc
 
+    # Completion transaction: running-lease lock, terminal state, and durable effects.
     def complete_execution(
         self,
         execution_id: UUID,
@@ -1064,6 +1066,7 @@ class PostgresOperationsRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể khôi phục outbox lease.") from exc
 
+    # Outbox lease claim transaction: skip-locked selection and delivery ownership.
     def claim_outbox_event(
         self,
         *,

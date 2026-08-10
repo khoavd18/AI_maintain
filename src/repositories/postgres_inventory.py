@@ -461,6 +461,7 @@ class PostgresInventoryRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể ghi stock movement.") from exc
 
+    # Atomic transfer: both positions, paired movements, idempotency, and audit stay together.
     def transfer_stock(
         self,
         values: dict[str, Any],
@@ -700,6 +701,7 @@ class PostgresInventoryRepository:
     def get_requirement(self, requirement_id: UUID) -> StoredRecord | None:
         return self.queries.get_requirement(requirement_id)
 
+    # Atomic reservation: position lock, reservation event, requirement state, and audit.
     def reserve_stock(
         self,
         requirement_id: UUID,
@@ -1153,6 +1155,7 @@ class PostgresInventoryRepository:
         except (OperationalError, SQLAlchemyError) as exc:
             raise StorageUnavailableError("Không thể replace reservation.") from exc
 
+    # Atomic issue: reservation/requirement locks, movements, issue rows, audit, and outbox.
     def issue_stock(
         self,
         work_order_id: UUID,

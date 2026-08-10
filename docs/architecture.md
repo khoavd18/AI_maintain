@@ -108,7 +108,9 @@ flowchart LR
 
 1. Alembic tạo và version schema; API không gọi `metadata.create_all()`.
 2. `src/ingestion/load_data.py` validate full synthetic dataset, tạo deterministic location hierarchy/defaults rồi import assets, tickets và logs trong một transaction.
-3. `src/repositories/contracts.py` định nghĩa storage-neutral operations.
+3. `src/repositories/contracts/` owns the storage-neutral protocol
+   implementations; the preserved Python import surface is
+   `src.repositories.contracts`.
 4. `src/repositories/postgres/` and the historical repository façades (`postgres_assets.py`, `postgres_tickets.py`, `postgres_maintenance.py`, `postgres_inventory.py`, and `postgres_operations.py`) thực thi từng bounded context, dùng PostgreSQL constraints/sequence/row locks và không được gọi trực tiếp từ routes. Read/query capabilities are composed under the domain subpackages; transaction-sensitive mutations remain owned by the façades.
 5. `src/api/services/compatibility.py`, các canonical domain services và `src/operations/service.py` giữ lifecycle, priority/SLA, chronology, recurrence, stock-control, completion, verification và operator rules.
 6. FastAPI routes chỉ phụ thuộc service; route không chọn storage backend.
@@ -122,10 +124,15 @@ SQLAlchemy models are owned by `src/database/models/` and imported through the
 compatibility package `src.database.models`; metadata snapshots and Alembic
 checks are required to remain identical. PostgreSQL read/query implementations
 are composed in `src/repositories/postgres/{inventory,maintenance,tickets,operations}/`.
-Inventory catalogue and evidence mutations have real component implementations,
-while stock-control, maintenance lifecycle, ticket lifecycle/SLA, and PM7
-claim/delivery mutations remain in their original repositories until their full
-transaction maps have method-level characterization coverage.
+Inventory catalogue and evidence mutations have real component implementations.
+Ticket intake, assignment, named lifecycle actions, SLA administration/runtime,
+and escalation have storage-neutral application collaborators while
+`PostgresTicketRepository` retains mutation transactions. Maintenance now has
+capability collaborators for plans, work-order planning/lifecycle/completion,
+preventive generation, reporting, templates, evidence, and queries;
+`PostgresMaintenancePlanningRepository` retains every mutation transaction.
+Stock-control and PM7 claim/delivery mutations remain in their canonical
+transaction owners.
 
 ## Background Jobs, Outbox Và Notifications
 
@@ -722,7 +729,7 @@ Xem [pilot deployment](pilot_deployment.md),
 [operational ownership](operational_ownership.md) và
 [PM9 release note](releases/product_milestone_9.md).
 
-## Refactoring seam checkpoint — 2026-08-08
+## Historical refactoring seam checkpoint — 2026-08-08
 
 The current backend preserves PostgreSQL as the transaction owner and keeps
 compatibility facades stable. Audit context and ticket reference contracts are
@@ -731,3 +738,53 @@ application service; Copilot and reliability environment construction have
 explicit dependency direction. Assignment and intake orchestration are
 extracted behind the ticket facade. PostgreSQL, security, worker, RAG/LLM, API, and frontend
 contracts remain unchanged.
+
+## Current refactoring seam checkpoint — 2026-08-09
+
+The stable service facades still define the route/CLI/worker compatibility
+surface, while maintenance application intent is capability-owned under
+`src/maintenance_management/application/`. The PostgreSQL repository remains
+the sole owner of work-order/plan locks, optimistic versions, idempotency,
+maintenance-log and asset-date coupling, audit/outbox, and commit/rollback.
+`tests/test_architecture_boundaries.py` prevents the maintenance collaborators
+from importing FastAPI, SQLAlchemy, concrete PostgreSQL repositories,
+composition, or the facade itself.
+
+Reliability deployment-manifest validation lives under
+`pilot_contract/deployment_manifest/`: artifact identity, environment
+declarations, health declarations, the closed job catalog, repository bindings,
+storage, and service/port/volume topology have direct owners. `topology.py` is
+the ordered facade over its service, port, and volume validators. Runtime
+environment checks live under `runtime_environment/`, release-record checks
+under `release_record/`, runtime/retry/recovery policy under `runtime_policy/`,
+and ownership/escalation/limitation validation under
+`operational_governance/`. Narrow root primitives own findings, document
+shape/value/safety, paths, and evidence values; no broad `support.py` owner
+remains. These validators are deterministic and non-transactional.
+`manifest.py` remains the 31-line orchestrator,
+FastAPI remains the serving/health boundary, `src/operations/domain.py` and the
+single PM7 worker remain the runtime job authority, and durable PostgreSQL
+operations state remains authoritative.
+
+Operator reliability drills preserve `src/reliability/drills.py` as a 65-line
+compatibility facade. `disk_capacity.py`, `backup_artifacts.py`, and
+`attachment_archives.py` are the capability owners; `artifact_io.py` owns the
+path-safe durability primitives already shared by the two artifact capabilities.
+The backup lock/immutable-pair/index boundary and attachment bounded-streaming,
+atomic-publication, staged-restore boundary are unchanged. These modules do not
+import application, repository, database, HTTP, or composition layers.
+
+`load_harness.py` is the historical import/CLI facade over `reliability/load/`.
+The profile and step workflows each retain one complete stateful scheduling and
+cancellation loop. Request contracts, HTTP sampling, execution limits, numeric
+normalization, stop policy, allow-listed report projection, report storage, and
+the fixed read-only API observer have explicit modules. None imports
+application, database, repository, or composition layers.
+
+Authenticated post-start validation is organized under `post_start/` into
+preflight, environment input, report contracts, HTTP/session helpers, response
+contracts, evidence storage, CLI, and runner modules. `post_start_validation.py`
+is the historical facade. The runner retains HTTP ordering, access/refresh token
+state, three-client lifetime, and unconditional session revocation/cleanup.
+Transaction-heavy repositories remain the sole owners of database sessions,
+row locks, audit/outbox coupling, and commit/rollback.

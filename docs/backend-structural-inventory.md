@@ -2,12 +2,101 @@
 
 Inventory date: 2026-08-06. This is a source-level maintainability inventory
 for production Python under `src/`; generated caches, tests, and frontend files
-are outside its scope. Line counts and the largest class/function were
-calculated from the current worktree with the Python AST. A large file is not
-automatically a defect: transaction ownership, declarative models, and public
-compatibility seams are retained when extraction would obscure a contract.
+are outside its scope. The ranked findings and first register below are
+historical baseline measurements. A current-state addendum follows and
+supersedes ownership statements that changed during later bounded phases.
+Line counts and the largest class/function were calculated from the worktree
+with the Python AST. A large file is not automatically a defect: transaction
+ownership, declarative models, and public compatibility seams are retained when
+extraction would obscure a contract.
 
-## Ranked findings
+## Current-state addendum — 2026-08-10
+
+The ticket application boundary is now characterized through intake, assignment,
+the eight named lifecycle actions, SLA administration, SLA runtime, and
+escalation. Their focused collaborators live under
+`src/ticket_management/application/`; `TicketWorkflowService` remains the
+compatibility facade, and `PostgresTicketRepository` remains the transaction
+owner. Priority mutation, bootstrap, and legacy adapters are intentionally still
+facade responsibilities.
+
+Maintenance application intent is now decomposed behind the unchanged
+`MaintenancePlanningService` facade: preventive-plan commands, work-order
+planning, lifecycle/checklists, completion/verification, preventive generation,
+calendar/metrics reporting, linked-ticket reads, templates, evidence, and
+primitive queries each have capability-named owners under
+`src/maintenance_management/application/`. The facade is now 975 lines rather
+than the historical 1,559-line baseline and preserves all 34 method signatures
+plus seven historical module bindings characterized by tests.
+`PostgresMaintenancePlanningRepository` still owns every session, row lock,
+optimistic-version check, occurrence uniqueness boundary, maintenance-log and
+asset-date write, audit/outbox write, commit/rollback, and exception map. Shared
+validation and the private legacy next-maintenance-date helper remain in the
+facade because extracting tiny generic helpers would reduce discoverability.
+
+Pilot-contract ownership is expressed through `deployment_manifest/`,
+`runtime_environment/`, `release_record/`, `runtime_policy/`, and
+`operational_governance/`. `manifest.py` is a 31-line ordered orchestrator;
+`environment.py` is 27 lines; `runtime.py` is 21 lines; `ownership.py` is a
+6-line compatibility facade; and `release.py` retains only runtime observation,
+reachability, and final-observation concerns. The deployment topology facade is
+20 lines over service, port, and volume validators. The broad `support.py`
+owner is removed; findings, document shapes/values/safety, paths, and evidence
+values have narrow owners. All are deterministic and non-transactional.
+
+The historical 1,420-line `reliability/drills.py` is a 65-line compatibility
+facade over the `operator_drills/` package: disk capacity, 603-line backup
+artifact, and 637-line attachment archive owners. `artifact_io.py` owns the
+path, sync, and checksum primitives shared by both filesystem capabilities;
+`contracts.py` owns their opaque operator-label contract. The split preserves
+the backup lock/immutable-pair/validated-index boundary, bounded attachment
+streaming and staged restore cleanup, public imports, and existing private crash
+injection seams. No application or PostgreSQL mutation moved.
+
+`load_harness.py` is an 81-line historical facade. `load/profile_workflow.py`
+(535 physical lines) retains the complete 487-line request scheduling loop;
+`load/step_workflow.py` (596 physical lines) retains the complete 386-line
+staged-load loop. Request contracts, HTTP sampling, execution limits,
+reporting/storage, safety, and telemetry are separate. `post_start_validation.py` is 33 lines;
+`post_start/runner.py` is 585 physical lines and retains the 534-line ordered
+authentication/session/unconditional-cleanup workflow. Deployment rehearsal
+(1,188) and mutation rehearsal (1,040) remain cohesive operator workflows.
+
+Moved public dataclasses and exceptions intentionally report their canonical
+capability-package owners through `__module__`; the historical facade
+attributes remain the same class objects. Historical pickle global lookup
+through those facade attributes therefore remains valid, while new pickles use
+the canonical package paths. Existing exact report-serialization and dataclass
+representation tests remain authoritative; no duplicate class or forced
+historical `__module__` assignment is introduced.
+
+The relevant tests mirror production under `tests/reliability/`. The move and
+contract-dimension split preserved exactly 719 collected tests; eight additive
+facade/metadata compatibility cases bring the current capability tree to 727,
+all passing. No test module exceeds 500 lines. Recursive architecture checks
+now include all eight implementation packages, resolve absolute and relative
+imports, and reject reverse facade imports, cycles, superseded flat owners,
+generic names, module/package collisions, and protected transaction-repository
+AST changes. Final repository-wide validation is in
+`docs/COMPANY_HANDOVER.md`. Historical tables and totals below are not evidence
+for the current worktree.
+
+### Current reliability large-boundary register
+
+| File / function | Lines | State or side-effect owner | Retention evidence |
+|---|---:|---|---|
+| `deployment_rehearsal.py` / `run_deployment_rehearsal` | 1,188 / 288 | One explicit Compose rehearsal lifecycle, evidence stream, and unconditional cleanup | Cohesive operator workflow; `tests/test_deployment_rehearsal.py` protects ordering and cleanup. |
+| `mutation_rehearsal.py` / `run_mutation_rehearsal` | 1,040 / 143 | One explicit API mutation rehearsal and redacted evidence report | No function exceeds 150 lines; scenario helpers remain colocated with the closed rehearsal catalog; `tests/test_pm9_mutation_rehearsal.py` protects it. |
+| `load/profile_workflow.py` / `run_profile` | 535 / 487 | HTTP client, thread pool, pending futures, telemetry cadence, deadline, cancellation, and final summary for one profile | Splitting the loop would divide live stop state; load workflow and runtime-stop suites protect it. |
+| `load/step_workflow.py` / `run_step_load` | 596 / 386 | Ordered stages, injected monitor cadence, stage deadlines, cancellation, and degradation selection | One staged-load state machine; step-workflow and safety-projection suites protect it. |
+| `post_start/runner.py` / `run_post_start_validation` | 585 / 534 | Ordered authenticated checks, three clients, token rotation, and unconditional logout/revocation cleanup | One failure/cleanup boundary; post-start runner tests exercise partial failure and cleanup. |
+| `operator_drills/backup_artifacts.py` / `_create_atomic_backup_artifact` | 603 / 119 | Filesystem lock, immutable pair publication, verification, atomic index advance, and retention | One atomic publication protocol; backup artifact/protocol suites protect crash and writer-failure seams. |
+| `operator_drills/attachment_archives.py` / `create_attachment_archive` | 637 / 97 | One archive format, bounded streaming, integrity, atomic publication, restore staging, and cleanup | Archive and restore share integrity/staging invariants; attachment suites protect traversal, corruption, and cleanup. |
+| `graduation_demo_smoke.py` / `run_smoke` | 459 / 285 | One explicit bounded demo smoke sequence | File is below 500 lines; retaining the ordered runner avoids a forwarding chain. |
+| `secret_rotation.py` / `run_synthetic_signing_key_rotation` | 225 / 151 | One synthetic key-rotation rehearsal and rollback observation | Borderline size is one stateful rehearsal; secret-rotation tests protect it. |
+| `release_record/identity.py` / `_validate_release_record_identity` | 166 / 152 | Pure ordered identity/manifest-summary finding accumulation | No side effects and one contract dimension; identity-order tests protect exact findings, so another split is unjustified. |
+
+## Historical ranked findings — 2026-08-06
 
 | Rank | Area | Evidence | Decision | Safe destination / next action |
 |---|---|---|---|---|
@@ -20,13 +109,14 @@ compatibility seams are retained when extraction would obscure a contract.
 | Medium | Declarative/schema collections | Inventory/ticket/maintenance models and API/inventory schemas exceed 500 lines but are declarative or contract collections. | Intentionally retain; splitting would reduce discoverability without a bounded responsibility. | Change only with explicit schema/contract review and metadata checks. |
 | Low | Canonical analytics/import scripts | Feature, risk, ingestion validation/load, and data generation modules are 512–860 lines but expose canonical batch entrypoints. | Retain canonical paths; no duplicate wrappers. | Only extract pure helpers if formula/output characterization justifies it. |
 
-## Complete large-file register
+## Historical large-file register — 2026-08-06
 
-The table records every `src/**/*.py` file over 500 lines in the current
-worktree. `class` is the longest class (`lines/public methods`); `function` is
-the longest function. `retain` means the file is deliberately kept at its
-current boundary for this continuation; `stage 5/6/later` identifies the next
-bounded refactor opportunity.
+The historical table below records every `src/**/*.py` file over 500 lines in
+the 2026-08-06 baseline worktree. `class` is the longest class (`lines/public
+methods`); `function` is the longest function. `retain` means the file was
+deliberately kept at that checkpoint; `stage 5/6/later` identifies the then-next
+bounded refactor opportunity. Consult the current-state addendum above for
+ownership that has since changed.
 
 | File | Lines | Largest class | Largest function | Responsibility / decision |
 |---|---:|---|---|---|
@@ -93,7 +183,7 @@ The AST/import review also found these confirmed or bounded findings:
   require characterization and are lower-value than the contract/principal
   seams.
 
-## Current safe checkpoint
+## Historical checkpoint — current safe checkpoint — 2026-08-06
 
 Phase A moved `CurrentUser` to `src/security/principal.py`; the historical
 `src.security.service.CurrentUser` import remains an identity-preserving
@@ -114,6 +204,9 @@ The next recommended phase is security characterization followed by one
 bounded extraction.
 
 ## Regenerated current register — 2026-08-08
+
+> Historical register captured on 2026-08-08; the 2026-08-09 current-state
+> addendum above supersedes its ownership wording and line counts.
 
 The following register was regenerated from the current `src/**/*.py` AST after
 the seam and assignment changes. Counts include the recovered worktree and are
@@ -153,7 +246,7 @@ retained and are not god files solely because of line count. Transaction-heavy
 repositories still own one session, lock order, idempotency, audit/outbox, and
 commit sequence per command.
 
-## Current dependency-cycle inventory
+## Historical checkpoint — dependency-cycle inventory — 2026-08-08
 
 Import-time smoke imports are green. The remaining directed edges are explicit
 compatibility seams only: historical builder modules delegate to composition,
@@ -164,7 +257,7 @@ implementation composes itself; deployment and post-start validation share
 only `environment_loader.py`. The API facade/routers cycle is the intentional
 compatibility router seam.
 
-## Current decisions
+## Historical checkpoint — current decisions — 2026-08-08
 
 Assignment, intake, and lifecycle are the completed ticket application
 extractions in this checkpoint. SLA runtime snapshot/override, escalation,
@@ -179,7 +272,7 @@ skipped, and isolated PostgreSQL 87 passed/421 deselected. The only warning is
 the existing FastAPI/Starlette-httpx deprecation. The next bounded backend
 phase is ticket SLA-runtime characterization; escalation remains deferred.
 
-## Ticket SLA runtime boundary - 2026-08-08
+## Historical checkpoint — ticket SLA runtime boundary — 2026-08-08
 
 `src/ticket_management/application/sla_runtime_service.py` now owns SLA override intent, immutable policy/calendar snapshots and deadlines, first-response events, and read-time clock presentation. `TicketWorkflowService` remains compatible, lifecycle remains in `lifecycle_service.py`, administration remains in `sla_service.py`, escalation remains retained, and `PostgresTicketRepository` retains all transaction mechanics.
 

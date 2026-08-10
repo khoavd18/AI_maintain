@@ -190,12 +190,9 @@ Pure/configuration-focused batch:
 
 ```powershell
 python -m pytest `
-  tests/test_pilot_contract.py `
+  tests/reliability `
   tests/test_deployment_rehearsal.py `
-  tests/test_pm9_post_start_validation.py `
   tests/test_backup_schedule.py `
-  tests/test_pm9_load_harness.py `
-  tests/test_pm9_drills.py `
   tests/test_pm9_mutation_rehearsal.py `
   tests/test_pm9_secret_rotation.py `
   tests/test_storage_configuration.py `

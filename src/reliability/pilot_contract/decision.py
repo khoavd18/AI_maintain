@@ -21,16 +21,15 @@ from .constants import (
 )
 
 from .documents import load_json_document, manifest_sha256
-from .redaction import redact_release_record
-from .support import (
-    _ownership_ready,
-    _critical_limitations_accepted,
+from .document_shapes import _list_of_mappings, _mapping
+from .document_values import _non_placeholder_text
+from .evidence_values import _valid_evidence_links
+from .operational_governance.state import (
     _condition_is_bounded,
-    _valid_evidence_links,
-    _non_placeholder_text,
-    _mapping,
-    _list_of_mappings,
+    _critical_limitations_accepted,
+    _ownership_ready,
 )
+from .redaction import redact_release_record
 
 
 def _has_external_pilot_blocked_classification(record: Mapping[str, Any]) -> bool:
@@ -278,5 +277,3 @@ def generate_release_record(
         redacted, ownership_document, limitation_document
     )
     return redacted
-
-
