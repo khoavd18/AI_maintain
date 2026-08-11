@@ -322,10 +322,18 @@ def validate_dataset(dataset_dir: Path) -> dict[str, object]:
     return _final_report(dataset_dir, findings, observed_counts)
 
 
+def _write_canonical_report(path: Path, content: str) -> None:
+    canonical_content = content.replace("\r\n", "\n").replace("\r", "\n")
+    path.write_bytes(canonical_content.encode("utf-8"))
+
+
 def write_reports(report: dict[str, object], dataset_dir: Path) -> None:
     json_path = dataset_dir / "validation_report.json"
     markdown_path = dataset_dir / "validation_report.md"
-    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_canonical_report(
+        json_path,
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+    )
     findings = report.get("findings") or []
     lines = [
         "# Phase 2 Dataset Validation Report",
@@ -357,7 +365,7 @@ def write_reports(report: dict[str, object], dataset_dir: Path) -> None:
             "This validation checks package structure, traceability, projection consistency, and obvious leakage. It does not approve maintenance content or establish field accuracy.",
         ]
     )
-    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_canonical_report(markdown_path, "\n".join(lines) + "\n")
 
 
 ValidationErrorCallback = Callable[[str, str], None]
