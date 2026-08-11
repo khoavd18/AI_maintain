@@ -265,6 +265,15 @@ def fallback_response(
             "Loại thiết bị trong câu hỏi không khớp thiết bị đã chọn. "
             "Hãy xác nhận lại thiết bị hoặc loại thiết bị cần tra cứu."
         ),
+        "model_context_mismatch": (
+            "Mã model trong câu hỏi hoặc tài liệu không khớp model của thiết bị đã chọn. "
+            "Copilot không sử dụng bằng chứng khác model; hãy xác nhận nhãn máy và tài liệu áp dụng."
+        ),
+        "parameter_confirmation_required": (
+            "Yêu cầu thông số kỹ thuật chính xác còn thiếu điều kiện áp dụng cần thiết. "
+            "Copilot không suy đoán mô-men, cấp dầu hoặc thông số an toàn; hãy xác nhận "
+            "nhãn máy, kích thước và đúng manual với người có thẩm quyền."
+        ),
         "prompt_injection": (
             "Câu hỏi chứa chỉ thị cố gắng thay đổi quy tắc hoặc truy xuất cấu hình nội bộ."
         ),

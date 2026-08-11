@@ -238,6 +238,7 @@ class MaintenanceCopilot:
             filters=prepared.filters,
             relaxable_filters=prepared.relaxable_filters,
             min_relevant_documents=self.generation_config.min_relevant_documents,
+            applicability=prepared.applicability,
         )
         if diagnostics is not None:
             diagnostics.relaxation_steps = list(retrieval.relaxation_steps)

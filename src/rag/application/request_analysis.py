@@ -6,7 +6,9 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from src.rag.adapters.asset_context import AssetContextProvider
+from src.rag.applicability import ApplicabilityConstraint, build_applicability_constraint
 from src.rag.conversation import ConversationContext, parse_conversation_context
+from src.rag.evidence_boundary import missing_exact_parameter_context
 from src.rag.query_analysis import (
     QueryAnalysis,
     QueryAnalyzer,
@@ -29,6 +31,7 @@ class PreparedCopilotRequest:
     asset_context: dict[str, Any] | None
     filters: dict[str, str]
     relaxable_filters: frozenset[str]
+    applicability: ApplicabilityConstraint | None
     retrieval_query: str | None
     early_status: str | None = None
 
@@ -140,6 +143,26 @@ class RequestAnalysisService:
             }.items()
             if relaxable
         )
+        applicability = build_applicability_constraint(normalized_question, asset_context)
+        guard_status = None
+        if applicability.question_conflicts_with_selected_model:
+            guard_status = "model_context_mismatch"
+        elif missing_exact_parameter_context(normalized_question):
+            guard_status = "parameter_confirmation_required"
+        if guard_status:
+            return PreparedCopilotRequest(
+                normalized_question=normalized_question,
+                asset_id=asset_id,
+                conversation=effective_conversation,
+                pre_analysis=pre_analysis,
+                analysis=analysis,
+                asset_context=asset_context,
+                filters=filters,
+                relaxable_filters=relaxable_filters,
+                applicability=applicability,
+                retrieval_query=None,
+                early_status=guard_status,
+            )
         if analysis.status != "supported":
             return PreparedCopilotRequest(
                 normalized_question=normalized_question,
@@ -150,6 +173,7 @@ class RequestAnalysisService:
                 asset_context=asset_context,
                 filters=filters,
                 relaxable_filters=relaxable_filters,
+                applicability=applicability,
                 retrieval_query=None,
                 early_status=analysis.status,
             )
@@ -171,6 +195,7 @@ class RequestAnalysisService:
             asset_context=asset_context,
             filters=filters,
             relaxable_filters=relaxable_filters,
+            applicability=applicability,
             retrieval_query=retrieval_query,
         )
 
@@ -192,6 +217,7 @@ class RequestAnalysisService:
             asset_context=None,
             filters={},
             relaxable_filters=frozenset(),
+            applicability=None,
             retrieval_query=None,
             early_status=status,
         )

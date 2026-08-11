@@ -66,7 +66,7 @@ class AssetContextQueryService:
         """Return the backward-compatible context consumed by the Copilot."""
 
         self.snapshot.ensure_analytics_current()
-        self.projections.get_asset(asset_id)
+        asset_profile = self.projections.get_asset(asset_id)
         risk_history = self.snapshot.risks[self.snapshot.risks["asset_id"] == asset_id].sort_values(
             "date", ascending=False
         )
@@ -81,6 +81,7 @@ class AssetContextQueryService:
         )
         return {
             "asset_id": asset_id,
+            "asset_profile": asset_profile,
             "latest_risk": latest_risk,
             "recent_anomalies": _records(anomaly_history.head(limit)),
             "recent_features": _records(feature_history.head(limit)),

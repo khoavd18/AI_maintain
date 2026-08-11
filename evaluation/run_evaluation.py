@@ -64,6 +64,26 @@ class EvaluationConversationSequence:
     turns: tuple[EvaluationConversationTurn, ...]
 
 
+@dataclass(frozen=True)
+class EvaluationBoundaryCase:
+    """One manual-review case executed outside retrieval ranking metrics."""
+
+    id: str
+    question: str
+    expected_status: str
+    selected_asset_id: str
+    selected_asset_type: str
+    manufacturer: str
+    model_scope: str
+
+
+_BOUNDARY_STATUS_BY_BEHAVIOR = {
+    "clarify_before_answer": "parameter_confirmation_required",
+    "refuse_model_mismatch_and_request_source": "model_context_mismatch",
+    "insufficient_evidence_request_engine_manual": "parameter_confirmation_required",
+}
+
+
 def load_questions(path: Path = DEFAULT_DATASET) -> list[EvaluationQuestion]:
     questions: list[EvaluationQuestion] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -130,6 +150,35 @@ def load_conversation_sequences(
     if not sequences:
         raise ValueError("Conversation sequence dataset is empty.")
     return sequences
+
+
+def load_boundary_cases(path: Path) -> list[EvaluationBoundaryCase]:
+    """Load manual-only safety boundaries without adding them to retrieval recall."""
+
+    cases: list[EvaluationBoundaryCase] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+            if bool(value["runner_eligible"]):
+                continue
+            profile = value["asset_profile"]
+            expected_status = _BOUNDARY_STATUS_BY_BEHAVIOR[str(value["expected_behavior"])]
+            cases.append(
+                EvaluationBoundaryCase(
+                    id=str(value["case_id"]),
+                    question=str(value["question"]),
+                    expected_status=expected_status,
+                    selected_asset_id=str(profile["asset_profile_id"]),
+                    selected_asset_type=str(profile["asset_type"]),
+                    manufacturer=str(profile["manufacturer"]),
+                    model_scope=str(profile["model_scope"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Invalid boundary evaluation row at line {line_number}.") from exc
+    return cases
 
 
 def build_in_memory_retrievers(documents_path: Path = RAW_DOCUMENT_FILE) -> dict[str, Retriever]:
@@ -570,6 +619,51 @@ def evaluate_conversation_sequences(
     }
 
 
+def evaluate_boundary_cases(
+    cases: list[EvaluationBoundaryCase],
+    retriever: Retriever,
+) -> dict[str, Any]:
+    """Execute manual-review safety routes without changing retrieval denominators."""
+
+    copilot = MaintenanceCopilot(
+        _EvaluationBoundaryAssetContextService(cases),
+        retriever,
+        generation_config=CopilotGenerationConfig(enabled=False),
+    )
+    matched_total = 0
+    isolated_total = 0
+    results: list[dict[str, Any]] = []
+    for case in cases:
+        response = copilot.ask(
+            case.question,
+            asset_id=case.selected_asset_id,
+            request_id=f"evaluation-boundary-{case.id}",
+        )
+        matched = response.retrieval_status == case.expected_status
+        evidence_isolated = not response.sources and not response.retrieved_chunks
+        matched_total += int(matched)
+        isolated_total += int(evidence_isolated)
+        results.append(
+            {
+                "id": case.id,
+                "expected_status": case.expected_status,
+                "observed_status": response.retrieval_status,
+                "fallback_reason": response.fallback_reason,
+                "matched_expectation": matched,
+                "evidence_isolated": evidence_isolated,
+                "safety_warning_present": bool(response.safety_notice),
+            }
+        )
+    return {
+        "case_count": len(cases),
+        "engineering_guard_accuracy": _ratio_or_none(matched_total, len(cases)),
+        "evidence_isolation_accuracy": _ratio_or_none(isolated_total, len(cases)),
+        "sme_approval_accuracy": None,
+        "sme_approval_reason": "All manual-review cases remain pending qualified SME review.",
+        "cases": results,
+    }
+
+
 def run_evaluation(
     *,
     questions_path: Path,
@@ -581,9 +675,16 @@ def run_evaluation(
     dataset_id: str | None = None,
     corpus_name: str | None = None,
     dataset_limitations: list[str] | None = None,
+    boundary_cases_path: Path | None = None,
+    provenance_type: str | None = None,
+    approval_state: str | None = None,
+    readiness: str | None = None,
+    total_case_count: int | None = None,
+    manual_review_only_case_count: int | None = None,
 ) -> dict[str, Any]:
     questions = load_questions(questions_path)
     conversation_sequences = load_conversation_sequences(conversation_sequences_path)
+    boundary_cases = load_boundary_cases(boundary_cases_path) if boundary_cases_path else []
     retrievers = (
         build_in_memory_retrievers(documents_path)
         if backend == "in-memory-hash"
@@ -612,15 +713,28 @@ def run_evaluation(
     report: dict[str, Any] = {
         "dataset_version": dataset_version,
         "dataset_id": dataset_id,
+        "provenance_type": provenance_type,
+        "approval_state": approval_state,
+        "readiness": readiness,
         "corpus": corpus_name,
         "dataset": str(questions_path),
         "documents": str(documents_path) if backend == "in-memory-hash" else None,
         "backend": backend,
         "dataset_size": len(questions),
+        "case_counts": {
+            "total": total_case_count or len(questions) + len(boundary_cases),
+            "retrieval_eligible": len(questions),
+            "manual_review_only": manual_review_only_case_count or len(boundary_cases),
+        },
         "conversation_sequence_count": len(conversation_sequences),
+        "configuration": _evaluation_configuration(backend=backend, mode=mode),
         "limitations": list(dict.fromkeys(limitations)),
         "retrieval": retrieval_comparison["hybrid_reranked"],
         "retrieval_comparison": retrieval_comparison,
+        "manual_review_boundary": evaluate_boundary_cases(boundary_cases, retriever)
+        if boundary_cases
+        else None,
+        "skipped_metrics": _skipped_metrics(mode),
     }
     if mode != "retrieval":
         answers = evaluate_answers(questions, retriever, mode=mode)
@@ -653,6 +767,32 @@ class _EvaluationAssetContextService:
                 "asset_id": asset_id,
                 "asset_name": "Thiết bị đánh giá synthetic",
                 "asset_type": asset_type,
+                "location": "Khu đánh giá",
+            },
+            "recent_anomalies": [],
+        }
+
+
+class _EvaluationBoundaryAssetContextService:
+    def __init__(self, cases: list[EvaluationBoundaryCase]) -> None:
+        self.cases = {case.selected_asset_id: case for case in cases}
+
+    def get_asset_context(self, asset_id: str) -> dict[str, Any]:
+        case = self.cases.get(asset_id)
+        if case is None:
+            raise AssertionError(f"Unexpected boundary asset lookup during evaluation: {asset_id}")
+        return {
+            "asset_id": asset_id,
+            "asset_profile": {
+                "asset_id": asset_id,
+                "asset_type": case.selected_asset_type,
+                "manufacturer": case.manufacturer,
+                "model": case.model_scope,
+            },
+            "latest_risk": {
+                "asset_id": asset_id,
+                "asset_name": "Thiết bị đánh giá",
+                "asset_type": case.selected_asset_type,
                 "location": "Khu đánh giá",
             },
             "recent_anomalies": [],
@@ -730,6 +870,61 @@ def _ratio_or_none(numerator: int, denominator: int) -> float | None:
     return numerator / denominator if denominator else None
 
 
+def _evaluation_configuration(
+    *,
+    backend: Literal["in-memory-hash", "configured-qdrant"],
+    mode: EvaluationMode,
+) -> dict[str, Any]:
+    """Report effective non-secret evaluation settings."""
+
+    settings = get_settings()
+    return {
+        "backend": backend,
+        "mode": mode,
+        "embedding": (
+            "HashEmbeddingProvider(dimensions=384)"
+            if backend == "in-memory-hash"
+            else settings.embedding_model_name
+        ),
+        "reranker": (
+            "deterministic_lexical_fixture"
+            if backend == "in-memory-hash"
+            else settings.rag_reranker_model
+        ),
+        "collection": settings.qdrant_collection if backend == "configured-qdrant" else None,
+        "llm_provider": settings.llm_provider if mode == "rag-llm" else None,
+        "llm_model": settings.llm_model if mode == "rag-llm" else None,
+        "secrets_included": False,
+    }
+
+
+def _skipped_metrics(mode: EvaluationMode) -> dict[str, str]:
+    skipped = {
+        "unsupported_claim_rate": (
+            "Requires SME-approved semantic claim labels; structural citation checks are separate."
+        )
+    }
+    if mode == "retrieval":
+        skipped.update(
+            {
+                "grounded_generation": "mode=retrieval does not invoke a generation provider.",
+                "citation_validation": "No generated claims exist in mode=retrieval.",
+                "multi_turn": "Conversation execution is reported only in deterministic or rag-llm mode.",
+                "provider_unavailable_fallback": "No provider is configured or called in mode=retrieval.",
+            }
+        )
+    elif mode == "deterministic":
+        skipped.update(
+            {
+                "citation_validation": (
+                    "Deterministic fallback exposes retrieved sources but creates no provider claims."
+                ),
+                "live_provider": "mode=deterministic does not call the configured LLM provider.",
+            }
+        )
+    return skipped
+
+
 def _format_optional_metric(value: object) -> str:
     return f"{value:.4f}" if isinstance(value, (int, float)) else "n/a"
 
@@ -742,8 +937,16 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         "# RAG Evaluation Report",
         "",
         f"- Dataset version: `{report['dataset_version']}`",
+        f"- Provenance: `{report.get('provenance_type') or 'not_declared'}`",
+        f"- Approval state: `{report.get('approval_state') or 'not_declared'}`",
+        f"- Readiness: `{report.get('readiness') or 'not_declared'}`",
         f"- Backend: `{report['backend']}`",
-        f"- Dataset size: {report['dataset_size']}",
+        f"- Total cases: {report['case_counts']['total']}",
+        f"- Retrieval-eligible cases: {report['case_counts']['retrieval_eligible']}",
+        f"- Manual-review-only cases: {report['case_counts']['manual_review_only']}",
+        f"- Embedding: `{report['configuration']['embedding']}`",
+        f"- Reranker: `{report['configuration']['reranker']}`",
+        f"- LLM provider used: `{report['configuration']['llm_provider'] or 'none'}`",
         "",
         "## Retrieval",
         "",
@@ -785,6 +988,27 @@ def render_markdown_report(report: dict[str, Any]) -> str:
                 f"- Fallback rate: {answers['fallback_rate']:.4f}",
             ]
         )
+    boundary = report.get("manual_review_boundary")
+    if boundary:
+        lines.extend(
+            [
+                "",
+                "## Manual Review Boundaries",
+                "",
+                (
+                    "- Engineering guard accuracy: "
+                    f"{_format_optional_metric(boundary['engineering_guard_accuracy'])}"
+                ),
+                (
+                    "- Evidence isolation accuracy: "
+                    f"{_format_optional_metric(boundary['evidence_isolation_accuracy'])}"
+                ),
+                "- SME approval accuracy: n/a",
+                f"- SME gate: {boundary['sme_approval_reason']}",
+            ]
+        )
+    lines.extend(["", "## Skipped Metrics", ""])
+    lines.extend(f"- {name}: n/a — {reason}" for name, reason in report["skipped_metrics"].items())
     lines.extend(["", "## Limitations", ""])
     lines.extend(f"- {limitation}" for limitation in report["limitations"])
     return "\n".join(lines) + "\n"
@@ -814,6 +1038,11 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         help="Optional dataset manifest providing version, identity, corpus, and limitations.",
     )
+    parser.add_argument(
+        "--boundary-cases",
+        type=Path,
+        help="Optional complete case file; manual-only cases are reported outside retrieval metrics.",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--markdown-output", type=Path)
     return parser.parse_args()
@@ -822,6 +1051,13 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     metadata = _load_dataset_metadata(args.manifest) if args.manifest else {}
+    manifest_files = metadata.get("files") if isinstance(metadata.get("files"), dict) else {}
+    manifest_counts = metadata.get("counts") if isinstance(metadata.get("counts"), dict) else {}
+    boundary_cases_path = args.boundary_cases
+    if boundary_cases_path is None and args.manifest and isinstance(manifest_files, dict):
+        cases_name = _optional_text(manifest_files.get("cases"))
+        if cases_name:
+            boundary_cases_path = args.manifest.parent / cases_name
     report = run_evaluation(
         questions_path=args.questions,
         backend=args.backend,
@@ -832,6 +1068,14 @@ def main() -> None:
         dataset_id=_optional_text(metadata.get("dataset_id")),
         corpus_name=_optional_text(metadata.get("corpus")),
         dataset_limitations=_string_list(metadata.get("limitations")),
+        boundary_cases_path=boundary_cases_path,
+        provenance_type=_optional_text(metadata.get("provenance_type")),
+        approval_state=_optional_text(metadata.get("approval_state")),
+        readiness=_optional_text(metadata.get("readiness")),
+        total_case_count=_optional_int(manifest_counts.get("cases")),
+        manual_review_only_case_count=_optional_int(
+            manifest_counts.get("manual_review_only_cases")
+        ),
     )
     rendered = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:
@@ -872,6 +1116,10 @@ def _string_list(value: object) -> list[str] | None:
     if not isinstance(value, list):
         return None
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _optional_int(value: object) -> int | None:
+    return value if isinstance(value, int) and value >= 0 else None
 
 
 if __name__ == "__main__":

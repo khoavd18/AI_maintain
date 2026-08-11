@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import time
 
 from src.rag.embeddings import EmbeddingDependencyError
+from src.rag.applicability import ApplicabilityConstraint
 from src.rag.evidence import has_significant_conflict
 from src.rag.retriever import (
     SEMANTIC_RELEVANCE_THRESHOLD,
@@ -51,6 +52,7 @@ class RetrievalService:
         filters: dict[str, str],
         relaxable_filters: frozenset[str] = frozenset(),
         min_relevant_documents: int,
+        applicability: ApplicabilityConstraint | None = None,
     ) -> RetrievalDecision:
         threshold = float(
             getattr(self.retriever, "minimum_relevance_score", SEMANTIC_RELEVANCE_THRESHOLD)
@@ -67,6 +69,8 @@ class RetrievalService:
         best_filters = dict(filters)
         best_relaxation_steps: tuple[str, ...] = ()
         best_candidate_count = 0
+        applicability_warnings: list[str] = []
+        best_applicability_warnings: list[str] = []
         best_quality: tuple[int, int, float] = (-1, -1, -1.0)
         for index, (attempt_filters, relaxed_filter) in enumerate(attempts):
             if relaxed_filter:
@@ -118,8 +122,23 @@ class RetrievalService:
                     last_reason = "retrieval_filter_mismatch"
                     last_warnings = ["retrieval_filter_mismatch_removed"]
                 else:
+                    applicable_retrievals = [
+                        result
+                        for result in filtered_retrievals
+                        if applicability is None or applicability.allows(result)
+                    ]
+                    applicability_warnings = (
+                        ["retrieval_model_mismatch_removed"]
+                        if len(applicable_retrievals) != len(filtered_retrievals)
+                        else []
+                    )
+                    if not applicable_retrievals:
+                        last_status = "model_context_mismatch"
+                        last_reason = "model_context_mismatch"
+                        last_warnings = applicability_warnings
+                        continue
                     relevant = [
-                        result for result in filtered_retrievals if result.score >= threshold
+                        result for result in applicable_retrievals if result.score >= threshold
                     ]
                     if relevant:
                         relevant_document_count = self._distinct_document_count(relevant)
@@ -133,6 +152,7 @@ class RetrievalService:
                             best_filters = attempt_filters
                             best_relaxation_steps = tuple(relaxation_steps)
                             best_candidate_count = last_candidate_count
+                            best_applicability_warnings = list(applicability_warnings)
                             best_quality = quality
                         if relevant_document_count >= min_relevant_documents:
                             break
@@ -149,6 +169,7 @@ class RetrievalService:
             applied_filters = best_filters
             relaxation_steps = list(best_relaxation_steps)
             last_candidate_count = best_candidate_count
+            applicability_warnings = best_applicability_warnings
         if not relevant:
             return RetrievalDecision(
                 retrieval_status=last_status,
@@ -167,7 +188,10 @@ class RetrievalService:
             for result in relevant
             if not contains_unsafe_instruction(f"{result.title}\n{result.text}")
         ]
-        context_warnings = self._relaxation_warnings(relaxation_steps)
+        context_warnings = [
+            *self._relaxation_warnings(relaxation_steps),
+            *applicability_warnings,
+        ]
         unsafe_warnings = (
             ["unsafe_retrieved_context_removed"] if len(relevant) != len(safe_relevant) else []
         )

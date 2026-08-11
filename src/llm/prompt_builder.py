@@ -146,6 +146,15 @@ def _safe_asset_context(asset_context: dict[str, Any] | None) -> dict[str, Any] 
     if not asset_context:
         return None
     latest_risk = asset_context.get("latest_risk") or {}
+    asset_profile = asset_context.get("asset_profile") or {}
+    safe_profile_fields = (
+        "asset_id",
+        "asset_name",
+        "asset_type",
+        "manufacturer",
+        "model",
+        "serial_number",
+    )
     safe_risk_fields = (
         "asset_id",
         "asset_name",
@@ -171,6 +180,11 @@ def _safe_asset_context(asset_context: dict[str, Any] | None) -> dict[str, Any] 
             )
     return {
         "asset_id": asset_context.get("asset_id") or latest_risk.get("asset_id"),
+        "asset_profile": {
+            field: asset_profile.get(field)
+            for field in safe_profile_fields
+            if field in asset_profile
+        },
         "latest_risk": {
             field: latest_risk.get(field) for field in safe_risk_fields if field in latest_risk
         },
