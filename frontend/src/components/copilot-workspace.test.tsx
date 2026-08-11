@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CopilotWorkspace } from "@/components/copilot-workspace";
@@ -97,7 +97,7 @@ describe("live Copilot workspace", () => {
         resolved_asset_type: "Máy phát điện dự phòng",
         resolved_failure_category: "Lỗi điện",
         previous_source_ids: ["S1"],
-        previous_answer_summary: "GENERATOR_002 cần được kiểm tra theo SOP đã truy xuất.",
+        previous_answer_summary: "Tóm tắt lượt trước do backend xác nhận.",
       },
     });
   });
@@ -258,6 +258,112 @@ describe("live Copilot workspace", () => {
     expect(await screen.findByText("Câu trả lời có nguồn tham khảo")).toBeInTheDocument();
   });
 
+  it("does not restore cleared history or hidden context from a delayed response", async () => {
+    const pending = deferred<unknown>();
+    let postCount = 0;
+    const fetchMock = mockContextApi(() => {
+      postCount += 1;
+      if (postCount === 1) return copilotResponseFixture;
+      if (postCount === 2) return pending.promise;
+      return responseWithSummary("Phản hồi mới hợp lệ");
+    });
+    renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" initialTicketId="TCK-000041" />);
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(await screen.findByText("Câu trả lời có nguồn tham khảo")).toBeInTheDocument();
+    fireEvent.change(textarea, { target: { value: "Cảnh báo trước thì sao?" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(2));
+    fireEvent.click(screen.getByRole("button", { name: "Xóa cuộc trò chuyện" }));
+
+    await act(async () => pending.resolve(responseWithSummary("PHẢN HỒI CŨ KHÔNG ĐƯỢC HIỆN")));
+    fireEvent.change(textarea, { target: { value: "Máy phát không khởi động cần kiểm tra gì?" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(3));
+
+    expect(screen.queryByText("PHẢN HỒI CŨ KHÔNG ĐƯỢC HIỆN")).not.toBeInTheDocument();
+    expect(await screen.findByText("Phản hồi mới hợp lệ")).toBeInTheDocument();
+    expect(JSON.parse(String(postRequests(fetchMock)[2]?.[1]?.body))).not.toHaveProperty(
+      "conversation_context",
+    );
+  });
+
+  it("ignores a delayed success after the selected ticket changes", async () => {
+    const pending = deferred<unknown>();
+    let postCount = 0;
+    const fetchMock = mockContextApi(() => {
+      postCount += 1;
+      return postCount === 1
+        ? pending.promise
+        : responseWithSummary("Phản hồi sau khi bỏ chọn ticket");
+    });
+    renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" initialTicketId="TCK-000041" />);
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(1));
+    chooseSelectOption("Sự cố liên quan (không bắt buộc)", "Không chọn sự cố");
+    await act(async () => pending.resolve(responseWithSummary("TICKET CŨ KHÔNG ĐƯỢC HIỆN")));
+    fireEvent.change(textarea, { target: { value: "Máy phát không khởi động cần kiểm tra gì?" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(2));
+
+    const currentRequest = JSON.parse(String(postRequests(fetchMock)[1]?.[1]?.body));
+    expect(currentRequest).not.toHaveProperty("failure_category");
+    expect(currentRequest).not.toHaveProperty("conversation_context");
+    expect(screen.queryByText("TICKET CŨ KHÔNG ĐƯỢC HIỆN")).not.toBeInTheDocument();
+    expect(await screen.findByText("Phản hồi sau khi bỏ chọn ticket")).toBeInTheDocument();
+  });
+
+  it("ignores a delayed success after the selected asset changes", async () => {
+    const pending = deferred<unknown>();
+    let postCount = 0;
+    const fetchMock = mockContextApi(() => {
+      postCount += 1;
+      return postCount === 1 ? pending.promise : responseWithSummary("Phản hồi cho máy lạnh");
+    });
+    renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(1));
+    chooseSelectOption("Thiết bị", "Máy lạnh 001 · Sân thượng phía Tây");
+    await screen.findByRole("heading", { name: "Máy lạnh 001", level: 3 });
+    await act(async () => pending.resolve(responseWithSummary("ASSET CŨ KHÔNG ĐƯỢC HIỆN")));
+    fireEvent.change(textarea, { target: { value: "Máy lạnh chảy nước là sao?" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(2));
+
+    const currentRequest = JSON.parse(String(postRequests(fetchMock)[1]?.[1]?.body));
+    expect(currentRequest).toMatchObject({ asset_id: "HVAC_001" });
+    expect(currentRequest).not.toHaveProperty("conversation_context");
+    expect(screen.queryByText("ASSET CŨ KHÔNG ĐƯỢC HIỆN")).not.toBeInTheDocument();
+    expect(await screen.findByText("Phản hồi cho máy lạnh")).toBeInTheDocument();
+  });
+
+  it("ignores a delayed failure after a new asset context is active", async () => {
+    const pending = deferred<unknown>();
+    let postCount = 0;
+    const fetchMock = mockContextApi(() => {
+      postCount += 1;
+      return postCount === 1 ? pending.promise : responseWithSummary("Ngữ cảnh mới thành công");
+    });
+    renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
+    const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(1));
+    chooseSelectOption("Thiết bị", "Máy lạnh 001 · Sân thượng phía Tây");
+    await act(async () => pending.reject(new Error("old request failed")));
+    fireEvent.change(textarea, { target: { value: "Máy lạnh chảy nước là sao?" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(2));
+
+    expect(screen.queryByText("Chưa nhận được câu trả lời")).not.toBeInTheDocument();
+    expect(await screen.findByText("Ngữ cảnh mới thành công")).toBeInTheDocument();
+  });
+
   it("renders backend text as text rather than executable HTML", async () => {
     mockContextApi({
       ...copilotResponseFixture,
@@ -279,4 +385,38 @@ function mockContextApi(copilotResponse?: unknown) {
   };
   if (copilotResponse !== undefined) routes["POST /copilot/ask"] = copilotResponse;
   return mockApi(routes);
+}
+
+function chooseSelectOption(label: string, option: string) {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
+
+function postRequests(fetchMock: ReturnType<typeof mockApi>) {
+  return fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
+}
+
+function responseWithSummary(summary: string) {
+  return {
+    ...copilotResponseFixture,
+    answer: `### Tóm tắt tình trạng thiết bị\n${summary}`,
+    structured_answer: {
+      ...copilotResponseFixture.structured_answer,
+      summary,
+    },
+    conversation_state: {
+      ...copilotResponseFixture.conversation_state,
+      previous_answer_summary: summary,
+    },
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }

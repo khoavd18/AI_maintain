@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from src.rag.adapters.asset_context import AssetContextProvider
 from src.rag.conversation import ConversationContext, parse_conversation_context
-from src.rag.query_analysis import QueryAnalysis, QueryAnalyzer, normalize_document_type, normalize_failure_category
+from src.rag.query_analysis import (
+    QueryAnalysis,
+    QueryAnalyzer,
+    normalize_document_type,
+    normalize_failure_category,
+)
 
 MAX_QUESTION_LENGTH = 1000
 
@@ -23,6 +28,7 @@ class PreparedCopilotRequest:
     analysis: QueryAnalysis | None
     asset_context: dict[str, Any] | None
     filters: dict[str, str]
+    relaxable_filters: frozenset[str]
     retrieval_query: str | None
     early_status: str | None = None
 
@@ -89,31 +95,61 @@ class RequestAnalysisService:
         analysis = self.query_analyzer.analyze(
             normalized_question,
             selected_asset_type=selected_asset_type or contextual_asset_type,
+            recent_intent=(conversation.recent_intent if conversation else None),
+            has_follow_up_context=conversation is not None,
         )
+        effective_conversation = (
+            conversation if conversation and analysis.follow_up_reference else None
+        )
+        current_asset_changed = bool(
+            effective_conversation
+            and pre_analysis.asset_type
+            and pre_analysis.asset_type != effective_conversation.resolved_asset_type
+        )
+        current_topic_changed = bool(effective_conversation and analysis.symptom_present)
+        if effective_conversation and (current_asset_changed or current_topic_changed):
+            effective_conversation = replace(
+                effective_conversation,
+                resolved_asset_type=(
+                    pre_analysis.asset_type or effective_conversation.resolved_asset_type
+                ),
+                resolved_failure_category=analysis.failure_category,
+                previous_source_ids=(),
+                previous_answer_summary="",
+            )
         asset_type_filter = analysis.asset_type or selected_asset_type or contextual_asset_type
         contextual_failure = (
-            conversation.resolved_failure_category
-            if conversation and analysis.follow_up_reference
-            else None
+            effective_conversation.resolved_failure_category if effective_conversation else None
         )
+        normalized_document_type = normalize_document_type(document_type)
+        normalized_failure_category = normalize_failure_category(failure_category)
         filters = self._clean_filters(
             asset_type=asset_type_filter,
-            document_type=normalize_document_type(document_type) or analysis.document_type,
-            failure_category=normalize_failure_category(failure_category)
+            document_type=normalized_document_type or analysis.document_type,
+            failure_category=normalized_failure_category
             or analysis.failure_category
             or contextual_failure,
             version=version,
             language=language,
         )
+        relaxable_filters = frozenset(
+            key
+            for key, relaxable in {
+                "failure_category": "failure_category" in filters,
+                "document_type": bool(analysis.document_type and not normalized_document_type),
+            }.items()
+            if relaxable
+        )
         if analysis.status != "supported":
             return PreparedCopilotRequest(
                 normalized_question=normalized_question,
                 asset_id=asset_id,
-                conversation=conversation,
+                conversation=effective_conversation,
                 pre_analysis=pre_analysis,
                 analysis=analysis,
                 asset_context=asset_context,
                 filters=filters,
+                relaxable_filters=relaxable_filters,
                 retrieval_query=None,
                 early_status=analysis.status,
             )
@@ -122,19 +158,19 @@ class RequestAnalysisService:
             normalized_question,
             self._recent_ticket_context(asset_id),
             previous_answer_summary=(
-                conversation.previous_answer_summary
-                if conversation and analysis.follow_up_reference
-                else ""
+                effective_conversation.previous_answer_summary if effective_conversation else ""
             ),
+            conversation=effective_conversation,
         )
         return PreparedCopilotRequest(
             normalized_question=normalized_question,
             asset_id=asset_id,
-            conversation=conversation,
+            conversation=effective_conversation,
             pre_analysis=pre_analysis,
             analysis=analysis,
             asset_context=asset_context,
             filters=filters,
+            relaxable_filters=relaxable_filters,
             retrieval_query=retrieval_query,
         )
 
@@ -155,6 +191,7 @@ class RequestAnalysisService:
             analysis=None,
             asset_context=None,
             filters={},
+            relaxable_filters=frozenset(),
             retrieval_query=None,
             early_status=status,
         )
@@ -222,8 +259,18 @@ class RequestAnalysisService:
         ticket_context: list[str],
         *,
         previous_answer_summary: str = "",
+        conversation: ConversationContext | None = None,
     ) -> str:
         supporting: list[str] = [question]
+        if conversation:
+            if conversation.resolved_asset_type:
+                supporting.append(f"Loại thiết bị lượt trước: {conversation.resolved_asset_type}")
+            if conversation.resolved_failure_category:
+                supporting.append(
+                    f"Nhóm sự cố lượt trước: {conversation.resolved_failure_category}"
+                )
+            if conversation.recent_intent:
+                supporting.append(f"Ý định lượt trước: {conversation.recent_intent}")
         if previous_answer_summary:
             supporting.append(f"Tóm tắt lượt trước: {previous_answer_summary[:600]}")
         if ticket_context:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from src.analytics.errors import AssetNotFoundError, ProcessedDataNotFoundError
 from src.api.composition import get_copilot_service
@@ -13,7 +13,7 @@ from src.api.schemas import CopilotAskRequest, CopilotAskResponse
 from src.rag.copilot import MaintenanceCopilot
 from src.rag.embeddings import EmbeddingDependencyError
 from src.rag.vector_store import VectorStoreError
-from src.security.dependencies import require_permission
+from src.security.dependencies import request_id, require_permission
 from src.security.permissions import Permission
 from src.security.rate_limit import RequestRateLimiter, RequestRateLimitExceededError
 from src.security.principal import CurrentUser
@@ -53,6 +53,7 @@ CopilotRateLimiterDependency = Annotated[
 @router.post("/copilot/ask", response_model=CopilotAskResponse, tags=["copilot"])
 def ask_copilot(
     request: CopilotAskRequest,
+    http_request: Request,
     copilot: CopilotDependency,
     actor: CopilotUseDependency,
     rate_limiter: CopilotRateLimiterDependency,
@@ -81,6 +82,8 @@ def ask_copilot(
         }
         if request.conversation_context is not None:
             optional_filters["conversation_context"] = request.conversation_context.model_dump()
+        if isinstance(copilot, MaintenanceCopilot):
+            optional_filters["request_id"] = request_id(http_request)
         return copilot.ask(
             question=request.question,
             asset_id=request.asset_id,

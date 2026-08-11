@@ -42,6 +42,7 @@ def get_copilot_service() -> MaintenanceCopilot:
         sparse_retriever=QdrantBM25Retriever(
             vector_store,
             max_chunks=settings.rag_sparse_max_chunks,
+            refresh_interval_seconds=settings.rag_sparse_refresh_seconds,
         ),
         reranker=CrossEncoderReranker(
             settings.rag_reranker_model,
@@ -62,9 +63,7 @@ def get_copilot_service() -> MaintenanceCopilot:
         ),
     )
     return MaintenanceCopilot(
-        asset_context_provider=ProcessedDataAssetContextAdapter(
-            get_asset_context_source()
-        ),
+        asset_context_provider=ProcessedDataAssetContextAdapter(get_asset_context_source()),
         retriever=retriever,
         llm_provider=create_llm_provider(settings),
         generation_config=CopilotGenerationConfig(

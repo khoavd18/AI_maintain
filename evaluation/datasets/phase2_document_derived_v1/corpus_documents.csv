@@ -1,0 +1,235 @@
+"doc_id","title","doc_type","asset_type","source","clean_text","created_at","failure_category","version","effective_date","raw_text","language"
+"P2-PUMP-DOC-001","Phạm vi áp dụng và nhận diện biến thể CR 5 Model A","Quy trình vận hành chuẩn","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Tài liệu chỉ bao phủ CR 1, CR 3 và CR 5 Model A ở 50/60 Hz, nguồn một hoặc ba pha. Trước khi áp dụng phải đối chiếu type designation, model và mã biến thể trên nhãn máy; mã A trong khóa loại biểu thị basic version.
+An toàn: model_applicability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, Cover; 1 Type identification; 1.2 Type key, manual page 1-3","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Tài liệu chỉ bao phủ CR 1, CR 3 và CR 5 Model A ở 50/60 Hz, nguồn một hoặc ba pha. Trước khi áp dụng phải đối chiếu type designation, model và mã biến thể trên nhãn máy; mã A trong khóa loại biểu thị basic version.
+An toàn: model_applicability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, Cover; 1 Type identification; 1.2 Type key, manual page 1-3","vi"
+"P2-PUMP-DOC-002","Mô-men siết vít khớp nối vị trí 9","Quy trình vận hành chuẩn","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Bảng mô-men cho vít lục giác vị trí 9 phụ thuộc kích thước: M6 là 13 Nm, M8 là 31 Nm và M10 là 62 Nm; M8 và M10 dùng THREAD-EZE theo bảng. Không được trả một giá trị khi chưa biết kích thước vít.
+An toàn: torque_control, model_applicability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 2 Tightening torques and lubricants, manual page 4","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Bảng mô-men cho vít lục giác vị trí 9 phụ thuộc kích thước: M6 là 13 Nm, M8 là 31 Nm và M10 là 62 Nm; M8 và M10 dùng THREAD-EZE theo bảng. Không được trả một giá trị khi chưa biết kích thước vít.
+An toàn: torque_control, model_applicability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 2 Tightening torques and lubricants, manual page 4","vi"
+"P2-PUMP-DOC-003","Điều kiện an toàn trước khi tháo bơm CR 5","Danh sách kiểm tra","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Trước khi tháo bơm phải cô lập nguồn điện động cơ, đóng van cách ly nếu có để tránh xả hệ thống, tháo cáp theo quy định địa phương và lưu ý trọng tâm để bơm không bị lật, đặc biệt với bơm dài.
+An toàn: electrical_isolation, stored_pressure, lifting_stability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.1.1 Before dismantling, manual page 7","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Trước khi tháo bơm phải cô lập nguồn điện động cơ, đóng van cách ly nếu có để tránh xả hệ thống, tháo cáp theo quy định địa phương và lưu ý trọng tâm để bơm không bị lật, đặc biệt với bơm dài.
+An toàn: electrical_isolation, stored_pressure, lifting_stability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.1.1 Before dismantling, manual page 7","vi"
+"P2-PUMP-DOC-004","Chuẩn bị lắp lại sau đại tu bơm CR 5","Danh sách kiểm tra","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Trước khi lắp lại cần làm sạch và kiểm tra chi tiết, chuẩn bị bộ service, thay chi tiết lỗi, đồng thời luôn thay gioăng và O-ring khi đại tu. Khi lắp phải bôi trơn và siết đúng bảng; sau lắp phải thử bơm theo test specification được dẫn chiếu.
+An toàn: quality_control, pressure_test
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.1.2 Before assembly; 4.1.3 During assembly; 4.1.4 After assembly, manual page 7","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Trước khi lắp lại cần làm sạch và kiểm tra chi tiết, chuẩn bị bộ service, thay chi tiết lỗi, đồng thời luôn thay gioăng và O-ring khi đại tu. Khi lắp phải bôi trơn và siết đúng bảng; sau lắp phải thử bơm theo test specification được dẫn chiếu.
+An toàn: quality_control, pressure_test
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.1.2 Before assembly; 4.1.3 During assembly; 4.1.4 After assembly, manual page 7","vi"
+"P2-PUMP-DOC-005","Lắp động cơ và căn khớp nối CR 5","Quy trình vận hành chuẩn","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Khi lắp động cơ, siết vít động cơ theo đường chéo và đúng mô-men. Lắp chốt trục và hai nửa khớp nối, giữ vít còn lỏng để căn chỉnh; kiểm tra khe hai bên bằng nhau trước và sau khi siết chéo, rồi lắp lại tấm bảo vệ khớp nối.
+An toàn: rotating_parts, alignment, torque_control
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.2 Replacement of motor, manual page 8","2026-08-11T00:00:00+07:00","Lỗi rung động","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Khi lắp động cơ, siết vít động cơ theo đường chéo và đúng mô-men. Lắp chốt trục và hai nửa khớp nối, giữ vít còn lỏng để căn chỉnh; kiểm tra khe hai bên bằng nhau trước và sau khi siết chéo, rồi lắp lại tấm bảo vệ khớp nối.
+An toàn: rotating_parts, alignment, torque_control
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.2 Replacement of motor, manual page 8","vi"
+"P2-PUMP-DOC-006","Thay phớt trục CR 5","Quy trình vận hành chuẩn","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Trước khi tháo phớt phải tháo động cơ và khớp nối. Khi lắp phớt mới, nếu cần thì làm sạch và làm nhẵn đầu trục bằng dụng cụ đi kèm bộ phớt, làm ẩm đầu trục bằng nước xà phòng, dùng đúng cờ lê ống và siết theo mô-men quy định; sau đó căn khe khớp nối bằng nhau.
+An toàn: rotating_parts, seal_integrity, torque_control
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.3 Replacement of shaft seal, manual page 9","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Trước khi tháo phớt phải tháo động cơ và khớp nối. Khi lắp phớt mới, nếu cần thì làm sạch và làm nhẵn đầu trục bằng dụng cụ đi kèm bộ phớt, làm ẩm đầu trục bằng nước xà phòng, dùng đúng cờ lê ống và siết theo mô-men quy định; sau đó căn khe khớp nối bằng nhau.
+An toàn: rotating_parts, seal_integrity, torque_control
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.3 Replacement of shaft seal, manual page 9","vi"
+"P2-PUMP-DOC-007","Trình tự tháo cụm chính của bơm CR 5","Quy trình vận hành chuẩn","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Trình tự cấp cao là tháo phớt trục; tháo đai ốc và vòng đệm; nới đầu bơm khỏi ty giằng; tách cụm cánh dẫn phía trên nếu còn dính; tháo ống bao ngoài; cuối cùng nhấc cụm buồng khỏi đế. Công việc đòi hỏi dụng cụ và kỹ thuật viên phù hợp.
+An toàn: qualified_technician, lifting_stability, rotating_parts
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.4.1 Dismantling, manual page 10","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Trình tự cấp cao là tháo phớt trục; tháo đai ốc và vòng đệm; nới đầu bơm khỏi ty giằng; tách cụm cánh dẫn phía trên nếu còn dính; tháo ống bao ngoài; cuối cùng nhấc cụm buồng khỏi đế. Công việc đòi hỏi dụng cụ và kỹ thuật viên phù hợp.
+An toàn: qualified_technician, lifting_stability, rotating_parts
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.4.1 Dismantling, manual page 10","vi"
+"P2-PUMP-DOC-008","Tiêu chí kiểm tra mòn cánh bơm CR 5","Hướng dẫn xử lý sự cố","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Kiểm tra ma sát giữa vòng cổ và váy cánh bơm. Nếu mòn tạo rãnh có thể cảm nhận rõ bằng móng tay trên váy cánh, tài liệu yêu cầu thay cánh bơm; không được suy đoán chỉ từ tiếng ồn mà chưa kiểm tra trực tiếp.
+An toàn: inspection_required, rotating_parts
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.7 Checking and replacing parts, manual page 13","2026-08-11T00:00:00+07:00","Lỗi rung động","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Kiểm tra ma sát giữa vòng cổ và váy cánh bơm. Nếu mòn tạo rãnh có thể cảm nhận rõ bằng móng tay trên váy cánh, tài liệu yêu cầu thay cánh bơm; không được suy đoán chỉ từ tiếng ồn mà chưa kiểm tra trực tiếp.
+An toàn: inspection_required, rotating_parts
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.7 Checking and replacing parts, manual page 13","vi"
+"P2-PUMP-DOC-009","Thay vòng cổ và vòng bi khi tháo cụm buồng CR 5","Quy trình vận hành chuẩn","Máy bơm nước","https://www.grundfos.com/content/dam/local/no-no/page-assets/support/techical-support/teknisk-selvhjelp/documents/teknisk-selvhjelp-vannforsyning/cr-service/Grundfosliterature-79597.pdf","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Khi cụm buồng đã tháo, vòng cổ và bộ giữ vòng cổ phải được thay. Với vòng bi quay, nếu có mép mòn nhìn thấy và cảm nhận được thì thay cả hai vòng bi và buồng có vòng bi theo tài liệu.
+An toàn: inspection_required, parts_applicability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.7 Checking and replacing parts, manual page 13","2026-08-11T00:00:00+07:00","Lỗi rung động","0.1.0","2026-08-11","Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Hành động khuyến nghị: Khi cụm buồng đã tháo, vòng cổ và bộ giữ vòng cổ phải được thay. Với vòng bi quay, nếu có mép mòn nhìn thấy và cảm nhận được thì thay cả hai vòng bi và buồng có vòng bi theo tài liệu.
+An toàn: inspection_required, parts_applicability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GF-CR5-0407, 4.7 Checking and replacing parts, manual page 13","vi"
+"P2-HVAC-DOC-001","Phạm vi bảo trì định kỳ Daikin RZAG","Danh sách kiểm tra","Máy lạnh","https://www.daikin.eu/content/dam/document-library/Installer-reference-guide/ac/sky-air/rzag-nv1_ny1/RZAG-NV1.RZAG-NY2_Installer%20reference%20guide_4PEN695307-1B_English.pdf","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Bảo trì phải do đơn vị lắp đặt hoặc nhân viên dịch vụ được ủy quyền thực hiện. Daikin khuyến nghị ít nhất mỗi năm một lần, nhưng quy định áp dụng tại nơi vận hành có thể yêu cầu chu kỳ ngắn hơn.
+An toàn: qualified_personnel, regulatory_compliance
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 10 Maintenance and service, manual page 71","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Bảo trì phải do đơn vị lắp đặt hoặc nhân viên dịch vụ được ủy quyền thực hiện. Daikin khuyến nghị ít nhất mỗi năm một lần, nhưng quy định áp dụng tại nơi vận hành có thể yêu cầu chu kỳ ngắn hơn.
+An toàn: qualified_personnel, regulatory_compliance
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 10 Maintenance and service, manual page 71","vi"
+"P2-HVAC-DOC-002","Xác nhận an toàn điện trước khi service biến tần RZAG","Quy trình vận hành chuẩn","Máy lạnh","https://www.daikin.eu/content/dam/document-library/Installer-reference-guide/ac/sky-air/rzag-nv1_ny1/RZAG-NV1.RZAG-NY2_Installer%20reference%20guide_4PEN695307-1B_English.pdf","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Sau khi ngắt nguồn, không làm công việc điện trong 10 phút. Dùng thiết bị đo để xác nhận nguồn đã tắt và điện áp tụ mạch chính dưới 50 VDC; nếu vẫn cao hơn, kỹ thuật viên phải xả tụ an toàn bằng dụng cụ chuyên dụng để tránh phát tia lửa.
+An toàn: electrical_isolation, stored_energy, arc_spark
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 10.2.1 To prevent electrical hazards, manual page 71","2026-08-11T00:00:00+07:00","Lỗi điện","0.1.0","2026-08-11","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Sau khi ngắt nguồn, không làm công việc điện trong 10 phút. Dùng thiết bị đo để xác nhận nguồn đã tắt và điện áp tụ mạch chính dưới 50 VDC; nếu vẫn cao hơn, kỹ thuật viên phải xả tụ an toàn bằng dụng cụ chuyên dụng để tránh phát tia lửa.
+An toàn: electrical_isolation, stored_energy, arc_spark
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 10.2.1 To prevent electrical hazards, manual page 71","vi"
+"P2-HVAC-DOC-003","Bảo vệ PCB và cô lập quạt ngoài trời RZAG","Quy trình vận hành chuẩn","Máy lạnh","https://www.daikin.eu/content/dam/document-library/Installer-reference-guide/ac/sky-air/rzag-nv1_ny1/RZAG-NV1.RZAG-NY2_Installer%20reference%20guide_4PEN695307-1B_English.pdf","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Trước khi rút hoặc cắm đầu nối, chạm vào phần kim loại không phủ để khử tĩnh điện. Trước service thiết bị biến tần phải rút đầu nối quạt ngoài trời X106A trên A1P vì gió có thể làm quạt phát điện ngược; sau service phải cắm lại, nếu không mã E7 xuất hiện và máy không vận hành bình thường.
+An toàn: electrostatic_discharge, stored_energy, fan_rotation
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 10.2.1 To prevent electrical hazards, manual page 72","2026-08-11T00:00:00+07:00","Lỗi điện","0.1.0","2026-08-11","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Trước khi rút hoặc cắm đầu nối, chạm vào phần kim loại không phủ để khử tĩnh điện. Trước service thiết bị biến tần phải rút đầu nối quạt ngoài trời X106A trên A1P vì gió có thể làm quạt phát điện ngược; sau service phải cắm lại, nếu không mã E7 xuất hiện và máy không vận hành bình thường.
+An toàn: electrostatic_discharge, stored_energy, fan_rotation
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 10.2.1 To prevent electrical hazards, manual page 72","vi"
+"P2-HVAC-DOC-004","Mã lỗi khi test run Daikin RZAG","Hướng dẫn xử lý sự cố","Máy lạnh","https://www.daikin.eu/content/dam/document-library/Installer-reference-guide/ac/sky-air/rzag-nv1_ny1/RZAG-NV1.RZAG-NY2_Installer%20reference%20guide_4PEN695307-1B_English.pdf","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Trong test run, E3, E4 hoặc L8 có thể liên quan van chặn đóng hoặc cửa hút/xả gió bị cản; L4 liên quan đường gió bị cản; U0 liên quan van chặn đóng. U2 có thể do mất cân bằng điện áp hoặc mất pha ở nguồn ba pha; phải tắt nguồn và để kỹ thuật viên kiểm tra lại dây nguồn. U4/UF chỉ ra dây liên kết sai, còn UA chỉ ra tổ hợp dàn nóng và dàn lạnh không tương thích.
+An toàn: electrical_isolation, commissioning, qualified_personnel
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 8.5 Error codes when performing a test run, manual page 68","2026-08-11T00:00:00+07:00","Lỗi điện","0.1.0","2026-08-11","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Trong test run, E3, E4 hoặc L8 có thể liên quan van chặn đóng hoặc cửa hút/xả gió bị cản; L4 liên quan đường gió bị cản; U0 liên quan van chặn đóng. U2 có thể do mất cân bằng điện áp hoặc mất pha ở nguồn ba pha; phải tắt nguồn và để kỹ thuật viên kiểm tra lại dây nguồn. U4/UF chỉ ra dây liên kết sai, còn UA chỉ ra tổ hợp dàn nóng và dàn lạnh không tương thích.
+An toàn: electrical_isolation, commissioning, qualified_personnel
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 8.5 Error codes when performing a test run, manual page 68","vi"
+"P2-HVAC-DOC-005","Kiểm tra bộ trao đổi nhiệt ngoài trời RZAG","Danh sách kiểm tra","Máy lạnh","https://www.daikin.eu/content/dam/document-library/Installer-reference-guide/ac/sky-air/rzag-nv1_ny1/RZAG-NV1.RZAG-NY2_Installer%20reference%20guide_4PEN695307-1B_English.pdf","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Ít nhất mỗi năm phải kiểm tra bộ trao đổi nhiệt ngoài trời. Bụi, đất và lá có thể gây tắc; nên vệ sinh hàng năm vì tắc nghẽn có thể làm áp suất quá thấp hoặc quá cao và làm giảm hiệu năng.
+An toàn: qualified_personnel, pressure_system
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 10.3 Checklist for yearly maintenance of the outdoor unit, manual page 72","2026-08-11T00:00:00+07:00","Lỗi làm lạnh","0.1.0","2026-08-11","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Ít nhất mỗi năm phải kiểm tra bộ trao đổi nhiệt ngoài trời. Bụi, đất và lá có thể gây tắc; nên vệ sinh hàng năm vì tắc nghẽn có thể làm áp suất quá thấp hoặc quá cao và làm giảm hiệu năng.
+An toàn: qualified_personnel, pressure_system
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 10.3 Checklist for yearly maintenance of the outdoor unit, manual page 72","vi"
+"P2-HVAC-DOC-006","Tiếng vận hành bình thường và giới hạn troubleshooting RZAG","Hướng dẫn xử lý sự cố","Máy lạnh","https://www.daikin.eu/content/dam/document-library/Installer-reference-guide/ac/sky-air/rzag-nv1_ny1/RZAG-NV1.RZAG-NY2_Installer%20reference%20guide_4PEN695307-1B_English.pdf","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Một số tiếng thoáng qua không phải hỏng hóc: tiếng chuyển van khi bắt đầu xả đá, tiếng xì nhẹ liên tục do môi chất khi làm lạnh hoặc xả đá, tiếng ọc sau xả đá và tiếng xì lúc bắt đầu hoặc dừng. Trước troubleshooting phải kiểm tra trực quan. Khi thiết bị an toàn tác động, dừng máy, tìm nguyên nhân trước khi reset, không nối tắt hoặc thay đổi giá trị bảo vệ; không tìm được nguyên nhân thì gọi đại lý.
+An toàn: electrical_isolation, burn_hazard, safety_interlock
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 11 Troubleshooting; 11.2 Precautions when troubleshooting, manual page 73-74","2026-08-11T00:00:00+07:00","Lỗi làm lạnh","0.1.0","2026-08-11","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Một số tiếng thoáng qua không phải hỏng hóc: tiếng chuyển van khi bắt đầu xả đá, tiếng xì nhẹ liên tục do môi chất khi làm lạnh hoặc xả đá, tiếng ọc sau xả đá và tiếng xì lúc bắt đầu hoặc dừng. Trước troubleshooting phải kiểm tra trực quan. Khi thiết bị an toàn tác động, dừng máy, tìm nguyên nhân trước khi reset, không nối tắt hoặc thay đổi giá trị bảo vệ; không tìm được nguyên nhân thì gọi đại lý.
+An toàn: electrical_isolation, burn_hazard, safety_interlock
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 11 Troubleshooting; 11.2 Precautions when troubleshooting, manual page 73-74","vi"
+"P2-HVAC-DOC-007","Pump-down khi mạch môi chất RZAG bị rò","Quy trình vận hành chuẩn","Máy lạnh","https://www.daikin.eu/content/dam/document-library/Installer-reference-guide/ac/sky-air/rzag-nv1_ny1/RZAG-NV1.RZAG-NY2_Installer%20reference%20guide_4PEN695307-1B_English.pdf","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Không được nối tắt công tắc hoặc cảm biến áp suất thấp. Nếu mạch môi chất đang rò, không dùng chức năng pump-down tự động vì không khí có thể đi vào máy nén đang chạy và gây cháy nổ; phải dùng hệ thống thu hồi riêng để máy nén của thiết bị không phải vận hành.
+An toàn: explosion, refrigerant, pressure_system, qualified_personnel
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 12.2 About pump down; 12.3 To pump down, manual page 75","2026-08-11T00:00:00+07:00","Lỗi làm lạnh","0.1.0","2026-08-11","Phạm vi: RZAG71-140N Sky Air Alpha-series
+Hành động khuyến nghị: Không được nối tắt công tắc hoặc cảm biến áp suất thấp. Nếu mạch môi chất đang rò, không dùng chức năng pump-down tự động vì không khí có thể đi vào máy nén đang chạy và gây cháy nổ; phải dùng hệ thống thu hồi riêng để máy nén của thiết bị không phải vận hành.
+An toàn: explosion, refrigerant, pressure_system, qualified_personnel
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B, 12.2 About pump down; 12.3 To pump down, manual page 75","vi"
+"P2-GEN-DOC-001","Giới hạn thông số dầu và nước làm mát MLG15","Quy trình vận hành chuẩn","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Manual MLG15 không chốt một cấp độ nhớt dầu duy nhất; phải chọn dầu detergent có phân loại và độ nhớt phù hợp loại động cơ và nhiệt độ môi trường, rồi đối chiếu đại lý dịch vụ hoặc manual động cơ. Khuyến nghị nước làm mát cũng được dẫn sang manual động cơ hoặc đại lý.
+An toàn: evidence_boundary, engine_applicability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Engine Oil Recommendations; Coolant Recommendation, manual page 14","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Manual MLG15 không chốt một cấp độ nhớt dầu duy nhất; phải chọn dầu detergent có phân loại và độ nhớt phù hợp loại động cơ và nhiệt độ môi trường, rồi đối chiếu đại lý dịch vụ hoặc manual động cơ. Khuyến nghị nước làm mát cũng được dẫn sang manual động cơ hoặc đại lý.
+An toàn: evidence_boundary, engine_applicability
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Engine Oil Recommendations; Coolant Recommendation, manual page 14","vi"
+"P2-GEN-DOC-002","Checklist trước khi khởi động MLG15","Danh sách kiểm tra","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Trước khi khởi động phải xác nhận bảo trì còn hiệu lực, máy cân bằng và khô, yêu cầu nối đất được đáp ứng, khóa và các circuit breaker ở OFF, dây điện không hư hỏng, mức dầu-nước làm mát-nhiên liệu đúng, đầu nối ắc quy chắc, dây đai-quạt-hệ xả-két nước và nắp che an toàn, đồng thời nút emergency stop đã được kéo ra.
+An toàn: electrical, fuel, carbon_monoxide, rotating_parts
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Prestart Checklist, manual page 15","2026-08-11T00:00:00+07:00","Lỗi điện","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Trước khi khởi động phải xác nhận bảo trì còn hiệu lực, máy cân bằng và khô, yêu cầu nối đất được đáp ứng, khóa và các circuit breaker ở OFF, dây điện không hư hỏng, mức dầu-nước làm mát-nhiên liệu đúng, đầu nối ắc quy chắc, dây đai-quạt-hệ xả-két nước và nắp che an toàn, đồng thời nút emergency stop đã được kéo ra.
+An toàn: electrical, fuel, carbon_monoxide, rotating_parts
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Prestart Checklist, manual page 15","vi"
+"P2-GEN-DOC-003","Giới hạn thời gian đề máy MLG15","Quy trình vận hành chuẩn","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Trước khi đề, breaker chính và breaker ổ cắm phải ở OFF. Manual cảnh báo không đề liên tục quá 10 giây vì có thể làm ắc quy xả quá mức và kẹt bộ đề; nếu máy không nổ phải dừng và kiểm tra theo manual thay vì tiếp tục giữ START.
+An toàn: electrical, starter_damage, carbon_monoxide
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Starting the Unit, manual page 15-16","2026-08-11T00:00:00+07:00","Lỗi điện","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Trước khi đề, breaker chính và breaker ổ cắm phải ở OFF. Manual cảnh báo không đề liên tục quá 10 giây vì có thể làm ắc quy xả quá mức và kẹt bộ đề; nếu máy không nổ phải dừng và kiểm tra theo manual thay vì tiếp tục giữ START.
+An toàn: electrical, starter_damage, carbon_monoxide
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Starting the Unit, manual page 15-16","vi"
+"P2-GEN-DOC-004","Reset sau khi MLG15 tự dừng bảo vệ","Hướng dẫn xử lý sự cố","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Hệ thống tự dừng khi áp suất dầu quá thấp hoặc nhiệt độ nước làm mát vượt giới hạn. Chỉ đưa khóa về OFF để reset sau khi đã xác định nguyên nhân dừng; không reset lặp lại mà bỏ qua nguyên nhân bảo vệ.
+An toàn: engine_damage, safety_interlock, hot_coolant
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Automatic Shutdown, manual page 16","2026-08-11T00:00:00+07:00","Lỗi điện","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Hệ thống tự dừng khi áp suất dầu quá thấp hoặc nhiệt độ nước làm mát vượt giới hạn. Chỉ đưa khóa về OFF để reset sau khi đã xác định nguyên nhân dừng; không reset lặp lại mà bỏ qua nguyên nhân bảo vệ.
+An toàn: engine_damage, safety_interlock, hot_coolant
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Automatic Shutdown, manual page 16","vi"
+"P2-GEN-DOC-005","Giới hạn chỉnh bộ điều áp MLG15","Quy trình vận hành chuẩn","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Bộ điều áp đã được chỉnh tại nhà máy và có các biến trở điện áp, ổn định và U/F. Manual yêu cầu liên hệ Generac Mobile trước khi cố chỉnh; Copilot không được hướng dẫn người không đủ thẩm quyền tự vặn các biến trở này.
+An toàn: electrical, qualified_personnel, equipment_damage
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Voltage Regulator, manual page 16","2026-08-11T00:00:00+07:00","Lỗi điện","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Bộ điều áp đã được chỉnh tại nhà máy và có các biến trở điện áp, ổn định và U/F. Manual yêu cầu liên hệ Generac Mobile trước khi cố chỉnh; Copilot không được hướng dẫn người không đủ thẩm quyền tự vặn các biến trở này.
+An toàn: electrical, qualified_personnel, equipment_damage
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Voltage Regulator, manual page 16","vi"
+"P2-GEN-DOC-006","Wet stacking khi MLG15 chạy tải thấp","Hướng dẫn xử lý sự cố","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Động cơ diesel có thể wet stack khi chạy dưới 30% tải, làm nhiên liệu chưa cháy tích tụ trong hệ xả; dấu hiệu là khói đen liên tục ở tải ổn định và có thể gây bẩn kim phun, đóng cặn xupap. Manual nêu vùng tải vận hành phù hợp 30-100%; xử lý tăng tải chỉ được thực hiện sau khi xác nhận khả năng tải và an toàn hệ thống.
+An toàn: exhaust, load_management, carbon_monoxide, fire
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Wet Stacking, manual page 17","2026-08-11T00:00:00+07:00","Lỗi thời gian vận hành","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Động cơ diesel có thể wet stack khi chạy dưới 30% tải, làm nhiên liệu chưa cháy tích tụ trong hệ xả; dấu hiệu là khói đen liên tục ở tải ổn định và có thể gây bẩn kim phun, đóng cặn xupap. Manual nêu vùng tải vận hành phù hợp 30-100%; xử lý tăng tải chỉ được thực hiện sau khi xác nhận khả năng tải và an toàn hệ thống.
+An toàn: exhaust, load_management, carbon_monoxide, fire
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Wet Stacking, manual page 17","vi"
+"P2-GEN-DOC-007","Trình tự tắt MLG15 bình thường","Quy trình vận hành chuẩn","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Trước khi tắt phải thông báo người đang dùng nguồn và kiểm tra việc mất điện không tạo nguy hiểm. Sau đó tháo tải khỏi ổ cắm, đưa từng breaker ổ cắm về OFF, đưa breaker chính về OFF rồi mới đưa khóa về OFF. Emergency stop chỉ dùng cho tình huống khẩn cấp, không thay cho trình tự tắt bình thường.
+An toàn: electrical, load_shedding, operational_coordination
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Shutting Down the Unit, manual page 17","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Trước khi tắt phải thông báo người đang dùng nguồn và kiểm tra việc mất điện không tạo nguy hiểm. Sau đó tháo tải khỏi ổ cắm, đưa từng breaker ổ cắm về OFF, đưa breaker chính về OFF rồi mới đưa khóa về OFF. Emergency stop chỉ dùng cho tình huống khẩn cấp, không thay cho trình tự tắt bình thường.
+An toàn: electrical, load_shedding, operational_coordination
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, Shutting Down the Unit, manual page 17","vi"
+"P2-GEN-DOC-008","Kiểm tra mức dầu hằng ngày MLG15","Danh sách kiểm tra","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Kiểm tra dầu hằng ngày khi máy ở điều kiện an toàn. Không khởi động nếu mức dưới vạch ADD; vùng bình thường nằm trong phần gạch chéo giữa FULL và ADD. Chỉ châm khi dưới ADD và không được châm quá đầy; cấp độ nhớt phải theo manual động cơ và điều kiện môi trường.
+An toàn: engine_damage, hot_surfaces, evidence_boundary
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, General Maintenance, manual page 19","2026-08-11T00:00:00+07:00","","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Kiểm tra dầu hằng ngày khi máy ở điều kiện an toàn. Không khởi động nếu mức dưới vạch ADD; vùng bình thường nằm trong phần gạch chéo giữa FULL và ADD. Chỉ châm khi dưới ADD và không được châm quá đầy; cấp độ nhớt phải theo manual động cơ và điều kiện môi trường.
+An toàn: engine_damage, hot_surfaces, evidence_boundary
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, General Maintenance, manual page 19","vi"
+"P2-GEN-DOC-009","MLG15 dừng do áp suất dầu thấp","Hướng dẫn xử lý sự cố","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Khi dừng vì áp suất dầu thấp, kiểm tra mức dầu bằng que thăm và châm nếu cần, đồng thời quan sát rò dầu. Sau khi khởi động lại theo quy trình, nếu áp suất không đạt 5 psi (34 kPa) trong 5 giây thì phải dừng ngay; lỗi cảm biến áp suất cần tra manual động cơ hoặc chuyển kỹ thuật viên.
+An toàn: engine_damage, pressure, qualified_personnel
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, General Troubleshooting — Low Oil Pressure Shutdown, manual page 23","2026-08-11T00:00:00+07:00","Lỗi áp suất","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Khi dừng vì áp suất dầu thấp, kiểm tra mức dầu bằng que thăm và châm nếu cần, đồng thời quan sát rò dầu. Sau khi khởi động lại theo quy trình, nếu áp suất không đạt 5 psi (34 kPa) trong 5 giây thì phải dừng ngay; lỗi cảm biến áp suất cần tra manual động cơ hoặc chuyển kỹ thuật viên.
+An toàn: engine_damage, pressure, qualified_personnel
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, General Troubleshooting — Low Oil Pressure Shutdown, manual page 23","vi"
+"P2-GEN-DOC-010","MLG15 dừng do nhiệt độ nước làm mát cao","Hướng dẫn xử lý sự cố","Máy phát điện dự phòng","https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Để máy nguội trước khi kiểm tra hoặc châm nước làm mát. Kiểm tra mức, vật cản ở két nước và ống dẫn, rò ở ống-động cơ-bơm nước, cùng độ căng dây đai bơm nước. Nếu sau khởi động nhiệt độ đạt 210°F (99°C) hoặc hơn thì dừng ngay; manual cũng yêu cầu dừng nếu máy tiếp tục quá nhiệt.
+An toàn: burn, hot_coolant, engine_damage, qualified_personnel
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, General Troubleshooting — High Coolant Temperature Shutdown, manual page 23","2026-08-11T00:00:00+07:00","Lỗi áp suất","0.1.0","2026-08-11","Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Hành động khuyến nghị: Để máy nguội trước khi kiểm tra hoặc châm nước làm mát. Kiểm tra mức, vật cản ở két nước và ống dẫn, rò ở ống-động cơ-bơm nước, cùng độ căng dây đai bơm nước. Nếu sau khởi động nhiệt độ đạt 210°F (99°C) hoặc hơn thì dừng ngay; manual cũng yêu cầu dừng nếu máy tiếp tục quá nhiệt.
+An toàn: burn, hot_coolant, engine_damage, qualified_personnel
+Giới hạn: Chỉ áp dụng cho model và revision đã ghi; cần SME xác nhận trước pilot.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158, General Troubleshooting — High Coolant Temperature Shutdown, manual page 23","vi"

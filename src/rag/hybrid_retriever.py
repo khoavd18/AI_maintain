@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import time
 from typing import Protocol
 
 from src.rag.reranking import Reranker, RerankerUnavailableError
 from src.rag.retriever import RetrievalResult, Retriever
+from src.rag.diagnostics import add_stage_latency
 
 
 class SparseRetriever(Protocol):
@@ -87,6 +89,7 @@ class HybridRetriever:
             "version": version,
             "language": language,
         }
+        retrieval_started = time.perf_counter()
         dense = self.dense_retriever.search(
             query,
             limit=max(limit, self.config.dense_candidates),
@@ -98,14 +101,18 @@ class HybridRetriever:
             **filters,
         )
         fused = self._fuse(dense, sparse, filters)
+        add_stage_latency("retrieval", (time.perf_counter() - retrieval_started) * 1000.0)
         rerank_candidates = fused[: self.config.fused_candidates]
         if not rerank_candidates:
             return []
         try:
+            reranking_started = time.perf_counter()
             reranker_scores = self.reranker.score(query, rerank_candidates)
         except RerankerUnavailableError:
             # Retrieval-only fallback remains bounded and transparent in score components.
             reranker_scores = [candidate.score for candidate in rerank_candidates]
+        finally:
+            add_stage_latency("reranking", (time.perf_counter() - reranking_started) * 1000.0)
         if len(reranker_scores) != len(rerank_candidates):
             raise ValueError("Reranker returned an unexpected score count.")
 

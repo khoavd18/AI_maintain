@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _INJECTION_PATTERNS = tuple(
     re.compile(pattern, flags=re.IGNORECASE | re.DOTALL)
@@ -15,6 +16,14 @@ _INJECTION_PATTERNS = tuple(
         r"bỏ\s+qua.{0,60}(?:hướng dẫn|chỉ thị|yêu cầu).{0,30}(?:trước|hệ thống|nhà phát triển)",
         r"(?:tiết lộ|hiển thị|in ra|trả về).{0,80}(?:prompt hệ thống|khóa api|mật khẩu|token|thông tin đăng nhập)",
         r"(?:ghi đè|thay thế).{0,20}(?:hướng dẫn|chỉ thị)\s+(?:của\s+)?(?:hệ thống|nhà phát triển)",
+    )
+)
+_FOLDED_INJECTION_PATTERNS = tuple(
+    re.compile(pattern, flags=re.IGNORECASE | re.DOTALL)
+    for pattern in (
+        r"bo[\W_]+qua.{0,60}(?:huong[\W_]+dan|chi[\W_]+thi|yeu[\W_]+cau).{0,30}(?:truoc|he[\W_]+thong|nha[\W_]+phat[\W_]+trien)",
+        r"(?:tiet[\W_]+lo|hien[\W_]+thi|in[\W_]+ra|tra[\W_]+ve).{0,80}(?:prompt[\W_]+he[\W_]+thong|khoa[\W_]+api|mat[\W_]+khau|token|thong[\W_]+tin[\W_]+dang[\W_]+nhap)",
+        r"(?:ghi[\W_]+de|thay[\W_]+the).{0,20}(?:huong[\W_]+dan|chi[\W_]+thi)[\W_]+(?:cua[\W_]+)?(?:he[\W_]+thong|nha[\W_]+phat[\W_]+trien)",
     )
 )
 _UNSAFE_EXECUTION_PATTERNS = tuple(
@@ -33,7 +42,10 @@ def contains_prompt_injection(text: str) -> bool:
     """Return true for explicit instruction-override or secret-exfiltration patterns."""
 
     normalized = " ".join(text.split())
-    return any(pattern.search(normalized) for pattern in _INJECTION_PATTERNS)
+    folded = _fold_accents(normalized)
+    return any(pattern.search(normalized) for pattern in _INJECTION_PATTERNS) or any(
+        pattern.search(folded) for pattern in _FOLDED_INJECTION_PATTERNS
+    )
 
 
 def contains_unsafe_instruction(text: str) -> bool:
@@ -42,4 +54,14 @@ def contains_unsafe_instruction(text: str) -> bool:
     normalized = " ".join(text.split())
     return contains_prompt_injection(normalized) or any(
         pattern.search(normalized) for pattern in _UNSAFE_EXECUTION_PATTERNS
+    )
+
+
+def _fold_accents(text: str) -> str:
+    """Fold only for security comparison; never return this representation to callers."""
+
+    decomposed = unicodedata.normalize("NFD", text.casefold()).replace("đ", "d")
+    return unicodedata.normalize(
+        "NFC",
+        "".join(character for character in decomposed if unicodedata.category(character) != "Mn"),
     )

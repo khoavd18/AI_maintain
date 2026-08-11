@@ -125,7 +125,7 @@ def test_generated_shell_or_tool_directive_is_rejected() -> None:
         (["S1", "S2"], ["S1"]),
     ],
 )
-def test_top_level_citations_must_equal_claim_level_citations(
+def test_safe_top_level_citation_union_mismatch_is_canonicalized(
     claim_source_ids: list[str],
     declared_source_ids: list[str],
 ) -> None:
@@ -138,8 +138,11 @@ def test_top_level_citations_must_equal_claim_level_citations(
 
     result = validate_citations(answer, {"S1", "S2"})
 
-    assert result.valid is False
-    assert result.coverage_complete is False
+    assert result.valid is True
+    assert result.coverage_complete is True
+    assert result.source_ids_canonicalized is True
+    assert result.top_level_union_exact is False
+    assert list(result.cited_source_ids) == list(dict.fromkeys(claim_source_ids))
     assert result.invalid_source_ids == ()
     assert result.cited_source_ids == tuple(claim_source_ids)
 

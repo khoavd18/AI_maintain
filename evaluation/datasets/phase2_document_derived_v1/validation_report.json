@@ -1,0 +1,51 @@
+{
+  "status": "PASS_WITH_WARNINGS",
+  "dataset_directory": "phase2_document_derived_v1",
+  "error_count": 0,
+  "warning_count": 6,
+  "observed_counts": {
+    "sources": 3,
+    "asset_profiles": 3,
+    "cases": 30,
+    "cases_per_asset_profile": 10,
+    "runner_eligible_cases": 27,
+    "manual_review_only_cases": 3,
+    "evidence_spans": 26,
+    "corpus_documents": 26,
+    "conversation_sequences": 3,
+    "conversation_turns": 6
+  },
+  "findings_digest_sha256": "af82cd60075309fd85f96ff188eaeac417cdc0ddd125df71e9a445c0ba1e1f0c",
+  "findings": [
+    {
+      "severity": "warning",
+      "code": "field_evidence_absent",
+      "message": "No field-observed ticket or work-order evidence is present."
+    },
+    {
+      "severity": "warning",
+      "code": "sme_review_pending",
+      "message": "All 30 cases require domain-expert review before approval."
+    },
+    {
+      "severity": "warning",
+      "code": "source_checksum_pending",
+      "message": "SRC-DAIKIN-RZAG-4P695307-1B needs a SHA-256 after authorised download."
+    },
+    {
+      "severity": "warning",
+      "code": "source_checksum_pending",
+      "message": "SRC-GENERAC-MLG15-A0000381158 needs a SHA-256 after authorised download."
+    },
+    {
+      "severity": "warning",
+      "code": "source_checksum_pending",
+      "message": "SRC-GF-CR5-0407 needs a SHA-256 after authorised download."
+    },
+    {
+      "severity": "warning",
+      "code": "supersession_pending",
+      "message": "One or more sources require a currentness/supersession check."
+    }
+  ]
+}

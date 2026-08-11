@@ -50,7 +50,7 @@ class GroundedLLMAnswer(BaseModel):
     safety_warnings: list[CitedStatement] = Field(max_length=6)
     escalation_required: bool
     source_ids: list[CitationId] = Field(
-        min_length=1,
+        default_factory=list,
         max_length=20,
         description=(
             "Exact deduplicated union of summary_source_ids and every claim-level source_ids; "
@@ -60,7 +60,7 @@ class GroundedLLMAnswer(BaseModel):
     confidence: Literal["low", "medium", "high"]
     insufficient_evidence: bool
 
-    @field_validator("summary_source_ids", "source_ids")
+    @field_validator("summary_source_ids")
     @classmethod
     def deduplicate_citations(cls, value: list[str]) -> list[str]:
         return list(dict.fromkeys(value))

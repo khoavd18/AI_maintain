@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-maintain-copilot/phase2-document-derived-case.schema.json",
+  "title": "Phase 2 document-derived evaluation case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "case_id",
+    "dataset_version",
+    "provenance_type",
+    "approval_state",
+    "split",
+    "language",
+    "asset_profile",
+    "question",
+    "question_form",
+    "case_type",
+    "intent",
+    "expected_behavior",
+    "runner_eligible",
+    "expected_document_ids",
+    "evidence_ids",
+    "gold_rubric",
+    "risk_level",
+    "citation_required",
+    "sme_review"
+  ],
+  "properties": {
+    "case_id": {"type": "string", "pattern": "^P2-(PUMP|HVAC|GEN)-[0-9]{3}$"},
+    "dataset_version": {"const": "0.1.0"},
+    "provenance_type": {"const": "document_derived"},
+    "approval_state": {"enum": ["draft", "SME_verified", "adjudicated", "approved"]},
+    "split": {"enum": ["calibration", "regression", "blind_acceptance"]},
+    "language": {"const": "vi"},
+    "asset_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_profile_id", "asset_type", "manufacturer", "model_scope"],
+      "properties": {
+        "asset_profile_id": {"type": "string"},
+        "asset_type": {"enum": ["Máy bơm nước", "Máy lạnh", "Máy phát điện dự phòng"]},
+        "manufacturer": {"type": "string", "minLength": 2},
+        "model_scope": {"type": "string", "minLength": 2}
+      }
+    },
+    "question": {"type": "string", "minLength": 12},
+    "question_form": {"type": "string", "minLength": 2},
+    "case_type": {"type": "string", "minLength": 2},
+    "intent": {"enum": ["preventive", "troubleshooting", "safety", "factual"]},
+    "expected_behavior": {"type": "string", "minLength": 2},
+    "runner_eligible": {"type": "boolean"},
+    "expected_document_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^P2-(PUMP|HVAC|GEN)-DOC-[0-9]{3}$"}
+    },
+    "evidence_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^EV-(PUMP|HVAC|GEN)-[0-9]{3}$"}
+    },
+    "gold_rubric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["must_include", "must_not_claim", "safety_requirements", "answer_boundary"],
+      "properties": {
+        "must_include": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 2}},
+        "must_not_claim": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 2}},
+        "safety_requirements": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 2}},
+        "answer_boundary": {"type": "string", "minLength": 8}
+      }
+    },
+    "risk_level": {"enum": ["low", "medium", "high", "critical"]},
+    "citation_required": {"const": true},
+    "sme_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "required_role"],
+      "properties": {
+        "status": {"enum": ["pending", "approved", "rejected", "needs_revision"]},
+        "required_role": {"type": "string", "minLength": 2}
+      }
+    }
+  }
+}

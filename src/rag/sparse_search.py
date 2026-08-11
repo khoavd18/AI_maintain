@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 import math
 import re
 from threading import Lock
+import time
 import unicodedata
 
 from src.rag.retriever import RetrievalResult
 from src.rag.vector_store import QdrantVectorStore, VectorSearchResult
+from src.rag.text_normalization import fold_accents
 
 _TOKEN_PATTERN = re.compile(r"[\w]+(?:[-_.][\w]+)*", flags=re.UNICODE)
 
@@ -120,12 +123,24 @@ class BM25Index:
 
 
 class QdrantBM25Retriever:
-    """Lazily materialize one bounded BM25 index from Qdrant payloads per process."""
+    """Lazily materialize a bounded BM25 index with interval-based freshness."""
 
-    def __init__(self, vector_store: QdrantVectorStore, *, max_chunks: int = 10000) -> None:
+    def __init__(
+        self,
+        vector_store: QdrantVectorStore,
+        *,
+        max_chunks: int = 10000,
+        refresh_interval_seconds: float = 60.0,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if refresh_interval_seconds <= 0:
+            raise ValueError("refresh_interval_seconds must be positive.")
         self.vector_store = vector_store
         self.max_chunks = max_chunks
+        self.refresh_interval_seconds = refresh_interval_seconds
+        self._monotonic = monotonic
         self._index: BM25Index | None = None
+        self._refreshed_at: float | None = None
         self._lock = Lock()
 
     def search(self, query: str, *, limit: int, **filters: str | None) -> list[RetrievalResult]:
@@ -136,21 +151,45 @@ class QdrantBM25Retriever:
 
         with self._lock:
             self._index = None
+            self._refreshed_at = None
 
     def _get_index(self) -> BM25Index:
-        if self._index is None:
+        now = self._now()
+        if self._is_stale(now):
             with self._lock:
-                if self._index is None:
+                now = self._now()
+                if self._is_stale(now):
                     payloads = self.vector_store.list_chunks(max_chunks=self.max_chunks)
                     self._index = BM25Index([_from_vector_result(item) for item in payloads])
+                    self._refreshed_at = now
+        if self._index is None:  # pragma: no cover - guarded by the refresh branch
+            raise RuntimeError("BM25 index initialization failed.")
         return self._index
+
+    def _is_stale(self, now: float) -> bool:
+        return (
+            self._index is None
+            or self._refreshed_at is None
+            or (now - self._refreshed_at >= self.refresh_interval_seconds)
+        )
+
+    def _now(self) -> float:
+        value = self._monotonic()
+        return float(value)
 
 
 def tokenize(text: str) -> list[str]:
-    """Tokenize Vietnamese text and preserve exact equipment identifiers."""
+    """Keep exact tokens and add distinct accent-folded Vietnamese variants."""
 
     normalized = unicodedata.normalize("NFC", text).casefold()
-    return [match.group(0) for match in _TOKEN_PATTERN.finditer(normalized)]
+    tokens: list[str] = []
+    for match in _TOKEN_PATTERN.finditer(normalized):
+        token = match.group(0)
+        tokens.append(token)
+        folded = fold_accents(token)
+        if folded != token:
+            tokens.append(folded)
+    return tokens
 
 
 def _matches_filters(

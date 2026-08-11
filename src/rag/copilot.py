@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
+import time
 from typing import Any
 
 from src.llm.base import (
@@ -28,6 +29,14 @@ from src.rag.adapters.asset_context import AssetContextProvider
 from src.rag.query_analysis import QueryAnalyzer
 from src.rag.retriever import Retriever
 from src.rag.application import GenerationService, RequestAnalysisService, RetrievalService
+from src.rag.conversation import build_conversation_state
+from src.rag.diagnostics import (
+    add_stage_latency,
+    current_diagnostics,
+    emit_diagnostics,
+    reset_diagnostics,
+    start_diagnostics,
+)
 
 MAX_QUESTION_LENGTH = 1000
 logger = logging.getLogger("maintenance.copilot")
@@ -99,8 +108,65 @@ class MaintenanceCopilot:
         version: str | None = None,
         language: str | None = None,
         conversation_context: dict[str, Any] | None = None,
+        request_id: str | None = None,
     ) -> CopilotAnswer:
         """Run the ordered grounded-answer pipeline through focused collaborators."""
+
+        diagnostics, token = start_diagnostics(request_id)
+        started = time.perf_counter()
+        try:
+            response = self._run_pipeline(
+                question=question,
+                asset_id=asset_id,
+                top_k=top_k,
+                document_type=document_type,
+                failure_category=failure_category,
+                version=version,
+                language=language,
+                conversation_context=conversation_context,
+            )
+            diagnostics.response_mode = response.response_mode
+            diagnostics.fallback_reason = response.fallback_reason
+            diagnostics.provider = response.llm_provider
+            diagnostics.model = response.llm_model
+            citation = response.citation_validation or {}
+            if citation.get("valid"):
+                diagnostics.citation_status = (
+                    "canonicalized" if citation.get("source_ids_canonicalized") else "valid"
+                )
+            elif response.citation_validation is not None:
+                diagnostics.citation_status = "invalid"
+            if response.fallback_reason in {
+                "llm_timeout",
+                "llm_unavailable",
+                "llm_provider_error",
+            }:
+                diagnostics.provider_failure_category = response.fallback_reason
+            diagnostics.latency_ms["total"] = (time.perf_counter() - started) * 1000.0
+            response = replace(response, diagnostics=diagnostics.to_dict())
+            emit_diagnostics(diagnostics)
+            return response
+        except Exception:
+            diagnostics.fallback_reason = "pipeline_error"
+            diagnostics.latency_ms["total"] = (time.perf_counter() - started) * 1000.0
+            emit_diagnostics(diagnostics)
+            raise
+        finally:
+            reset_diagnostics(token)
+
+    def _run_pipeline(
+        self,
+        *,
+        question: str,
+        asset_id: str | None,
+        top_k: int,
+        document_type: str | None,
+        failure_category: str | None,
+        version: str | None,
+        language: str | None,
+        conversation_context: dict[str, Any] | None,
+    ) -> CopilotAnswer:
+        routing_started = time.perf_counter()
 
         prepared = self.request_analysis.prepare(
             question=question,
@@ -111,6 +177,22 @@ class MaintenanceCopilot:
             language=language,
             conversation_context=conversation_context,
         )
+        add_stage_latency("routing", (time.perf_counter() - routing_started) * 1000.0)
+        diagnostics = current_diagnostics()
+        if diagnostics is not None:
+            diagnostics.route_status = prepared.early_status or "supported"
+            analysis = prepared.analysis or prepared.pre_analysis
+            diagnostics.intent = analysis.intent if analysis is not None else None
+            diagnostics.filters_present = {
+                key: key in prepared.filters
+                for key in (
+                    "asset_type",
+                    "failure_category",
+                    "document_type",
+                    "version",
+                    "language",
+                )
+            }
         if prepared.early_status == "unsafe_conversation":
             return fallback_response(
                 question=prepared.normalized_question,
@@ -130,10 +212,17 @@ class MaintenanceCopilot:
                 fallback_reason=prepared.early_status,
             )
         if prepared.early_status == "conversation":
-            return self._conversation_response(
-                question=prepared.normalized_question,
-                intent=prepared.pre_analysis.intent,
-            )
+            generation_started = time.perf_counter()
+            try:
+                return self._conversation_response(
+                    question=prepared.normalized_question,
+                    intent=prepared.pre_analysis.intent,
+                )
+            finally:
+                add_stage_latency(
+                    "generation",
+                    (time.perf_counter() - generation_started) * 1000.0,
+                )
         if prepared.early_status is not None:
             return fallback_response(
                 question=prepared.normalized_question,
@@ -147,26 +236,55 @@ class MaintenanceCopilot:
             query=prepared.retrieval_query or prepared.normalized_question,
             top_k=top_k,
             filters=prepared.filters,
+            relaxable_filters=prepared.relaxable_filters,
             min_relevant_documents=self.generation_config.min_relevant_documents,
         )
+        if diagnostics is not None:
+            diagnostics.relaxation_steps = list(retrieval.relaxation_steps)
+            diagnostics.candidate_count = retrieval.candidate_count
+            diagnostics.relevant_count = retrieval.relevant_count
+            diagnostics.document_count = retrieval.document_count
         if retrieval.requires_fallback:
             return fallback_response(
                 question=prepared.normalized_question,
                 asset_id=asset_id,
                 asset_context=prepared.asset_context,
                 retrieval_status=retrieval.retrieval_status or "empty",
-                filters=prepared.filters,
+                filters=retrieval.filters_applied or prepared.filters,
                 fallback_reason=retrieval.fallback_reason,
                 context_warnings=retrieval.context_warnings,
             )
 
-        return self.generation_service.generate(
+        generation_started = time.perf_counter()
+        response = self.generation_service.generate(
             question=prepared.normalized_question,
+            conversation=(
+                prepared.conversation
+                if prepared.analysis and prepared.analysis.follow_up_reference
+                else None
+            ),
             asset_id=asset_id,
             asset_context=prepared.asset_context,
             retrievals=retrieval.relevant,
-            filters=prepared.filters,
+            filters=retrieval.filters_applied or prepared.filters,
             context_warnings=retrieval.context_warnings,
+        )
+        add_stage_latency("generation", (time.perf_counter() - generation_started) * 1000.0)
+        if (
+            response.retrieval_status != "success"
+            or not response.sources
+            or prepared.analysis is None
+        ):
+            return response
+        return replace(
+            response,
+            conversation_state=build_conversation_state(
+                intent=prepared.analysis.intent,
+                inferred_failure_category=prepared.analysis.failure_category,
+                filters_applied=retrieval.filters_applied or prepared.filters,
+                sources=response.sources,
+                structured_answer=response.structured_answer,
+            ),
         )
 
     def _conversation_response(self, *, question: str, intent: str) -> CopilotAnswer:
@@ -223,8 +341,11 @@ class MaintenanceCopilot:
                 confidence="not_applicable",
             )
 
-        logger.warning("Copilot used local conversation fallback after generation failure: %s", reason)
+        logger.warning(
+            "Copilot used local conversation fallback after generation failure: %s", reason
+        )
         return conversation_fallback(question=question, intent=intent, reason=reason)
+
 
 @lru_cache(maxsize=1)
 def get_copilot_service() -> MaintenanceCopilot:

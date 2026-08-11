@@ -627,6 +627,28 @@ class CopilotAskRequest(BaseModel):
     conversation_context: ConversationContextRequest | None = None
 
 
+class CopilotDiagnosticsResponse(BaseModel):
+    """Privacy-safe operational facts; content-bearing fields are deliberately absent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = "not-provided"
+    route_status: str | None = None
+    intent: str | None = None
+    filters_present: dict[str, bool] = Field(default_factory=dict)
+    relaxation_steps: list[str] = Field(default_factory=list)
+    candidate_count: int = Field(default=0, ge=0)
+    relevant_count: int = Field(default=0, ge=0)
+    document_count: int = Field(default=0, ge=0)
+    latency_ms: dict[str, float] = Field(default_factory=dict)
+    response_mode: str | None = None
+    fallback_reason: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    citation_status: str = "not_applicable"
+    provider_failure_category: str | None = None
+
+
 class CopilotAskResponse(BaseModel):
     """Response returned by the Maintenance Copilot."""
 
@@ -646,6 +668,8 @@ class CopilotAskResponse(BaseModel):
     evidence_status: str = "insufficient"
     citation_validation: dict[str, Any] | None = None
     context_warnings: list[str] = Field(default_factory=list)
+    conversation_state: ConversationContextRequest | None = None
+    diagnostics: CopilotDiagnosticsResponse = Field(default_factory=CopilotDiagnosticsResponse)
     confidence: Literal[
         "high",
         "medium",

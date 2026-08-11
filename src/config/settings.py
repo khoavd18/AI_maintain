@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     rag_reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     rag_reranker_device: str = "auto"
     rag_sparse_max_chunks: int = Field(default=10000, ge=100, le=100000)
+    rag_sparse_refresh_seconds: int = Field(default=60, ge=5, le=3600)
     rag_debug_enabled: bool = False
     llm_enabled: bool = False
     llm_provider: Literal["ollama", "openai_compatible"] = "ollama"
@@ -215,9 +216,7 @@ class Settings(BaseSettings):
         ):
             raise ValueError("RAG_DENSE_WEIGHT and RAG_SPARSE_WEIGHT must sum to 1.0.")
         if not math.isclose(
-            self.rag_retrieval_weight
-            + self.rag_reranker_weight
-            + self.rag_metadata_weight,
+            self.rag_retrieval_weight + self.rag_reranker_weight + self.rag_metadata_weight,
             1.0,
             abs_tol=1e-9,
         ):

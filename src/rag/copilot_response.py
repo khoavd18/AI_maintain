@@ -47,6 +47,8 @@ class CopilotAnswer:
     citation_validation: dict[str, Any] | None = None
     context_warnings: list[str] = field(default_factory=list)
     confidence: str = "insufficient_evidence"
+    conversation_state: dict[str, Any] | None = None
+    diagnostics: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Return an API-safe response dictionary with additive status fields."""
@@ -69,6 +71,8 @@ class CopilotAnswer:
             "citation_validation": self.citation_validation,
             "context_warnings": self.context_warnings,
             "confidence": self.confidence,
+            "conversation_state": self.conversation_state,
+            "diagnostics": self.diagnostics,
         }
 
 

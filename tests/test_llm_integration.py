@@ -82,6 +82,8 @@ def test_grounded_llm_response_is_structured_and_citation_validated() -> None:
         "coverage_complete": True,
         "support_complete": True,
         "unsupported_claims": [],
+        "source_ids_canonicalized": False,
+        "top_level_union_exact": True,
     }
     assert response.sources[0]["citation_ids"] == ["S1"]
     assert response.retrieved_chunks[0]["citation_id"] == "S1"

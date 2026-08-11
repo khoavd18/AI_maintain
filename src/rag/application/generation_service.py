@@ -31,6 +31,7 @@ from src.rag.copilot_response import (
     retrieved_chunk_payloads,
 )
 from src.rag.retriever import RetrievalResult
+from src.rag.conversation import ConversationContext
 
 logger = logging.getLogger("maintenance.copilot")
 
@@ -46,6 +47,7 @@ class GenerationService:
         self,
         *,
         question: str,
+        conversation: ConversationContext | None,
         asset_id: str | None,
         asset_context: dict[str, Any] | None,
         retrievals: list[RetrievalResult],
@@ -76,6 +78,7 @@ class GenerationService:
 
         prompt = build_grounded_prompt(
             question=question,
+            conversation_context=(conversation.to_prompt_data() if conversation else None),
             asset_context=asset_context,
             retrievals=retrievals,
             max_context_chars=self.generation_config.max_context_chars,

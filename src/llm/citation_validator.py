@@ -20,6 +20,8 @@ class CitationValidationResult:
     coverage_complete: bool
     support_complete: bool = True
     unsupported_claims: tuple[str, ...] = ()
+    source_ids_canonicalized: bool = False
+    top_level_union_exact: bool = True
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -29,6 +31,8 @@ class CitationValidationResult:
             "coverage_complete": self.coverage_complete,
             "support_complete": self.support_complete,
             "unsupported_claims": list(self.unsupported_claims),
+            "source_ids_canonicalized": self.source_ids_canonicalized,
+            "top_level_union_exact": self.top_level_union_exact,
         }
 
 
@@ -49,10 +53,10 @@ def validate_citations(
     claim_source_ids: set[str] = set()
     for group in citation_groups:
         claim_source_ids.update(group)
+    canonical_source_ids = tuple(sorted(claim_source_ids, key=_citation_sort_key))
     declared_source_ids = set(answer.source_ids)
-    coverage_complete = all(bool(group) for group in citation_groups) and (
-        declared_source_ids == claim_source_ids
-    )
+    coverage_complete = all(bool(group) for group in citation_groups)
+    top_level_union_exact = tuple(answer.source_ids) == canonical_source_ids
     referenced_source_ids = declared_source_ids | claim_source_ids
     invalid = referenced_source_ids - allowed_source_ids
     unsupported_claims: list[str] = []
@@ -77,13 +81,22 @@ def validate_citations(
             if not _has_lexical_support(claim, cited_text, minimum_token_overlap):
                 unsupported_claims.append(label)
     support_complete = not unsupported_claims
+    safe_to_canonicalize = (
+        coverage_complete
+        and support_complete
+        and bool(claim_source_ids)
+        and not invalid
+        and not top_level_union_exact
+    )
     return CitationValidationResult(
         valid=(coverage_complete and support_complete and bool(claim_source_ids) and not invalid),
-        cited_source_ids=tuple(sorted(claim_source_ids, key=_citation_sort_key)),
+        cited_source_ids=canonical_source_ids,
         invalid_source_ids=tuple(sorted(invalid, key=_citation_sort_key)),
         coverage_complete=coverage_complete,
         support_complete=support_complete,
         unsupported_claims=tuple(unsupported_claims),
+        source_ids_canonicalized=safe_to_canonicalize,
+        top_level_union_exact=top_level_union_exact,
     )
 
 

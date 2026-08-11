@@ -9,7 +9,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { useCopilotStatus } from "@/components/copilot-status-provider";
 import { SafetyNotice } from "@/components/safety-notice";
@@ -35,8 +35,6 @@ import { getApiErrorMessage, UserSafeApiError } from "@/lib/api/errors";
 import type { CopilotAskResponse } from "@/lib/api/schemas";
 import {
   getCopilotSuggestions,
-  isCopilotSummarySection,
-  parseCopilotAnswer,
   ragStatusFromResponse,
 } from "@/lib/copilot";
 import { cn } from "@/lib/utils";
@@ -66,7 +64,26 @@ export function CopilotWorkspace({
   const [history, setHistory] = useState<ConversationTurn[]>([]);
   const turnSequence = useRef(0);
   const submitting = useRef(false);
+  const conversationEpoch = useRef(0);
+  const requestSequence = useRef(0);
+  const activeRequestId = useRef<number | null>(null);
+  const mounted = useRef(true);
+  const selectedContext = useRef({ assetId: selectedAssetId, ticketId: selectedTicketId });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      conversationEpoch.current += 1;
+      activeRequestId.current = null;
+      submitting.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    selectedContext.current = { assetId: selectedAssetId, ticketId: selectedTicketId };
+  }, [selectedAssetId, selectedTicketId]);
 
   const assets = useMemo(() => (assetsQuery.data ?? []).map(adaptAsset), [assetsQuery.data]);
   const tickets = useMemo(() => (ticketsQuery.data ?? []).map(adaptTicket), [ticketsQuery.data]);
@@ -80,7 +97,27 @@ export function CopilotWorkspace({
     (!assetsQuery.isPending && Boolean(selectedAssetId) && !selectedAsset) ||
     (!ticketsQuery.isPending && Boolean(selectedTicketId) && !selectedTicket);
 
+  function invalidateConversationEpoch() {
+    conversationEpoch.current += 1;
+    activeRequestId.current = null;
+    submitting.current = false;
+  }
+
+  function isCurrentRequest(
+    requestId: number,
+    epoch: number,
+    assetId: string,
+    ticketId: string,
+  ) {
+    return mounted.current
+      && activeRequestId.current === requestId
+      && conversationEpoch.current === epoch
+      && selectedContext.current.assetId === assetId
+      && selectedContext.current.ticketId === ticketId;
+  }
+
   function updateContext(assetId: string, ticketId = "") {
+    invalidateConversationEpoch();
     setSelectedAssetId(assetId);
     setSelectedTicketId(ticketId);
     setHistory([]);
@@ -90,6 +127,13 @@ export function CopilotWorkspace({
     if (assetId) params.set("asset", assetId);
     if (ticketId) params.set("ticket", ticketId);
     router.replace(params.size ? `${pathname}?${params}` : pathname, { scroll: false });
+  }
+
+  function clearConversation() {
+    invalidateConversationEpoch();
+    setHistory([]);
+    mutation.reset();
+    setValidationError(null);
   }
 
   async function submitQuestion(nextQuestion = question) {
@@ -109,6 +153,12 @@ export function CopilotWorkspace({
     setValidationError(null);
     mutation.reset();
     submitting.current = true;
+    requestSequence.current += 1;
+    const requestId = requestSequence.current;
+    const epoch = conversationEpoch.current;
+    const submittedAssetId = selectedAssetId;
+    const submittedTicketId = selectedTicketId;
+    activeRequestId.current = requestId;
     try {
       const previousTurn = history.at(-1);
       const conversationContext = previousTurn
@@ -121,6 +171,14 @@ export function CopilotWorkspace({
         failure_category: selectedTicket?.failureCategory,
         ...(conversationContext ? { conversation_context: conversationContext } : {}),
       });
+      if (
+        !isCurrentRequest(
+          requestId,
+          epoch,
+          submittedAssetId,
+          submittedTicketId,
+        )
+      ) return;
       turnSequence.current += 1;
       setHistory((current) => [
         ...current,
@@ -130,12 +188,23 @@ export function CopilotWorkspace({
       const nextRagStatus = ragStatusFromResponse(response);
       if (nextRagStatus) setRagStatus(nextRagStatus);
     } catch (error) {
+      if (
+        !isCurrentRequest(
+          requestId,
+          epoch,
+          submittedAssetId,
+          submittedTicketId,
+        )
+      ) return;
       if (error instanceof UserSafeApiError && error.code === "rag_unavailable") {
         setRagStatus("unavailable");
       }
     } finally {
-      submitting.current = false;
-      window.setTimeout(() => textareaRef.current?.focus(), 0);
+      if (activeRequestId.current === requestId) {
+        activeRequestId.current = null;
+        submitting.current = false;
+        if (mounted.current) window.setTimeout(() => textareaRef.current?.focus(), 0);
+      }
     }
   }
 
@@ -339,7 +408,7 @@ export function CopilotWorkspace({
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="copilot-question">Câu hỏi bảo trì</Label>
             {history.length > 0 && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setHistory([])}>
+              <Button type="button" variant="ghost" size="sm" onClick={clearConversation}>
                 <Trash2 aria-hidden="true" />Xóa cuộc trò chuyện
               </Button>
             )}
@@ -387,19 +456,16 @@ function buildConversationContext(
   selectedAssetType?: string,
   selectedFailureCategory?: string,
 ) {
+  if (response.conversation_state) return response.conversation_state;
   const citationIds = Array.from(new Set(
     response.sources.flatMap((source) => source.citation_ids),
   )).slice(0, 10);
-  const parsedSummary = parseCopilotAnswer(response.answer)
-    .find((section) => isCopilotSummarySection(section.title));
-  const summary = response.structured_answer?.summary
-    ?? [...(parsedSummary?.paragraphs ?? []), ...(parsedSummary?.items ?? [])].join(" ");
   return {
     resolved_asset_type: selectedAssetType ?? response.sources[0]?.asset_type ?? undefined,
     resolved_failure_category: selectedFailureCategory
       ?? response.sources[0]?.failure_category
       ?? undefined,
     previous_source_ids: citationIds,
-    previous_answer_summary: summary.slice(0, 600),
+    previous_answer_summary: "",
   };
 }

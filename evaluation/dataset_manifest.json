@@ -1,10 +1,11 @@
 {
   "dataset": "rag_questions.jsonl",
-  "version": "2.0.0",
+  "conversation_sequences": "rag_conversation_sequences.jsonl",
+  "version": "3.0.0",
   "language": "vi",
   "corpus": "synthetic-maintenance-demo",
   "limitations": [
-    "Small synthetic corpus",
+    "Six-document, 30-chunk synthetic corpus with evidence-derived paraphrases only",
     "Not evidence of field accuracy or safety approval",
     "Production cross-encoder quality requires a configured-service evaluation"
   ]

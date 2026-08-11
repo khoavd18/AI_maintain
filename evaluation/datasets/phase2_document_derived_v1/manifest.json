@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_id": "phase2-document-derived-v1-draft",
+  "version": "0.1.0",
+  "created_at": "2026-08-11T00:00:00+07:00",
+  "language": "vi",
+  "provenance_type": "document_derived",
+  "approval_state": "draft",
+  "readiness": "DRAFT_SME_REVIEW_REQUIRED",
+  "corpus": "official-manual-paraphrase-fixture-v0.1",
+  "source_archive": {
+    "filename": "ai_maintain_copilot-source-20260811-101604.zip",
+    "sha256": "08521ceae108d33736e26770e7b32478a3b18a22627b029cfc2b4254f9b8eea4"
+  },
+  "files": {
+    "cases": "cases.jsonl",
+    "retrieval_questions": "retrieval_questions.jsonl",
+    "conversation_sequences": "conversation_sequences.jsonl",
+    "source_registry": "source_registry.jsonl",
+    "evidence_spans": "evidence_spans.jsonl",
+    "corpus_documents": "corpus_documents.csv",
+    "review_queue": "review_queue.xlsx",
+    "validation_report": "validation_report.json",
+    "retrieval_report": "retrieval_report.json",
+    "deterministic_report": "deterministic_report.json",
+    "qa_report": "QA_REPORT.md",
+    "checksums": "checksums.sha256"
+  },
+  "counts": {
+    "sources": 3,
+    "asset_profiles": 3,
+    "cases": 30,
+    "cases_per_asset_profile": 10,
+    "runner_eligible_cases": 27,
+    "manual_review_only_cases": 3,
+    "evidence_spans": 26,
+    "corpus_documents": 26,
+    "conversation_sequences": 3,
+    "conversation_turns": 6
+  },
+  "asset_profiles": [
+    {
+      "asset_profile_id": "ASSET-PUMP-GF-CR5-A",
+      "asset_type": "Máy bơm nước",
+      "manufacturer": "Grundfos",
+      "model_scope": "CR 5 Model A, 50/60 Hz, 1/3 phase"
+    },
+    {
+      "asset_profile_id": "ASSET-HVAC-DAIKIN-RZAG-N",
+      "asset_type": "Máy lạnh",
+      "manufacturer": "Daikin",
+      "model_scope": "RZAG71-140N Sky Air Alpha-series"
+    },
+    {
+      "asset_profile_id": "ASSET-GEN-GENERAC-MLG15",
+      "asset_type": "Máy phát điện dự phòng",
+      "manufacturer": "Generac Mobile",
+      "model_scope": "MLG15 diesel generator, serial number 3004595385 and above"
+    }
+  ],
+  "limitations": [
+    "This is a document-derived calibration batch, not field-observed ticket or work-order evidence.",
+    "All case answers and Vietnamese corpus text are paraphrases of linked manufacturer manuals; SME review is still pending.",
+    "Applicability is limited to the exact model and revision scope recorded in the source registry; instructions must not be generalized to other variants.",
+    "Manufacturer PDFs are link-only and are not redistributed in this package; remote availability and checksums must be re-verified before controlled ingestion.",
+    "The Grundfos CR 5 service source is an older Model A document and must be supersession-checked before any operational pilot.",
+    "The batch is for schema, retrieval, citation, refusal, and review-workflow calibration; it is not evidence of production accuracy or safety approval."
+  ]
+}

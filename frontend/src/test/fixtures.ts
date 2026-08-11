@@ -481,6 +481,30 @@ export const copilotResponseFixture = {
     coverage_complete: true,
   },
   context_warnings: [],
+  conversation_state: {
+    recent_intent: "troubleshooting",
+    resolved_asset_type: "Máy phát điện dự phòng",
+    resolved_failure_category: "Lỗi điện",
+    previous_source_ids: ["S1"],
+    previous_answer_summary: "Tóm tắt lượt trước do backend xác nhận.",
+  },
+  diagnostics: {
+    request_id: "fixture-request",
+    route_status: "supported",
+    intent: "troubleshooting",
+    filters_present: { asset_type: true, failure_category: true },
+    relaxation_steps: [],
+    candidate_count: 1,
+    relevant_count: 1,
+    document_count: 1,
+    latency_ms: { routing: 1, retrieval: 2, reranking: 3, generation: 4, total: 10 },
+    response_mode: "llm_grounded",
+    fallback_reason: null,
+    provider: "ollama",
+    model: "demo-model",
+    citation_status: "valid",
+    provider_failure_category: null,
+  },
 };
 
 export const copilotUnavailableFixture = {
@@ -502,4 +526,5 @@ export const copilotUnavailableFixture = {
   llm_model: null,
   evidence_status: "insufficient" as const,
   citation_validation: null,
+  conversation_state: null,
 };

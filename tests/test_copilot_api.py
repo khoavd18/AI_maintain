@@ -67,6 +67,24 @@ def test_copilot_api_serializes_bounded_conversation_response() -> None:
         "citation_validation": None,
         "context_warnings": [],
         "confidence": "not_applicable",
+        "conversation_state": None,
+        "diagnostics": {
+            "request_id": "not-provided",
+            "route_status": None,
+            "intent": None,
+            "filters_present": {},
+            "relaxation_steps": [],
+            "candidate_count": 0,
+            "relevant_count": 0,
+            "document_count": 0,
+            "latency_ms": {},
+            "response_mode": None,
+            "fallback_reason": None,
+            "provider": None,
+            "model": None,
+            "citation_status": "not_applicable",
+            "provider_failure_category": None,
+        },
     }
 
 

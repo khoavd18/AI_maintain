@@ -642,6 +642,26 @@ const copilotCitationValidationSchema = z.object({
   coverage_complete: z.boolean(),
   support_complete: z.boolean().optional(),
   unsupported_claims: z.array(requiredStringSchema).optional(),
+  source_ids_canonicalized: z.boolean().optional(),
+  top_level_union_exact: z.boolean().optional(),
+});
+
+const copilotDiagnosticsSchema = z.object({
+  request_id: requiredStringSchema,
+  route_status: z.string().nullable(),
+  intent: z.string().nullable(),
+  filters_present: z.record(z.string(), z.boolean()),
+  relaxation_steps: z.array(requiredStringSchema),
+  candidate_count: nonNegativeIntegerSchema,
+  relevant_count: nonNegativeIntegerSchema,
+  document_count: nonNegativeIntegerSchema,
+  latency_ms: z.record(z.string(), z.number().nonnegative()),
+  response_mode: z.string().nullable(),
+  fallback_reason: z.string().nullable(),
+  provider: z.string().nullable(),
+  model: z.string().nullable(),
+  citation_status: requiredStringSchema,
+  provider_failure_category: z.string().nullable(),
 });
 
 export const copilotAskResponseSchema = z.object({
@@ -662,6 +682,24 @@ export const copilotAskResponseSchema = z.object({
   citation_validation: copilotCitationValidationSchema.nullable().default(null),
   context_warnings: z.array(requiredStringSchema).default([]),
   confidence: z.enum(["high", "medium", "low", "insufficient_evidence", "not_applicable"]).optional(),
+  conversation_state: copilotConversationContextSchema.nullable().default(null),
+  diagnostics: copilotDiagnosticsSchema.optional().default({
+    request_id: "not-provided",
+    route_status: null,
+    intent: null,
+    filters_present: {},
+    relaxation_steps: [],
+    candidate_count: 0,
+    relevant_count: 0,
+    document_count: 0,
+    latency_ms: {},
+    response_mode: null,
+    fallback_reason: null,
+    provider: null,
+    model: null,
+    citation_status: "not_applicable",
+    provider_failure_category: null,
+  }),
 });
 
 export const assetDetailsResponseSchema = z.object({

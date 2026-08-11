@@ -1,0 +1,3 @@
+{"id":"hvac_second_cause","turns":[{"question":"Máy lạnh không làm mát thì cần kiểm tra gì trước?","expected_document_ids":["DOC-002"]},{"question":"Cái thứ hai thì sao?","expected_document_ids":["DOC-002"]}]}
+{"id":"pump_handle_reference","turns":[{"question":"Máy bơm nước rung hoặc có tiếng ồn bất thường cần kiểm tra gì?","expected_document_ids":["DOC-004"]},{"question":"Làm sao xử lý cái đó?","expected_document_ids":["DOC-004"]}]}
+{"id":"hvac_other_cause","turns":[{"question":"Máy lạnh chảy nước là sao?","expected_document_ids":["DOC-002"]},{"question":"Còn nguyên nhân kia?","expected_document_ids":["DOC-002"]}]}

@@ -1,0 +1,1953 @@
+{
+  "dataset_version": "0.1.0",
+  "dataset_id": "phase2-document-derived-v1-draft",
+  "corpus": "official-manual-paraphrase-fixture-v0.1",
+  "dataset": "evaluation/datasets/phase2_document_derived_v1/retrieval_questions.jsonl",
+  "documents": "evaluation/datasets/phase2_document_derived_v1/corpus_documents.csv",
+  "backend": "in-memory-hash",
+  "dataset_size": 27,
+  "conversation_sequence_count": 3,
+  "limitations": [
+    "This is a document-derived calibration batch, not field-observed ticket or work-order evidence.",
+    "All case answers and Vietnamese corpus text are paraphrases of linked manufacturer manuals; SME review is still pending.",
+    "Applicability is limited to the exact model and revision scope recorded in the source registry; instructions must not be generalized to other variants.",
+    "Manufacturer PDFs are link-only and are not redistributed in this package; remote availability and checksums must be re-verified before controlled ingestion.",
+    "The Grundfos CR 5 service source is an older Model A document and must be supersession-checked before any operational pilot.",
+    "The batch is for schema, retrieval, citation, refusal, and review-workflow calibration; it is not evidence of production accuracy or safety approval.",
+    "In-memory hash embeddings are deterministic test fixtures, not semantic production embeddings.",
+    "Ungrounded LLM mode is intentionally excluded because the product must not generate maintenance guidance without retrieved evidence."
+  ],
+  "retrieval": {
+    "question_count": 27,
+    "recall_at_1": 0.8518518518518519,
+    "recall_at_3": 0.9629629629629629,
+    "recall_at_5": 1.0,
+    "mean_reciprocal_rank": 0.908641975308642,
+    "ndcg_at_5": 0.9314337894213872,
+    "asset_type_filter_accuracy": 1.0,
+    "latency_ms": {
+      "average": 4.4256842962500675,
+      "p50": 4.43816599999991,
+      "p95": 4.971929999555869
+    },
+    "cases": [
+      {
+        "id": "P2-PUMP-001",
+        "ranked_document_ids": [
+          "P2-PUMP-DOC-003",
+          "P2-PUMP-DOC-006",
+          "P2-PUMP-DOC-007"
+        ],
+        "expected_document_ids": [
+          "P2-PUMP-DOC-003"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-PUMP-002",
+        "ranked_document_ids": [
+          "P2-PUMP-DOC-004",
+          "P2-PUMP-DOC-005",
+          "P2-PUMP-DOC-009",
+          "P2-PUMP-DOC-007"
+        ],
+        "expected_document_ids": [
+          "P2-PUMP-DOC-004"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-PUMP-003",
+        "ranked_document_ids": [
+          "P2-PUMP-DOC-005",
+          "P2-PUMP-DOC-006",
+          "P2-PUMP-DOC-004",
+          "P2-PUMP-DOC-003"
+        ],
+        "expected_document_ids": [
+          "P2-PUMP-DOC-005"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-PUMP-004",
+        "ranked_document_ids": [
+          "P2-PUMP-DOC-004",
+          "P2-PUMP-DOC-006",
+          "P2-PUMP-DOC-005"
+        ],
+        "expected_document_ids": [
+          "P2-PUMP-DOC-006"
+        ],
+        "first_relevant_rank": 2,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-PUMP-005",
+        "ranked_document_ids": [
+          "P2-PUMP-DOC-007",
+          "P2-PUMP-DOC-003",
+          "P2-PUMP-DOC-001"
+        ],
+        "expected_document_ids": [
+          "P2-PUMP-DOC-007"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-PUMP-006",
+        "ranked_document_ids": [
+          "P2-PUMP-DOC-008",
+          "P2-PUMP-DOC-003",
+          "P2-PUMP-DOC-004"
+        ],
+        "expected_document_ids": [
+          "P2-PUMP-DOC-008"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-PUMP-007",
+        "ranked_document_ids": [
+          "P2-PUMP-DOC-009",
+          "P2-PUMP-DOC-006",
+          "P2-PUMP-DOC-007"
+        ],
+        "expected_document_ids": [
+          "P2-PUMP-DOC-009"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-PUMP-008",
+        "ranked_document_ids": [
+          "P2-PUMP-DOC-002",
+          "P2-PUMP-DOC-005",
+          "P2-PUMP-DOC-006"
+        ],
+        "expected_document_ids": [
+          "P2-PUMP-DOC-002"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-001",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-001",
+          "P2-HVAC-DOC-006",
+          "P2-HVAC-DOC-004"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-001"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-002",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-004",
+          "P2-HVAC-DOC-003",
+          "P2-HVAC-DOC-006",
+          "P2-HVAC-DOC-007",
+          "P2-HVAC-DOC-002"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-002"
+        ],
+        "first_relevant_rank": 5,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-003",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-003",
+          "P2-HVAC-DOC-002"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-003"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-004",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-003",
+          "P2-HVAC-DOC-006",
+          "P2-HVAC-DOC-001",
+          "P2-HVAC-DOC-007"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-003"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-005",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-005",
+          "P2-HVAC-DOC-004"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-005"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-006",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-004",
+          "P2-HVAC-DOC-006",
+          "P2-HVAC-DOC-005"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-004"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-007",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-004",
+          "P2-HVAC-DOC-003",
+          "P2-HVAC-DOC-006",
+          "P2-HVAC-DOC-005",
+          "P2-HVAC-DOC-001"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-004"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-008",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-006",
+          "P2-HVAC-DOC-004",
+          "P2-HVAC-DOC-003",
+          "P2-HVAC-DOC-002",
+          "P2-HVAC-DOC-007"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-006"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-009",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-006",
+          "P2-HVAC-DOC-007",
+          "P2-HVAC-DOC-003",
+          "P2-HVAC-DOC-004",
+          "P2-HVAC-DOC-005"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-006"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-HVAC-010",
+        "ranked_document_ids": [
+          "P2-HVAC-DOC-007",
+          "P2-HVAC-DOC-006",
+          "P2-HVAC-DOC-004",
+          "P2-HVAC-DOC-002"
+        ],
+        "expected_document_ids": [
+          "P2-HVAC-DOC-007"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-001",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-005",
+          "P2-GEN-DOC-010",
+          "P2-GEN-DOC-002",
+          "P2-GEN-DOC-003",
+          "P2-GEN-DOC-007"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-002"
+        ],
+        "first_relevant_rank": 3,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-002",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-003",
+          "P2-GEN-DOC-005",
+          "P2-GEN-DOC-008",
+          "P2-GEN-DOC-010",
+          "P2-GEN-DOC-009"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-003"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-003",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-009",
+          "P2-GEN-DOC-004",
+          "P2-GEN-DOC-005",
+          "P2-GEN-DOC-008"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-004"
+        ],
+        "first_relevant_rank": 2,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-004",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-005",
+          "P2-GEN-DOC-009",
+          "P2-GEN-DOC-008",
+          "P2-GEN-DOC-007",
+          "P2-GEN-DOC-004"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-005"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-005",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-006",
+          "P2-GEN-DOC-003",
+          "P2-GEN-DOC-010",
+          "P2-GEN-DOC-005",
+          "P2-GEN-DOC-008"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-006"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-006",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-007",
+          "P2-GEN-DOC-004",
+          "P2-GEN-DOC-008",
+          "P2-GEN-DOC-003"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-007"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-007",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-008",
+          "P2-GEN-DOC-009",
+          "P2-GEN-DOC-003"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-008"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-008",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-009",
+          "P2-GEN-DOC-003",
+          "P2-GEN-DOC-010",
+          "P2-GEN-DOC-008",
+          "P2-GEN-DOC-007"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-009"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      },
+      {
+        "id": "P2-GEN-009",
+        "ranked_document_ids": [
+          "P2-GEN-DOC-010",
+          "P2-GEN-DOC-001",
+          "P2-GEN-DOC-004"
+        ],
+        "expected_document_ids": [
+          "P2-GEN-DOC-010"
+        ],
+        "first_relevant_rank": 1,
+        "asset_filter_correct": true
+      }
+    ]
+  },
+  "retrieval_comparison": {
+    "dense_only": {
+      "question_count": 27,
+      "recall_at_1": 0.6666666666666666,
+      "recall_at_3": 0.7777777777777778,
+      "recall_at_5": 0.8518518518518519,
+      "mean_reciprocal_rank": 0.7327160493827161,
+      "ndcg_at_5": 0.76219958786855,
+      "asset_type_filter_accuracy": 1.0,
+      "latency_ms": {
+        "average": 0.860399962962051,
+        "p50": 0.827541999569803,
+        "p95": 1.2688289998550317
+      },
+      "cases": [
+        {
+          "id": "P2-PUMP-001",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-001",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-009",
+            "P2-PUMP-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-002",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-001",
+            "P2-PUMP-DOC-009",
+            "P2-PUMP-DOC-008",
+            "P2-PUMP-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-003",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-003"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-004",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-001",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-003"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-006"
+          ],
+          "first_relevant_rank": 3,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-005",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-007",
+            "P2-PUMP-DOC-002",
+            "P2-PUMP-DOC-008",
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-006"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-006",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-008",
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-009",
+            "P2-PUMP-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-008"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-007",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-001",
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-007",
+            "P2-PUMP-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-009"
+          ],
+          "first_relevant_rank": null,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-008",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-001",
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-002"
+          ],
+          "first_relevant_rank": 5,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-001",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-003"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-001"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-002",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-002"
+          ],
+          "first_relevant_rank": null,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-003",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-002",
+            "P2-HVAC-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-004",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-005",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-006"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-006",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-002",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-007",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-008",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-002",
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-006"
+          ],
+          "first_relevant_rank": null,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-009",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-006"
+          ],
+          "first_relevant_rank": 2,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-010",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-001",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-002"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-002",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-003"
+          ],
+          "first_relevant_rank": null,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-003",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-004",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-004"
+          ],
+          "first_relevant_rank": 2,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-004",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-005",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-006",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-006",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-007",
+            "P2-GEN-DOC-006",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-007",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-010"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-008"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-008",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-009"
+          ],
+          "first_relevant_rank": 4,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-009",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-001",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-010"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        }
+      ]
+    },
+    "sparse_only": {
+      "question_count": 27,
+      "recall_at_1": 0.8518518518518519,
+      "recall_at_3": 0.9629629629629629,
+      "recall_at_5": 0.9629629629629629,
+      "mean_reciprocal_rank": 0.9012345679012346,
+      "ndcg_at_5": 0.9171059076719599,
+      "asset_type_filter_accuracy": 1.0,
+      "latency_ms": {
+        "average": 0.26485240737707094,
+        "p50": 0.2517849998184829,
+        "p95": 0.3876069995385478
+      },
+      "cases": [
+        {
+          "id": "P2-PUMP-001",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-002",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-009"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-003",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-004",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-005",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-006",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-008"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-007",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-009"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-009"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-008",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-002"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-001",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-001"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-002",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-002"
+          ],
+          "first_relevant_rank": null,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-003",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-004",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-005",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-006",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-007",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-008",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-009",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-006"
+          ],
+          "first_relevant_rank": 3,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-010",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-001",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-006",
+            "P2-GEN-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-002"
+          ],
+          "first_relevant_rank": 2,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-002",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-009"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-003",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-004"
+          ],
+          "first_relevant_rank": 2,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-004",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-005",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-006",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-006",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-007",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-008"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-008",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-009"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-009",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-010"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-010"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        }
+      ]
+    },
+    "hybrid": {
+      "question_count": 27,
+      "recall_at_1": 0.8148148148148148,
+      "recall_at_3": 0.9259259259259259,
+      "recall_at_5": 0.9629629629629629,
+      "mean_reciprocal_rank": 0.871604938271605,
+      "ndcg_at_5": 0.8943967523843502,
+      "asset_type_filter_accuracy": 1.0,
+      "latency_ms": {
+        "average": 1.5613376296338781,
+        "p50": 1.5324910000344971,
+        "p95": 1.7745509994711028
+      },
+      "cases": [
+        {
+          "id": "P2-PUMP-001",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-002",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-009",
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-003",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-004",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-006"
+          ],
+          "first_relevant_rank": 2,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-005",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-007",
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-009"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-006",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-008",
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-009",
+            "P2-PUMP-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-008"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-007",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-009",
+            "P2-PUMP-DOC-007",
+            "P2-PUMP-DOC-006"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-009"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-008",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-002",
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-006"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-002"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-001",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-001"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-002",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-002"
+          ],
+          "first_relevant_rank": null,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-003",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-004",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-005",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-006",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-007",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-006"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-008",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-002",
+            "P2-HVAC-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-009",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-006"
+          ],
+          "first_relevant_rank": 3,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-010",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-002",
+            "P2-HVAC-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-001",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-006",
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-002"
+          ],
+          "first_relevant_rank": 5,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-002",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-010"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-003",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-004",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-004"
+          ],
+          "first_relevant_rank": 2,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-004",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-007",
+            "P2-GEN-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-005",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-006",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-004",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-006",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-007",
+            "P2-GEN-DOC-004",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-003"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-007",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-010"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-008"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-008",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-009"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-009",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-001",
+            "P2-GEN-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-010"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        }
+      ]
+    },
+    "hybrid_reranked": {
+      "question_count": 27,
+      "recall_at_1": 0.8518518518518519,
+      "recall_at_3": 0.9629629629629629,
+      "recall_at_5": 1.0,
+      "mean_reciprocal_rank": 0.908641975308642,
+      "ndcg_at_5": 0.9314337894213872,
+      "asset_type_filter_accuracy": 1.0,
+      "latency_ms": {
+        "average": 4.4256842962500675,
+        "p50": 4.43816599999991,
+        "p95": 4.971929999555869
+      },
+      "cases": [
+        {
+          "id": "P2-PUMP-001",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-002",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-009",
+            "P2-PUMP-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-003",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-003"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-004",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-004",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-006"
+          ],
+          "first_relevant_rank": 2,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-005",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-007",
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-006",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-008",
+            "P2-PUMP-DOC-003",
+            "P2-PUMP-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-008"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-007",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-009",
+            "P2-PUMP-DOC-006",
+            "P2-PUMP-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-009"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-PUMP-008",
+          "ranked_document_ids": [
+            "P2-PUMP-DOC-002",
+            "P2-PUMP-DOC-005",
+            "P2-PUMP-DOC-006"
+          ],
+          "expected_document_ids": [
+            "P2-PUMP-DOC-002"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-001",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-001"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-002",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-002"
+          ],
+          "first_relevant_rank": 5,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-003",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-004",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-001",
+            "P2-HVAC-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-005",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-006",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-007",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-005",
+            "P2-HVAC-DOC-001"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-004"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-008",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-002",
+            "P2-HVAC-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-009",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-003",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-005"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-HVAC-010",
+          "ranked_document_ids": [
+            "P2-HVAC-DOC-007",
+            "P2-HVAC-DOC-006",
+            "P2-HVAC-DOC-004",
+            "P2-HVAC-DOC-002"
+          ],
+          "expected_document_ids": [
+            "P2-HVAC-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-001",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-002",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-002"
+          ],
+          "first_relevant_rank": 3,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-002",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-009"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-003"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-003",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-004",
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-004"
+          ],
+          "first_relevant_rank": 2,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-004",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-007",
+            "P2-GEN-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-005"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-005",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-006",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-005",
+            "P2-GEN-DOC-008"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-006"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-006",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-007",
+            "P2-GEN-DOC-004",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-003"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-007"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-007",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-003"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-008"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-008",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-009",
+            "P2-GEN-DOC-003",
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-008",
+            "P2-GEN-DOC-007"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-009"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        },
+        {
+          "id": "P2-GEN-009",
+          "ranked_document_ids": [
+            "P2-GEN-DOC-010",
+            "P2-GEN-DOC-001",
+            "P2-GEN-DOC-004"
+          ],
+          "expected_document_ids": [
+            "P2-GEN-DOC-010"
+          ],
+          "first_relevant_rank": 1,
+          "asset_filter_correct": true
+        }
+      ]
+    }
+  }
+}
