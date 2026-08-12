@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phase 2 v2 document-derived evaluation case",
+  "type": "object",
+  "required": [
+    "case_id",
+    "dataset_version",
+    "scenario_origin",
+    "field_observed",
+    "source_id",
+    "model_applicability",
+    "source_currentness_status",
+    "sme_review_status",
+    "promotion_eligible",
+    "risk_level",
+    "response_policy",
+    "question",
+    "evidence_ids",
+    "expected_document_ids"
+  ],
+  "properties": {
+    "dataset_version": {
+      "const": "2.0.0"
+    },
+    "scenario_origin": {
+      "const": "document_derived"
+    },
+    "field_observed": {
+      "const": false
+    },
+    "promotion_eligible": {
+      "const": false
+    },
+    "sme_review_status": {
+      "const": "pending"
+    },
+    "risk_level": {
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "response_policy": {
+      "enum": [
+        "answer_with_evidence",
+        "refuse_insufficient_evidence",
+        "escalate_manual_review"
+      ]
+    }
+  }
+}

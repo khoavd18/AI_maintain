@@ -1,0 +1,71 @@
+{
+  "dataset_id": "phase2-document-derived-v2-draft",
+  "version": "2.0.0",
+  "provenance_type": "document_derived",
+  "scenario_origin": "document_derived",
+  "field_observed": false,
+  "approval_state": "draft",
+  "readiness": "DRAFT_SME_REVIEW_REQUIRED",
+  "corpus": "official-oem-paraphrase-fixture-v2.0",
+  "created_at": "2026-08-12T00:00:00+07:00",
+  "counts": {
+    "sources": 3,
+    "asset_profiles": 3,
+    "cases": 300,
+    "cases_per_asset_profile": 100,
+    "retrieval_questions": 300,
+    "no_answer_cases": 30,
+    "evidence_spans": 152,
+    "corpus_documents": 3,
+    "conversation_sequences": 30,
+    "conversation_turns": 66,
+    "review_queue_rows": 300,
+    "original_cases_preserved": 30,
+    "new_cases": 270
+  },
+  "quotas": {
+    "primary_categories_per_family": {
+      "troubleshooting": 30,
+      "operation_repair_procedure": 15,
+      "preventive_maintenance_inspection": 12,
+      "safety_escalation": 10,
+      "insufficient_evidence_no_answer": 10,
+      "model_version_applicability_isolation": 10,
+      "multi_turn_follow_up": 8,
+      "language_typo_abbreviation_robustness": 5
+    },
+    "risk_per_family": {
+      "critical": 15,
+      "high": 25,
+      "medium": 35,
+      "low": 25
+    },
+    "language_total": {
+      "vi_diacritics": 180,
+      "vi_no_diacritics": 45,
+      "en": 45,
+      "mixed_vi_en": 30
+    },
+    "response_policy_total": {
+      "answer_with_evidence": 240,
+      "refuse_insufficient_evidence": 30,
+      "escalate_manual_review": 30
+    },
+    "adversarial_unsafe": 30
+  },
+  "files": {
+    "sources": "source_registry.jsonl",
+    "evidence": "evidence_spans.jsonl",
+    "cases": "cases.jsonl",
+    "questions": "retrieval_questions.jsonl",
+    "conversations": "conversation_sequences.jsonl",
+    "documents": "corpus_documents.csv",
+    "review_queue": "review_queue.xlsx"
+  },
+  "limitations": [
+    "All cases are document-derived drafts, not field-observed tickets or work orders.",
+    "Grundfos and Generac source currentness remains VERSION_AMBIGUOUS and blocks promotion.",
+    "Daikin source currentness passed, but every case remains pending qualified SME review.",
+    "Deterministic hash retrieval is an integration fixture, not semantic or production accuracy."
+  ]
+}

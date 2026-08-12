@@ -50,18 +50,27 @@ class EvaluationQuestion:
     language: str | None = None
     conversation_context: dict[str, Any] | None = None
     expected_relaxation: tuple[str, ...] = ()
+    source_id: str | None = None
+    model_applicability: str | None = None
+    response_policy: str | None = None
+    adversarial_unsafe: bool = False
 
 
 @dataclass(frozen=True)
 class EvaluationConversationTurn:
     question: str
     expected_document_ids: tuple[str, ...]
+    expected_status: str | None = None
 
 
 @dataclass(frozen=True)
 class EvaluationConversationSequence:
     id: str
     turns: tuple[EvaluationConversationTurn, ...]
+    asset_profile_id: str | None = None
+    asset_type: str | None = None
+    manufacturer: str | None = None
+    model_scope: str | None = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +117,10 @@ def load_questions(path: Path = DEFAULT_DATASET) -> list[EvaluationQuestion]:
                     language=value.get("language"),
                     conversation_context=value.get("conversation_context"),
                     expected_relaxation=tuple(value.get("expected_relaxation", [])),
+                    source_id=value.get("source_id"),
+                    model_applicability=value.get("model_applicability"),
+                    response_policy=value.get("response_policy"),
+                    adversarial_unsafe=bool(value.get("adversarial_unsafe", False)),
                 )
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -134,15 +147,22 @@ def load_conversation_sequences(
                     expected_document_ids=tuple(
                         dict.fromkeys(str(item) for item in turn["expected_document_ids"])
                     ),
+                    expected_status=turn.get("expected_status"),
                 )
                 for turn in value["turns"]
             )
-            if len(turns) < 2 or any(not turn.expected_document_ids for turn in turns):
-                raise ValueError("Conversation sequences require two grounded turns.")
+            if len(turns) < 2 or any(
+                not turn.expected_document_ids and not turn.expected_status for turn in turns
+            ):
+                raise ValueError("Conversation turns require evidence or an expected safe route.")
             sequences.append(
                 EvaluationConversationSequence(
                     id=str(value["id"]),
                     turns=turns,
+                    asset_profile_id=value.get("asset_profile_id"),
+                    asset_type=value.get("asset_type"),
+                    manufacturer=value.get("manufacturer"),
+                    model_scope=value.get("model_scope"),
                 )
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -213,7 +233,14 @@ def build_in_memory_retrievers(documents_path: Path = RAW_DOCUMENT_FILE) -> dict
         for chunk in chunks
     ]
     sparse = BM25Index(corpus)
-    config = HybridRetrievalConfig(relevance_threshold=0.15)
+    config = HybridRetrievalConfig(
+        dense_weight=0.20,
+        sparse_weight=0.80,
+        retrieval_weight=0.80,
+        reranker_weight=0.15,
+        metadata_weight=0.05,
+        relevance_threshold=0.15,
+    )
     return {
         "dense_only": dense,
         "sparse_only": sparse,  # type: ignore[dict-item]
@@ -280,7 +307,12 @@ def evaluate_retrieval(
     questions: list[EvaluationQuestion],
     retriever: Retriever,
 ) -> dict[str, Any]:
-    supported = [question for question in questions if not question.expected_no_answer]
+    supported = [
+        question
+        for question in questions
+        if not question.expected_no_answer
+        and question.response_policy in {None, "answer_with_evidence"}
+    ]
     reciprocal_ranks: list[float] = []
     ndcg_scores: list[float] = []
     recall_scores = {1: 0.0, 3: 0.0, 5: 0.0}
@@ -411,6 +443,10 @@ def evaluate_answers(
     relaxation_total = 0
     relaxation_hits = 0
     canonicalization_count = 0
+    model_isolation_total = 0
+    model_isolation_hits = 0
+    unsafe_request_total = 0
+    unsafe_request_hits = 0
     cases: list[dict[str, Any]] = []
     for question in questions:
         calls_before = llm_provider.generation_calls if llm_provider else 0
@@ -436,10 +472,24 @@ def evaluate_answers(
                 fallback_reasons.get(response.fallback_reason, 0) + 1
             )
         safety_hits += int(bool(response.safety_notice))
-        if question.expected_no_answer:
-            no_answer_total += 1
+        routing_only = question.response_policy in {
+            "refuse_insufficient_evidence",
+            "escalate_manual_review",
+        }
+        if routing_only or question.expected_no_answer:
             matched = response.retrieval_status == question.expected_status
-            no_answer_hits += int(matched)
+            if (
+                question.expected_no_answer
+                or question.response_policy == "refuse_insufficient_evidence"
+            ):
+                no_answer_total += 1
+                no_answer_hits += int(matched)
+            if question.response_policy == "escalate_manual_review":
+                model_isolation_total += 1
+                model_isolation_hits += int(matched and not response.sources)
+            if question.adversarial_unsafe:
+                unsafe_request_total += 1
+                unsafe_request_hits += int(matched and not response.sources)
             if question.expected_status == "unsupported_asset_type":
                 unsupported_total += 1
                 unsupported_hits += int(matched)
@@ -539,6 +589,10 @@ def evaluate_answers(
         "response_modes": response_modes,
         "fallback_reasons": fallback_reasons,
         "citation_canonicalization_count": canonicalization_count,
+        "model_variant_isolation_accuracy": _ratio_or_none(
+            model_isolation_hits, model_isolation_total
+        ),
+        "unsafe_request_refusal_routing": _ratio_or_none(unsafe_request_hits, unsafe_request_total),
         "fallback_rate": (
             sum(count for name, count in response_modes.items() if name != "llm_grounded")
             / (len(questions) or 1)
@@ -567,7 +621,7 @@ def evaluate_conversation_sequences(
     if mode == "rag-llm" and provider is None:
         raise ValueError("rag-llm mode requires LLM_ENABLED=true and explicit provider settings.")
     copilot = MaintenanceCopilot(
-        _EvaluationAssetContextService([]),
+        _EvaluationConversationAssetContextService(sequences),
         retriever,
         provider,
         CopilotGenerationConfig(
@@ -580,6 +634,7 @@ def evaluate_conversation_sequences(
     )
     follow_up_total = 0
     follow_up_hits = 0
+    state_hits = 0
     turn_total = 0
     cases: list[dict[str, Any]] = []
     for sequence in sequences:
@@ -589,14 +644,20 @@ def evaluate_conversation_sequences(
             supplied_state = conversation_state
             response = copilot.ask(
                 turn.question,
+                asset_id=sequence.asset_profile_id,
                 conversation_context=supplied_state,
                 request_id=f"evaluation-sequence-{sequence.id}-{turn_index + 1}",
             )
             returned_ids = {str(source.get("doc_id", "")) for source in response.sources}
-            matched = bool(returned_ids.intersection(turn.expected_document_ids))
+            matched = (
+                response.retrieval_status == turn.expected_status
+                if turn.expected_status
+                else bool(returned_ids.intersection(turn.expected_document_ids))
+            )
             if turn_index > 0:
                 follow_up_total += 1
                 follow_up_hits += int(matched and supplied_state is not None)
+                state_hits += int(matched and supplied_state is not None)
             turn_total += 1
             turns.append(
                 {
@@ -615,6 +676,7 @@ def evaluate_conversation_sequences(
         "turn_count": turn_total,
         "follow_up_count": follow_up_total,
         "follow_up_accuracy": follow_up_hits / follow_up_total if follow_up_total else None,
+        "conversation_state_accuracy": state_hits / follow_up_total if follow_up_total else None,
         "cases": cases,
     }
 
@@ -744,6 +806,7 @@ def run_evaluation(
             mode=mode,
         )
         answers["multi_turn_resolution_accuracy"] = conversation_report["follow_up_accuracy"]
+        answers["conversation_state_accuracy"] = conversation_report["conversation_state_accuracy"]
         report["answers"] = answers
         report["conversation_sequences"] = conversation_report
     return report
@@ -756,17 +819,58 @@ class _EvaluationAssetContextService:
             for question in questions
             if question.selected_asset_id and question.selected_asset_type
         }
+        self.model_profiles = {
+            question.selected_asset_id: {
+                "asset_id": question.selected_asset_id,
+                "asset_type": question.selected_asset_type or question.asset_type,
+                "model_scope": question.model_applicability,
+            }
+            for question in questions
+            if question.selected_asset_id and question.model_applicability
+        }
 
     def get_asset_context(self, asset_id: str) -> dict[str, Any]:
         asset_type = self.asset_types.get(asset_id)
         if not asset_type:
             raise AssertionError(f"Unexpected asset lookup during evaluation: {asset_id}")
+        asset_profile = self.model_profiles.get(asset_id)
         return {
             "asset_id": asset_id,
+            **({"asset_profile": asset_profile} if asset_profile else {}),
             "latest_risk": {
                 "asset_id": asset_id,
                 "asset_name": "Thiết bị đánh giá synthetic",
                 "asset_type": asset_type,
+                "location": "Khu đánh giá",
+            },
+            "recent_anomalies": [],
+        }
+
+
+class _EvaluationConversationAssetContextService:
+    def __init__(self, sequences: list[EvaluationConversationSequence]) -> None:
+        self.profiles = {
+            sequence.asset_profile_id: sequence
+            for sequence in sequences
+            if sequence.asset_profile_id
+        }
+
+    def get_asset_context(self, asset_id: str) -> dict[str, Any]:
+        sequence = self.profiles.get(asset_id)
+        if sequence is None:
+            raise AssertionError(f"Unexpected conversation asset lookup: {asset_id}")
+        return {
+            "asset_id": asset_id,
+            "asset_profile": {
+                "asset_id": asset_id,
+                "asset_type": sequence.asset_type,
+                "manufacturer": sequence.manufacturer,
+                "model_scope": sequence.model_scope,
+            },
+            "latest_risk": {
+                "asset_id": asset_id,
+                "asset_name": "Thiết bị đánh giá document-derived",
+                "asset_type": sequence.asset_type,
                 "location": "Khu đánh giá",
             },
             "recent_anomalies": [],
@@ -975,6 +1079,14 @@ def render_markdown_report(report: dict[str, Any]) -> str:
                 f"- Source precision: {answers['source_precision']:.4f}",
                 f"- Source coverage: {answers['source_coverage']:.4f}",
                 f"- Multi-turn resolution: {answers['multi_turn_resolution_accuracy']:.4f}",
+                (
+                    "- Model/variant isolation: "
+                    f"{_format_optional_metric(answers['model_variant_isolation_accuracy'])}"
+                ),
+                (
+                    "- Unsafe-request refusal routing: "
+                    f"{_format_optional_metric(answers['unsafe_request_refusal_routing'])}"
+                ),
                 f"- Filter relaxation: {_format_optional_metric(answers['filter_relaxation_accuracy'])}",
                 (
                     "- Unsupported-equipment rejection: "
@@ -1080,14 +1192,19 @@ def main() -> None:
     rendered = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(rendered + "\n", encoding="utf-8")
+        _write_canonical_utf8(args.output, rendered + "\n")
     markdown_output = args.markdown_output or (
         args.output.with_suffix(".md") if args.output else None
     )
     if markdown_output:
         markdown_output.parent.mkdir(parents=True, exist_ok=True)
-        markdown_output.write_text(render_markdown_report(report), encoding="utf-8")
+        _write_canonical_utf8(markdown_output, render_markdown_report(report))
     print(rendered)
+
+
+def _write_canonical_utf8(path: Path, content: str) -> None:
+    canonical = content.replace("\r\n", "\n").replace("\r", "\n")
+    path.write_bytes(canonical.encode("utf-8"))
 
 
 def _load_dataset_metadata(path: Path) -> dict[str, Any]:

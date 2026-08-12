@@ -46,6 +46,8 @@ class ValidationFinding:
 
 def validate_dataset(dataset_dir: Path) -> dict[str, object]:
     dataset_dir = dataset_dir.resolve()
+    if _is_v2_dataset(dataset_dir):
+        return _validate_v2_dataset(dataset_dir)
     findings: list[ValidationFinding] = []
 
     def error(code: str, message: str) -> None:
@@ -319,6 +321,29 @@ def validate_dataset(dataset_dir: Path) -> dict[str, object]:
     warning("sme_review_pending", "All 30 cases require domain-expert review before approval.")
     warning("field_evidence_absent", "No field-observed ticket or work-order evidence is present.")
 
+    return _final_report(dataset_dir, findings, observed_counts)
+
+
+def _is_v2_dataset(dataset_dir: Path) -> bool:
+    manifest_path = dataset_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return False
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    return isinstance(manifest, dict) and manifest.get("version") == "2.0.0"
+
+
+def _validate_v2_dataset(dataset_dir: Path) -> dict[str, object]:
+    from evaluation.phase2_v2.validation import validate_v2_dataset
+
+    findings: list[ValidationFinding] = []
+
+    def finding(severity: str, code: str, message: str) -> None:
+        findings.append(ValidationFinding(severity, code, message))
+
+    observed_counts = validate_v2_dataset(dataset_dir, finding=finding)
     return _final_report(dataset_dir, findings, observed_counts)
 
 

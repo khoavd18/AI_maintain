@@ -1,0 +1,39 @@
+{
+  "status": "PASS_WITH_WARNINGS",
+  "dataset_directory": "phase2_document_derived_v2",
+  "error_count": 0,
+  "warning_count": 3,
+  "observed_counts": {
+    "sources": 3,
+    "asset_profiles": 3,
+    "cases": 300,
+    "cases_per_asset_profile": 100,
+    "retrieval_questions": 300,
+    "no_answer_cases": 30,
+    "evidence_spans": 152,
+    "corpus_documents": 3,
+    "conversation_sequences": 30,
+    "conversation_turns": 66,
+    "review_queue_rows": 300,
+    "original_cases_preserved": 30,
+    "new_cases": 270
+  },
+  "findings_digest_sha256": "db325ff8951af74286688dbeb2a9a439b8de442771f17c7b2d7a6d15210465d9",
+  "findings": [
+    {
+      "severity": "warning",
+      "code": "field_evidence_absent",
+      "message": "All 300 cases are document-derived; no field evidence exists."
+    },
+    {
+      "severity": "warning",
+      "code": "sme_review_pending",
+      "message": "All 300 cases remain pending qualified SME review."
+    },
+    {
+      "severity": "warning",
+      "code": "source_currentness_blocked",
+      "message": "Grundfos and Generac remain VERSION_AMBIGUOUS/HIGH and cannot be promoted."
+    }
+  ]
+}

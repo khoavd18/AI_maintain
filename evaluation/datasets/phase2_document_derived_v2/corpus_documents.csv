@@ -1,0 +1,332 @@
+doc_id,title,doc_type,asset_type,source,raw_text,created_at,failure_category,version,effective_date,clean_text,language
+P2V2-PUMP-DOC-001,Grundfos — captured OEM manual evidence collection,Hướng dẫn xử lý sự cố,Máy bơm nước,https://api.grundfos.com/literature/Grundfosliterature-79597.pdf,"Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Các đơn vị bằng chứng:
+- Phạm vi CR 1/3/5 Model A: Tài liệu ghi phạm vi CR, CRI, CRN 1, 3, 5 Model A, 50/60 Hz và nguồn một hoặc ba pha.
+- Mã tài liệu và bản in 03.2022: Artifact API đã chụp mang mã 96546866 và chân trang 03.2022; quan hệ với bản đăng ký 0407 chưa được OEM xác nhận.
+- Đọc tài liệu trước khi làm việc: Phải đọc tài liệu trước khi lắp hoặc làm việc; thao tác phải tuân thủ quy định địa phương và thực hành tốt.
+- Ý nghĩa mức DANGER: DANGER chỉ tình huống nếu không tránh sẽ gây chết người hoặc thương tích nghiêm trọng.
+- Ý nghĩa mức WARNING: WARNING chỉ tình huống có thể gây chết người hoặc thương tích nghiêm trọng.
+- Ý nghĩa mức CAUTION: CAUTION chỉ tình huống có thể gây thương tích nhẹ hoặc vừa.
+- Cô lập điện trước công việc: Tắt nguồn trước mọi công việc và bảo đảm nguồn không thể bị đóng lại ngoài ý muốn.
+- Nâng bơm bằng thiết bị đúng tải: Dùng thiết bị nâng được phê duyệt theo khối lượng, giữ người ngoài vùng nâng và mang PPE.
+- Giữ bơm ổn định khi làm việc: Giữ sản phẩm ở vị trí ổn định và cố định trong suốt công việc để tránh vật rơi hoặc lật.
+- PPE cho chất lỏng ăn mòn: Khi có chất lỏng ăn mòn phải sử dụng phương tiện bảo vệ cá nhân phù hợp.
+- PPE cho chất lỏng độc: Khi có chất lỏng độc phải sử dụng phương tiện bảo vệ cá nhân phù hợp.
+- Tránh tiếp xúc bề mặt nóng lạnh: Ngăn tiếp xúc vô ý với bề mặt nóng hoặc lạnh và dùng PPE khi chất lỏng có nhiệt độ nguy hiểm.
+- Xử lý bơm nhiễm bẩn: Bơm dùng chất độc hại được xem là nhiễm bẩn; xả rửa bằng nước sạch và khai báo lưu chất trước khi gửi service.
+- Nguồn service cho động cơ: Động cơ Grundfos MG/MGE dùng tài liệu trong Product Center; động cơ hãng khác phải liên hệ nhà sản xuất động cơ.
+- Điều kiện trước tháo bơm: Trước tháo: ngắt nguồn động cơ, đóng van cách ly nếu có, tháo cáp theo quy định và kiểm soát trọng tâm.
+- Đóng van để tránh xả hệ thống: Đóng các van cách ly nếu được lắp để tránh làm cạn hệ thống khi tháo bơm.
+- Kiểm soát trọng tâm bơm dài: Phải chú ý trọng tâm để tránh bơm lật, đặc biệt đối với bơm dài.
+- Làm sạch và kiểm tra chi tiết: Trước lắp phải làm sạch, kiểm tra toàn bộ chi tiết và chuẩn bị bộ service cần thiết.
+- Thay gioăng và O-ring khi đại tu: Khi đại tu, gioăng và O-ring luôn phải thay mới; chi tiết hỏng cũng phải thay.
+- Bôi trơn và siết đúng bảng: Trong lắp ráp phải bôi trơn và siết vít, đai ốc đúng mô-men trong bảng liên quan.
+- Trình tự tháo động cơ: Tháo bảo vệ khớp nối, nửa khớp và chốt trục, tháo vít động cơ rồi nhấc động cơ khỏi đầu bơm.
+- Siết chéo vít động cơ: Lắp động cơ vào đầu bơm và siết chéo vít động cơ theo mô-men quy định.
+- Căn khe khớp nối bằng nhau: Lắp chốt và hai nửa khớp, để vít lỏng khi căn; kiểm tra khe hai bên bằng nhau trước và sau siết chéo.
+- Lắp lại bảo vệ khớp nối: Sau căn chỉnh phải lắp bảo vệ khớp nối và vít giữ.
+- Tháo phớt trục: Tháo động cơ và khớp nối, nới ba vít 113 khoảng một phần tư vòng, dùng cờ lê ống tháo phớt rồi kéo khỏi trục.
+- Chuẩn bị đầu trục cho phớt: Nếu cần, làm sạch và làm nhẵn đầu trục bằng dụng cụ trong bộ phớt rồi làm ẩm bằng nước xà phòng.
+- Lắp và siết phớt mới: Đặt phớt trong cờ lê ống, ép xuống trục, vặn vào đầu bơm và siết đúng mô-men.
+- Đặt vị trí trục nửa hành trình: Nâng trục hoặc khớp đến điểm chặn, đo hành trình rồi hạ xuống một nửa trước khi siết bốn vít khớp.
+- Siết vít phớt vị trí 113: Sau căn khớp phải siết ba vít 113 đúng mô-men và lắp lại bảo vệ khớp.
+- Trình tự tháo cụm chính: Tháo phớt, vít và vòng đệm; tách đầu bơm, cánh dẫn trên, ống bao rồi nhấc cụm buồng khỏi đế.
+- Lắp cụm buồng vào đế: Đặt cụm buồng với đầu trục trơn hướng lên, lắp ống bao và O-ring đã bôi trơn, sau đó lắp đầu bơm.
+- Hướng vít xả khí đầu bơm: Khi lắp đầu bơm phải định hướng vít xả khí theo yêu cầu và bôi trơn O-ring.
+- Siết chéo đai ốc ty giằng: Bôi trơn ren ty giằng, lắp vòng đệm và đai ốc, rồi siết chéo đúng mô-men.
+- Tháo cụm buồng bằng giá giữ: Dùng giá giữ trục trong ê-tô, lắp chốt, tháo đai ốc-vòng đệm-kẹp rồi tháo lần lượt cánh, buồng, vòng bi và ống cách.
+- Lắp cụm buồng đúng thứ tự: Lắp cánh, buồng, ống cách và vòng bi theo bảng thứ tự; lắp kẹp, vòng đệm kép và đai ốc đúng chiều rồi siết mô-men.
+- Tháo đế và kết nối bích: Tháo ty giằng, kết nối bích theo loại CR/CRI/CRN, nút xả và các O-ring theo trình tự.
+- Lắp đế và nút xả: Lắp O-ring, bích đúng biến thể, bôi trơn ren ty giằng và lắp nút xả cùng O-ring.
+- Lắp đầu bơm CR: Với CR, lắp O-ring cho vít xả khí và nút, lắp lò xo gợn sóng và O-ring đầu bơm.
+- Lắp đầu bơm CRI/CRN: Với CRI/CRN, đóng nắp đầu bơm bằng búa cao su rồi lắp O-ring, vít, nút và lò xo đúng vị trí.
+- Rãnh mòn cánh bơm: Nếu ma sát vòng cổ tạo rãnh trên váy cánh cảm nhận được bằng móng tay thì phải thay cánh.
+- Thay vòng cổ khi tháo cụm: Vòng cổ và bộ giữ luôn phải thay khi cụm buồng đã tháo; vòng mới phải dịch ngang tự do trong bộ giữ.
+- Tiêu chí thay vòng bi: Nếu mép mòn trên vòng bi quay nhìn và cảm nhận được bằng móng tay, thay cả hai vòng bi và buồng có vòng bi.
+- Đối chiếu nhãn bơm: Nhãn cho biết type, model, số sản phẩm, nơi và tuần-năm sản xuất, thông số 50/60 Hz, áp suất-nhiệt độ tối đa và chiều quay.
+- Mã phiên bản A và U: Trong khóa loại, A là phiên bản cơ bản còn U là phiên bản NEMA; không được coi hai mã là tương đương.
+- Mã vật liệu A I G: Khóa loại phân biệt vật liệu A, I và G; lựa chọn chi tiết phải khớp mã vật liệu trên bơm.
+- Mã cao su E và V: Mã E chỉ EPDM và mã V chỉ FKM; phải đối chiếu mã trước khi chọn gioăng.
+- Mô-men vít khớp vị trí 9: Vít lục giác vị trí 9: M6 13 Nm, M8 31 Nm, M10 62 Nm; phải biết cỡ vít trước khi trả lời.
+- Mô-men vít động cơ vị trí 28: Vít đầu lục giác vị trí 28: M6 10 Nm, M8 12 Nm và M12 40 Nm.
+- Mô-men phớt và vít chặn: Đai ốc khóa M8 vị trí 67 là 22 Nm, phớt M28 vị trí 105 là 35 Nm và vít M5 vị trí 113 là 2,5 Nm.
+- Bảng chất bôi trơn: THREAD-EZE dùng cho các vị trí ren được liệt kê; nước xà phòng, Gardolube L 6034 và Rocol 22 có vị trí riêng, không thay thế tùy ý.
+An toàn: alignment, assembly_orientation, biological, chemical, chemical_compatibility, contamination, electrical_isolation, falling_objects, hazard_communication, inspection_required, lifting, lifting_stability, loto, model_applicability, parts_applicability, ppe, pressure, procedure_order, qualified_personnel, quality_control, rotating_parts, seal_integrity, source_currentness, special_tool, stability, stored_pressure, temperature, torque_control, toxic_liquid, variant_applicability
+Giới hạn: VERSION_AMBIGUOUS; SME pending; không tự động quyết định bảo trì.
+Tài liệu tham khảo: SRC-GF-CR5-0407; EV2-PUMP-001 PDF 1 printed cover Cover | EV2-PUMP-002 PDF 20 printed 20 Document footer | EV2-PUMP-003 PDF 4 printed 4 1 General information | EV2-PUMP-004 PDF 4 printed 4 1.1 Hazard statements | EV2-PUMP-005 PDF 4 printed 4 1.1 Hazard statements | EV2-PUMP-006 PDF 4 printed 4 1.1 Hazard statements | EV2-PUMP-007 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-008 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-009 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-010 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-011 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-012 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-013 PDF 5 printed 5 1.4 Contaminated products | EV2-PUMP-014 PDF 5 printed 5 1.5 Servicing the motor | EV2-PUMP-015 PDF 6 printed 6 2.1.1 Before dismantling | EV2-PUMP-016 PDF 6 printed 6 2.1.1 Before dismantling | EV2-PUMP-017 PDF 6 printed 6 2.1.1 Before dismantling | EV2-PUMP-018 PDF 6 printed 6 2.1.2 Before assembly | EV2-PUMP-019 PDF 6 printed 6 2.1.2 Before assembly | EV2-PUMP-020 PDF 6 printed 6 2.1.3 During assembly | EV2-PUMP-021 PDF 6 printed 6 2.2.1 Dismantling | EV2-PUMP-022 PDF 6 printed 6 2.2.2 Assembly | EV2-PUMP-023 PDF 6 printed 6 2.2.2 Assembly | EV2-PUMP-024 PDF 6 printed 6 2.2.2 Assembly | EV2-PUMP-025 PDF 6 printed 6 2.3.1 Dismantling | EV2-PUMP-026 PDF 6 printed 6 2.3.2 Assembly | EV2-PUMP-027 PDF 6 printed 6 2.3.2 Assembly | EV2-PUMP-028 PDF 7 printed 7 2.3.2 Assembly | EV2-PUMP-029 PDF 7 printed 7 2.3.2 Assembly | EV2-PUMP-030 PDF 7 printed 7 2.4.1 Dismantling | EV2-PUMP-031 PDF 7 printed 7 2.4.2 Assembly | EV2-PUMP-032 PDF 7 printed 7 2.4.2 Assembly | EV2-PUMP-033 PDF 7 printed 7 2.4.2 Assembly | EV2-PUMP-034 PDF 7 printed 7 2.5.1 Dismantling | EV2-PUMP-035 PDF 7 printed 7 2.5.2 Assembly | EV2-PUMP-036 PDF 8 printed 8 2.6.1 Dismantling the base | EV2-PUMP-037 PDF 8 printed 8 2.6.3 Assembling the base | EV2-PUMP-038 PDF 8 printed 8 2.6.4 Assembling the CR pump head | EV2-PUMP-039 PDF 8 printed 8 2.6.5 Assembling the CRI, CRN pump head | EV2-PUMP-040 PDF 9 printed 9 2.7 Checking and replacing parts | EV2-PUMP-041 PDF 9 printed 9 2.7 Checking and replacing parts | EV2-PUMP-042 PDF 9 printed 9 2.7 Checking and replacing parts | EV2-PUMP-043 PDF 10 printed 10 3.1.1 Nameplate | EV2-PUMP-044 PDF 10 printed 10 3.1.2 Type key | EV2-PUMP-045 PDF 10 printed 10 3.1.2 Type key | EV2-PUMP-046 PDF 10 printed 10 3.1.2 Type key | EV2-PUMP-047 PDF 10 printed 10 3.2 Torques | EV2-PUMP-048 PDF 10 printed 10 3.2 Torques | EV2-PUMP-049 PDF 11 printed 11 3.2 Torques | EV2-PUMP-050 PDF 11 printed 11 3.2.1 Lubricants",2026-08-12T00:00:00+07:00,,2.0.0,2026-08-12,"Phạm vi: CR 1, CR 3 and CR 5; Model A; 50/60 Hz; 1/3 phase
+Các đơn vị bằng chứng:
+- Phạm vi CR 1/3/5 Model A: Tài liệu ghi phạm vi CR, CRI, CRN 1, 3, 5 Model A, 50/60 Hz và nguồn một hoặc ba pha.
+- Mã tài liệu và bản in 03.2022: Artifact API đã chụp mang mã 96546866 và chân trang 03.2022; quan hệ với bản đăng ký 0407 chưa được OEM xác nhận.
+- Đọc tài liệu trước khi làm việc: Phải đọc tài liệu trước khi lắp hoặc làm việc; thao tác phải tuân thủ quy định địa phương và thực hành tốt.
+- Ý nghĩa mức DANGER: DANGER chỉ tình huống nếu không tránh sẽ gây chết người hoặc thương tích nghiêm trọng.
+- Ý nghĩa mức WARNING: WARNING chỉ tình huống có thể gây chết người hoặc thương tích nghiêm trọng.
+- Ý nghĩa mức CAUTION: CAUTION chỉ tình huống có thể gây thương tích nhẹ hoặc vừa.
+- Cô lập điện trước công việc: Tắt nguồn trước mọi công việc và bảo đảm nguồn không thể bị đóng lại ngoài ý muốn.
+- Nâng bơm bằng thiết bị đúng tải: Dùng thiết bị nâng được phê duyệt theo khối lượng, giữ người ngoài vùng nâng và mang PPE.
+- Giữ bơm ổn định khi làm việc: Giữ sản phẩm ở vị trí ổn định và cố định trong suốt công việc để tránh vật rơi hoặc lật.
+- PPE cho chất lỏng ăn mòn: Khi có chất lỏng ăn mòn phải sử dụng phương tiện bảo vệ cá nhân phù hợp.
+- PPE cho chất lỏng độc: Khi có chất lỏng độc phải sử dụng phương tiện bảo vệ cá nhân phù hợp.
+- Tránh tiếp xúc bề mặt nóng lạnh: Ngăn tiếp xúc vô ý với bề mặt nóng hoặc lạnh và dùng PPE khi chất lỏng có nhiệt độ nguy hiểm.
+- Xử lý bơm nhiễm bẩn: Bơm dùng chất độc hại được xem là nhiễm bẩn; xả rửa bằng nước sạch và khai báo lưu chất trước khi gửi service.
+- Nguồn service cho động cơ: Động cơ Grundfos MG/MGE dùng tài liệu trong Product Center; động cơ hãng khác phải liên hệ nhà sản xuất động cơ.
+- Điều kiện trước tháo bơm: Trước tháo: ngắt nguồn động cơ, đóng van cách ly nếu có, tháo cáp theo quy định và kiểm soát trọng tâm.
+- Đóng van để tránh xả hệ thống: Đóng các van cách ly nếu được lắp để tránh làm cạn hệ thống khi tháo bơm.
+- Kiểm soát trọng tâm bơm dài: Phải chú ý trọng tâm để tránh bơm lật, đặc biệt đối với bơm dài.
+- Làm sạch và kiểm tra chi tiết: Trước lắp phải làm sạch, kiểm tra toàn bộ chi tiết và chuẩn bị bộ service cần thiết.
+- Thay gioăng và O-ring khi đại tu: Khi đại tu, gioăng và O-ring luôn phải thay mới; chi tiết hỏng cũng phải thay.
+- Bôi trơn và siết đúng bảng: Trong lắp ráp phải bôi trơn và siết vít, đai ốc đúng mô-men trong bảng liên quan.
+- Trình tự tháo động cơ: Tháo bảo vệ khớp nối, nửa khớp và chốt trục, tháo vít động cơ rồi nhấc động cơ khỏi đầu bơm.
+- Siết chéo vít động cơ: Lắp động cơ vào đầu bơm và siết chéo vít động cơ theo mô-men quy định.
+- Căn khe khớp nối bằng nhau: Lắp chốt và hai nửa khớp, để vít lỏng khi căn; kiểm tra khe hai bên bằng nhau trước và sau siết chéo.
+- Lắp lại bảo vệ khớp nối: Sau căn chỉnh phải lắp bảo vệ khớp nối và vít giữ.
+- Tháo phớt trục: Tháo động cơ và khớp nối, nới ba vít 113 khoảng một phần tư vòng, dùng cờ lê ống tháo phớt rồi kéo khỏi trục.
+- Chuẩn bị đầu trục cho phớt: Nếu cần, làm sạch và làm nhẵn đầu trục bằng dụng cụ trong bộ phớt rồi làm ẩm bằng nước xà phòng.
+- Lắp và siết phớt mới: Đặt phớt trong cờ lê ống, ép xuống trục, vặn vào đầu bơm và siết đúng mô-men.
+- Đặt vị trí trục nửa hành trình: Nâng trục hoặc khớp đến điểm chặn, đo hành trình rồi hạ xuống một nửa trước khi siết bốn vít khớp.
+- Siết vít phớt vị trí 113: Sau căn khớp phải siết ba vít 113 đúng mô-men và lắp lại bảo vệ khớp.
+- Trình tự tháo cụm chính: Tháo phớt, vít và vòng đệm; tách đầu bơm, cánh dẫn trên, ống bao rồi nhấc cụm buồng khỏi đế.
+- Lắp cụm buồng vào đế: Đặt cụm buồng với đầu trục trơn hướng lên, lắp ống bao và O-ring đã bôi trơn, sau đó lắp đầu bơm.
+- Hướng vít xả khí đầu bơm: Khi lắp đầu bơm phải định hướng vít xả khí theo yêu cầu và bôi trơn O-ring.
+- Siết chéo đai ốc ty giằng: Bôi trơn ren ty giằng, lắp vòng đệm và đai ốc, rồi siết chéo đúng mô-men.
+- Tháo cụm buồng bằng giá giữ: Dùng giá giữ trục trong ê-tô, lắp chốt, tháo đai ốc-vòng đệm-kẹp rồi tháo lần lượt cánh, buồng, vòng bi và ống cách.
+- Lắp cụm buồng đúng thứ tự: Lắp cánh, buồng, ống cách và vòng bi theo bảng thứ tự; lắp kẹp, vòng đệm kép và đai ốc đúng chiều rồi siết mô-men.
+- Tháo đế và kết nối bích: Tháo ty giằng, kết nối bích theo loại CR/CRI/CRN, nút xả và các O-ring theo trình tự.
+- Lắp đế và nút xả: Lắp O-ring, bích đúng biến thể, bôi trơn ren ty giằng và lắp nút xả cùng O-ring.
+- Lắp đầu bơm CR: Với CR, lắp O-ring cho vít xả khí và nút, lắp lò xo gợn sóng và O-ring đầu bơm.
+- Lắp đầu bơm CRI/CRN: Với CRI/CRN, đóng nắp đầu bơm bằng búa cao su rồi lắp O-ring, vít, nút và lò xo đúng vị trí.
+- Rãnh mòn cánh bơm: Nếu ma sát vòng cổ tạo rãnh trên váy cánh cảm nhận được bằng móng tay thì phải thay cánh.
+- Thay vòng cổ khi tháo cụm: Vòng cổ và bộ giữ luôn phải thay khi cụm buồng đã tháo; vòng mới phải dịch ngang tự do trong bộ giữ.
+- Tiêu chí thay vòng bi: Nếu mép mòn trên vòng bi quay nhìn và cảm nhận được bằng móng tay, thay cả hai vòng bi và buồng có vòng bi.
+- Đối chiếu nhãn bơm: Nhãn cho biết type, model, số sản phẩm, nơi và tuần-năm sản xuất, thông số 50/60 Hz, áp suất-nhiệt độ tối đa và chiều quay.
+- Mã phiên bản A và U: Trong khóa loại, A là phiên bản cơ bản còn U là phiên bản NEMA; không được coi hai mã là tương đương.
+- Mã vật liệu A I G: Khóa loại phân biệt vật liệu A, I và G; lựa chọn chi tiết phải khớp mã vật liệu trên bơm.
+- Mã cao su E và V: Mã E chỉ EPDM và mã V chỉ FKM; phải đối chiếu mã trước khi chọn gioăng.
+- Mô-men vít khớp vị trí 9: Vít lục giác vị trí 9: M6 13 Nm, M8 31 Nm, M10 62 Nm; phải biết cỡ vít trước khi trả lời.
+- Mô-men vít động cơ vị trí 28: Vít đầu lục giác vị trí 28: M6 10 Nm, M8 12 Nm và M12 40 Nm.
+- Mô-men phớt và vít chặn: Đai ốc khóa M8 vị trí 67 là 22 Nm, phớt M28 vị trí 105 là 35 Nm và vít M5 vị trí 113 là 2,5 Nm.
+- Bảng chất bôi trơn: THREAD-EZE dùng cho các vị trí ren được liệt kê; nước xà phòng, Gardolube L 6034 và Rocol 22 có vị trí riêng, không thay thế tùy ý.
+An toàn: alignment, assembly_orientation, biological, chemical, chemical_compatibility, contamination, electrical_isolation, falling_objects, hazard_communication, inspection_required, lifting, lifting_stability, loto, model_applicability, parts_applicability, ppe, pressure, procedure_order, qualified_personnel, quality_control, rotating_parts, seal_integrity, source_currentness, special_tool, stability, stored_pressure, temperature, torque_control, toxic_liquid, variant_applicability
+Giới hạn: VERSION_AMBIGUOUS; SME pending; không tự động quyết định bảo trì.
+Tài liệu tham khảo: SRC-GF-CR5-0407; EV2-PUMP-001 PDF 1 printed cover Cover | EV2-PUMP-002 PDF 20 printed 20 Document footer | EV2-PUMP-003 PDF 4 printed 4 1 General information | EV2-PUMP-004 PDF 4 printed 4 1.1 Hazard statements | EV2-PUMP-005 PDF 4 printed 4 1.1 Hazard statements | EV2-PUMP-006 PDF 4 printed 4 1.1 Hazard statements | EV2-PUMP-007 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-008 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-009 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-010 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-011 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-012 PDF 4 printed 4 1.3 Safety details | EV2-PUMP-013 PDF 5 printed 5 1.4 Contaminated products | EV2-PUMP-014 PDF 5 printed 5 1.5 Servicing the motor | EV2-PUMP-015 PDF 6 printed 6 2.1.1 Before dismantling | EV2-PUMP-016 PDF 6 printed 6 2.1.1 Before dismantling | EV2-PUMP-017 PDF 6 printed 6 2.1.1 Before dismantling | EV2-PUMP-018 PDF 6 printed 6 2.1.2 Before assembly | EV2-PUMP-019 PDF 6 printed 6 2.1.2 Before assembly | EV2-PUMP-020 PDF 6 printed 6 2.1.3 During assembly | EV2-PUMP-021 PDF 6 printed 6 2.2.1 Dismantling | EV2-PUMP-022 PDF 6 printed 6 2.2.2 Assembly | EV2-PUMP-023 PDF 6 printed 6 2.2.2 Assembly | EV2-PUMP-024 PDF 6 printed 6 2.2.2 Assembly | EV2-PUMP-025 PDF 6 printed 6 2.3.1 Dismantling | EV2-PUMP-026 PDF 6 printed 6 2.3.2 Assembly | EV2-PUMP-027 PDF 6 printed 6 2.3.2 Assembly | EV2-PUMP-028 PDF 7 printed 7 2.3.2 Assembly | EV2-PUMP-029 PDF 7 printed 7 2.3.2 Assembly | EV2-PUMP-030 PDF 7 printed 7 2.4.1 Dismantling | EV2-PUMP-031 PDF 7 printed 7 2.4.2 Assembly | EV2-PUMP-032 PDF 7 printed 7 2.4.2 Assembly | EV2-PUMP-033 PDF 7 printed 7 2.4.2 Assembly | EV2-PUMP-034 PDF 7 printed 7 2.5.1 Dismantling | EV2-PUMP-035 PDF 7 printed 7 2.5.2 Assembly | EV2-PUMP-036 PDF 8 printed 8 2.6.1 Dismantling the base | EV2-PUMP-037 PDF 8 printed 8 2.6.3 Assembling the base | EV2-PUMP-038 PDF 8 printed 8 2.6.4 Assembling the CR pump head | EV2-PUMP-039 PDF 8 printed 8 2.6.5 Assembling the CRI, CRN pump head | EV2-PUMP-040 PDF 9 printed 9 2.7 Checking and replacing parts | EV2-PUMP-041 PDF 9 printed 9 2.7 Checking and replacing parts | EV2-PUMP-042 PDF 9 printed 9 2.7 Checking and replacing parts | EV2-PUMP-043 PDF 10 printed 10 3.1.1 Nameplate | EV2-PUMP-044 PDF 10 printed 10 3.1.2 Type key | EV2-PUMP-045 PDF 10 printed 10 3.1.2 Type key | EV2-PUMP-046 PDF 10 printed 10 3.1.2 Type key | EV2-PUMP-047 PDF 10 printed 10 3.2 Torques | EV2-PUMP-048 PDF 10 printed 10 3.2 Torques | EV2-PUMP-049 PDF 11 printed 11 3.2 Torques | EV2-PUMP-050 PDF 11 printed 11 3.2.1 Lubricants",vi
+P2V2-HVAC-DOC-001,Daikin — captured OEM manual evidence collection,Hướng dẫn xử lý sự cố,Máy lạnh,https://www.daikin.eu/content/dam/document-library/Installer-reference-guide/ac/sky-air/rzag-nv1_ny1/RZAG-NV1.RZAG-NY2_Installer%20reference%20guide_4PEN695307-1B_English.pdf,"Phạm vi: RZAG71-140N Sky Air Alpha-series; V1B/Y1B variants on cover
+Các đơn vị bằng chứng:
+- Phạm vi RZAG71-140N: Tài liệu bao phủ RZAG71N, RZAG100N, RZAG125N và RZAG140N các biến thể V1B/Y1B được ghi trên bìa.
+- Mã 4P695307-1B và bản 2025.03: Mã tài liệu là 4P695307-1B và bản in có ngày hiệu lực 2025.03; hai trường này không được trộn lẫn.
+- Chỉ dành cho người lắp đặt được ủy quyền: Đối tượng của hướng dẫn là người lắp đặt được ủy quyền; thiết bị dành cho người dùng chuyên môn hoặc đã được đào tạo.
+- Liên hệ đại lý khi không chắc: Nếu không chắc cách lắp hoặc vận hành, phải liên hệ đại lý thay vì tự suy đoán.
+- Hồ sơ hệ thống theo luật áp dụng: Pháp luật áp dụng có thể yêu cầu logbook chứa thông tin bảo trì, sửa chữa, thử nghiệm và thời gian ngừng.
+- Bảo vệ đường ống khỏi rung: Phải tránh rung hoặc xung quá mức trên đường ống môi chất và bảo vệ thiết bị an toàn, đường ống khỏi tác động xấu.
+- Không pump-down khi mạch rò: Khi mạch môi chất bị rò, không dùng chức năng pump-down tự động vì không khí có thể vào máy nén và gây cháy hoặc nổ.
+- Dùng hệ thống thu hồi riêng: Khi có rò môi chất, phải dùng hệ thống thu hồi riêng để thu toàn bộ môi chất thay vì gom bằng máy nén.
+- Ngăn nguồn đánh lửa khi rò: Môi chất trong máy có tính cháy nhẹ; khi rò trong phòng phải thông gió và tránh lửa, bộ gia nhiệt hoặc nguồn đánh lửa.
+- Công việc điện do người đủ chuẩn: Mọi đấu dây phải do thợ điện được ủy quyền thực hiện theo quy định quốc gia và sơ đồ đấu dây.
+- Thứ tự dây tiếp địa: Khi nối nguồn phải nối dây đất trước dây mang điện; khi tháo phải ngắt dây mang điện trước dây đất.
+- Cố định dàn nóng đúng cách: Phương pháp cố định dàn nóng phải chịu được gió và điều kiện lắp đặt; cố định không đủ có thể làm thiết bị đổ.
+- Không tháo ống bị bóp bằng hàn: Không tháo đường ống bị bóp bằng cách hàn vì khí hoặc dầu còn lại trong van chặn có thể bắn ra.
+- Nguy cơ sai hoặc mất pha N: Nguồn thiếu hoặc sai pha N có thể làm hỏng thiết bị; phải kiểm tra cấu hình nguồn đúng biến thể.
+- Tiếp địa đúng quy định: Phải thiết lập tiếp địa đúng; không nối đất vào ống tiện ích, bộ chống sét hoặc dây đất điện thoại.
+- Không đưa vật vào cửa gió: Không đưa ngón tay, que hoặc vật khác vào cửa hút/xả và không tháo bảo vệ quạt khi quạt có thể quay tốc độ cao.
+- Kiểm tra hư hỏng khi giao: Khi giao phải kiểm tra thiết bị đủ và không hư hỏng; báo ngay thiếu hoặc hư hỏng cho bộ phận khiếu nại của hãng vận chuyển.
+- Chọn vị trí thông thoáng an toàn: Vị trí cần đủ không gian service và thông gió, tránh nơi có khí dễ cháy, dầu khoáng hoặc môi trường có thể gây ăn mòn.
+- Chắn gió và tuyết: Ở khí hậu lạnh phải xét hướng gió, dùng tấm chắn khi cần và bảo vệ dàn nóng khỏi tuyết tích tụ.
+- Giữ đường ống sạch: Không để vật lạ, kể cả dầu khoáng hoặc ẩm, lọt vào đường ống; giữ đầu ống kín đến khi nối.
+- Giới hạn chiều dài theo cấu hình: Giới hạn chiều dài và chênh cao thay đổi theo model, cỡ ống và bố trí; phải dùng đúng bảng cấu hình thay vì một giá trị chung.
+- Bu-lông M12 và lỗ thoát nước: Dàn nóng dùng bốn điểm cố định M12 theo bố trí chỉ dẫn và không được che lỗ thoát nước ở tấm đáy.
+- Thoát nước quanh móng: Chuẩn bị rãnh thoát quanh móng, tránh nước chảy lên lối đi và kê thiết bị phù hợp tại vùng có tuyết.
+- Xử lý lỗ knockout: Sau khi mở lỗ knockout phải loại bỏ ba via và xử lý mép để tránh gỉ hoặc làm hỏng dây, ống.
+- Chỉ dùng môi chất được chỉ định: Không để bất kỳ chất nào ngoài môi chất được chỉ định hòa vào chu trình và tránh đưa không khí vào hệ thống.
+- Mô-men flare theo cỡ ống: Mô-men và kích thước flare phụ thuộc đường kính ống, ví dụ Ø9,5 mm dùng 33-39 Nm; phải tra đúng cỡ.
+- Thổi nitơ khi hàn: Khi hàn đường ống phải thổi nitơ để tránh tạo màng oxy hóa; không dùng chất chống oxy hóa gây tắc.
+- Dùng hai cờ lê đúng cách: Khi nối flare dùng một cờ lê giữ và một cờ lê lực; không đặt lực sai lên van chặn.
+- Giữ đường ống ngắn và được bảo vệ: Giữ đường ống hiện trường ngắn nhất có thể và bảo vệ khỏi hư hỏng vật lý.
+- Tránh hư hỏng khi mở knockout: Khi mở knockout phải tránh làm hỏng vỏ và ống bên dưới; sau đó xử lý ba via, sơn sửa và bảo vệ dây/ống.
+- Không chặn lỗ thông gió: Không chặn lỗ thông gió; đồng thời bịt khe để ngăn động vật nhỏ vào gây lỗi điện hoặc khói.
+- Khí thử kín phù hợp: Kiểm tra kín phải theo áp suất và khí được hướng dẫn; không dùng oxy hoặc khí dễ cháy để tăng áp.
+- Không dùng nước xà phòng thử rò: Chỉ dùng dung dịch thử bọt được khuyến nghị; nước xà phòng có thể làm nứt đai ốc flare hoặc gây ăn mòn.
+- Nạp đúng môi chất R32: Chỉ dùng R32, dụng cụ dành riêng cho loại môi chất và cân để nạp lượng bổ sung theo tính toán.
+- Thông gió khi môi chất rò: Nếu môi chất rò trong phòng phải thông gió ngay; tiếp xúc với lửa có thể tạo khí độc.
+- Tính lượng nạp theo model và ống: Lượng nạp bổ sung hoặc nạp lại phụ thuộc model, cỡ ống và chiều dài; không dùng một lượng chung.
+- Đóng nắp và van sau công việc: Sau công việc phải lắp lại nắp hộp điện, nắp trước và bảo đảm các van chặn ở trạng thái yêu cầu.
+- Ghi nhãn lượng môi chất: Nhãn khí nhà kính phải ghi lượng nạp nhà máy, lượng bổ sung và tổng lượng theo quy định áp dụng.
+- Trễ cảnh báo nhiệt độ 10 phút: Với ứng dụng có cảnh báo nhiệt độ, khuyến nghị trễ 10 phút để tránh báo giả khi vượt ngưỡng tạm thời.
+- Đầu cốt và dây đúng phương pháp: Dây lõi đơn và dây bện phải được lắp theo phương pháp minh họa; dùng đầu cốt tròn khi được yêu cầu và không kẹp nhiều dây tùy ý.
+- Thiết bị bảo vệ theo luật: Aptomat chống rò và bảo vệ nguồn phải tuân thủ luật áp dụng và thông số model; không chọn theo suy đoán.
+- Checklist trước commissioning: Trước cấp nguồn phải kiểm tra lắp đặt, dây, tiếp địa, bảo vệ, cỡ ống, cách nhiệt, van chặn, hư hỏng và rò môi chất.
+- Trình tự test run: Test run chỉ sau checklist; mở van lỏng và gas, cấp nguồn theo thời gian yêu cầu, chạy chế độ test và dừng qua giao diện service.
+- Mã E3 E4 L8 U2 khi test: Bảng test run liên kết E3/E4 với áp suất, L8 với dòng máy nén và U2 với nguồn/pha; phải theo bảng và người đủ chuẩn.
+- Bảo trì bởi đơn vị ủy quyền: Bảo trì phải do người lắp đặt hoặc service được ủy quyền; khuyến nghị ít nhất hằng năm, có thể ngắn hơn theo luật.
+- Chờ 10 phút và đo dưới 50 VDC: Sau ngắt nguồn phải chờ 10 phút, xác nhận mất điện và đo tụ mạch chính dưới 50 VDC trước công việc điện.
+- Khử tĩnh điện trước khi chạm PCB: Trước rút hoặc cắm đầu nối phải chạm phần kim loại không phủ để khử tĩnh điện, tránh hỏng PCB.
+- Cô lập quạt bằng X106A: Trước service biến tần phải rút X106A vì gió có thể làm quạt phát điện; cắm lại sau service, nếu thiếu sẽ báo E7.
+- Kiểm tra bộ trao đổi nhiệt hằng năm: Checklist hằng năm yêu cầu kiểm tra bộ trao đổi nhiệt; tắc bẩn có thể làm giảm hiệu suất và tăng áp suất.
+- Giới hạn troubleshooting và reset bảo vệ: Một số tiếng xì/óc sau xả đá là bình thường; không được cấp nguồn qua thiết bị tự reset làm vô hiệu bảo vệ nhiệt và công việc sâu phải do service.
+- Pump-down chỉ khi mạch kín: Pump-down chỉ dùng khi mạch không rò, theo nút BS2 và trình tự van trong hướng dẫn; có rò phải dừng và thu hồi riêng.
+An toàn: airflow, alarm_management, brazing, burn_hazard, chemical_compatibility, commissioning, corrosion, drainage, electrical, electrical_isolation, electrostatic_discharge, escalation, explosion, falling_objects, fan_rotation, fire, grounding, installation, model_applicability, personal_injury, pressure_system, preventive, procedure_order, qualified_personnel, quality_control, refrigerant, regulatory_compliance, safety_interlock, sharp_edges, site_selection, slip_hazard, source_currentness, stored_energy, torque_control, toxic_gas, variant_applicability, vibration, weather
+Giới hạn: VERIFIED_CURRENT; SME pending; không tự động quyết định bảo trì.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B; EV2-HVAC-001 PDF 1 printed 1 Cover | EV2-HVAC-002 PDF 2 printed 2 Document footer | EV2-HVAC-003 PDF 4 printed 4 1 About this document | EV2-HVAC-004 PDF 7 printed 7 2.1.1 General | EV2-HVAC-005 PDF 8 printed 8 2.1.1 General | EV2-HVAC-006 PDF 9 printed 9 2 General safety precautions | EV2-HVAC-007 PDF 11 printed 11 2.1.3 Refrigerant | EV2-HVAC-008 PDF 11 printed 11 2.1.3 Refrigerant | EV2-HVAC-009 PDF 12 printed 12 2.1.3 Refrigerant | EV2-HVAC-010 PDF 14 printed 14 2.1.6 Electrical | EV2-HVAC-011 PDF 14 printed 14 2.1.6 Electrical | EV2-HVAC-012 PDF 18 printed 18 3 Specific installer safety instructions | EV2-HVAC-013 PDF 19 printed 19 3 Specific installer safety instructions | EV2-HVAC-014 PDF 20 printed 20 3 Specific installer safety instructions | EV2-HVAC-015 PDF 20 printed 20 3 Specific installer safety instructions | EV2-HVAC-016 PDF 21 printed 21 3 Specific installer safety instructions | EV2-HVAC-017 PDF 22 printed 22 4 About the box | EV2-HVAC-018 PDF 28 printed 28 6.2.1 Installation site requirements | EV2-HVAC-019 PDF 29 printed 29 6.2.2 Cold climate requirements | EV2-HVAC-020 PDF 30 printed 30 6.3 Refrigerant piping preparation | EV2-HVAC-021 PDF 32 printed 32 6.3.3 Refrigerant piping requirements | EV2-HVAC-022 PDF 37 printed 37 7.3.3 Mounting the outdoor unit | EV2-HVAC-023 PDF 38 printed 38 7.3.4 To provide drainage | EV2-HVAC-024 PDF 39 printed 39 7.3.5 To prevent the outdoor unit from falling over | EV2-HVAC-025 PDF 41 printed 41 7.4.2 Refrigerant piping precautions | EV2-HVAC-026 PDF 42 printed 42 7.4.5 Flare connection guidelines | EV2-HVAC-027 PDF 43 printed 43 7.4.6 To braze the pipe end | EV2-HVAC-028 PDF 44 printed 44 7.4.7 Stop valve use | EV2-HVAC-029 PDF 45 printed 45 7.4.8 Connect piping to outdoor unit | EV2-HVAC-030 PDF 46 printed 46 7.4.8 Connect piping to outdoor unit | EV2-HVAC-031 PDF 47 printed 47 7.4.8 Connect piping to outdoor unit | EV2-HVAC-032 PDF 48 printed 48 7.5.2 Checking refrigerant piping | EV2-HVAC-033 PDF 49 printed 49 7.5.4 To check for leaks | EV2-HVAC-034 PDF 55 printed 55 7.6.5 Charging additional refrigerant | EV2-HVAC-035 PDF 52 printed 52 7.6 Charging refrigerant | EV2-HVAC-036 PDF 53 printed 53-56 7.6.5 Additional refrigerant amount | EV2-HVAC-037 PDF 57 printed 57 7.6.6 To completely recharge | EV2-HVAC-038 PDF 58 printed 58 7.6.7 Fluorinated gas label | EV2-HVAC-039 PDF 59 printed 59 7.7 Electrical installation | EV2-HVAC-040 PDF 60 printed 60 7.7.5 Wiring methods | EV2-HVAC-041 PDF 61 printed 61 7.7.6 Standard wiring components | EV2-HVAC-042 PDF 66 printed 66 8.3 Checklist before commissioning | EV2-HVAC-043 PDF 67 printed 67-68 8.4 To perform a test run | EV2-HVAC-044 PDF 68 printed 68 8.5 Error codes during test run | EV2-HVAC-045 PDF 71 printed 71 10 Maintenance and service | EV2-HVAC-046 PDF 71 printed 71 10.2.1 Prevent electrical hazards | EV2-HVAC-047 PDF 72 printed 72 10.2.1 Prevent electrical hazards | EV2-HVAC-048 PDF 72 printed 72 10.2.1 Prevent electrical hazards | EV2-HVAC-049 PDF 72 printed 72 10.3 Yearly maintenance checklist | EV2-HVAC-050 PDF 73 printed 73-74 11 Troubleshooting | EV2-HVAC-051 PDF 75 printed 75-76 12.2-12.3 Pump down",2026-08-12T00:00:00+07:00,,2.0.0,2026-08-12,"Phạm vi: RZAG71-140N Sky Air Alpha-series; V1B/Y1B variants on cover
+Các đơn vị bằng chứng:
+- Phạm vi RZAG71-140N: Tài liệu bao phủ RZAG71N, RZAG100N, RZAG125N và RZAG140N các biến thể V1B/Y1B được ghi trên bìa.
+- Mã 4P695307-1B và bản 2025.03: Mã tài liệu là 4P695307-1B và bản in có ngày hiệu lực 2025.03; hai trường này không được trộn lẫn.
+- Chỉ dành cho người lắp đặt được ủy quyền: Đối tượng của hướng dẫn là người lắp đặt được ủy quyền; thiết bị dành cho người dùng chuyên môn hoặc đã được đào tạo.
+- Liên hệ đại lý khi không chắc: Nếu không chắc cách lắp hoặc vận hành, phải liên hệ đại lý thay vì tự suy đoán.
+- Hồ sơ hệ thống theo luật áp dụng: Pháp luật áp dụng có thể yêu cầu logbook chứa thông tin bảo trì, sửa chữa, thử nghiệm và thời gian ngừng.
+- Bảo vệ đường ống khỏi rung: Phải tránh rung hoặc xung quá mức trên đường ống môi chất và bảo vệ thiết bị an toàn, đường ống khỏi tác động xấu.
+- Không pump-down khi mạch rò: Khi mạch môi chất bị rò, không dùng chức năng pump-down tự động vì không khí có thể vào máy nén và gây cháy hoặc nổ.
+- Dùng hệ thống thu hồi riêng: Khi có rò môi chất, phải dùng hệ thống thu hồi riêng để thu toàn bộ môi chất thay vì gom bằng máy nén.
+- Ngăn nguồn đánh lửa khi rò: Môi chất trong máy có tính cháy nhẹ; khi rò trong phòng phải thông gió và tránh lửa, bộ gia nhiệt hoặc nguồn đánh lửa.
+- Công việc điện do người đủ chuẩn: Mọi đấu dây phải do thợ điện được ủy quyền thực hiện theo quy định quốc gia và sơ đồ đấu dây.
+- Thứ tự dây tiếp địa: Khi nối nguồn phải nối dây đất trước dây mang điện; khi tháo phải ngắt dây mang điện trước dây đất.
+- Cố định dàn nóng đúng cách: Phương pháp cố định dàn nóng phải chịu được gió và điều kiện lắp đặt; cố định không đủ có thể làm thiết bị đổ.
+- Không tháo ống bị bóp bằng hàn: Không tháo đường ống bị bóp bằng cách hàn vì khí hoặc dầu còn lại trong van chặn có thể bắn ra.
+- Nguy cơ sai hoặc mất pha N: Nguồn thiếu hoặc sai pha N có thể làm hỏng thiết bị; phải kiểm tra cấu hình nguồn đúng biến thể.
+- Tiếp địa đúng quy định: Phải thiết lập tiếp địa đúng; không nối đất vào ống tiện ích, bộ chống sét hoặc dây đất điện thoại.
+- Không đưa vật vào cửa gió: Không đưa ngón tay, que hoặc vật khác vào cửa hút/xả và không tháo bảo vệ quạt khi quạt có thể quay tốc độ cao.
+- Kiểm tra hư hỏng khi giao: Khi giao phải kiểm tra thiết bị đủ và không hư hỏng; báo ngay thiếu hoặc hư hỏng cho bộ phận khiếu nại của hãng vận chuyển.
+- Chọn vị trí thông thoáng an toàn: Vị trí cần đủ không gian service và thông gió, tránh nơi có khí dễ cháy, dầu khoáng hoặc môi trường có thể gây ăn mòn.
+- Chắn gió và tuyết: Ở khí hậu lạnh phải xét hướng gió, dùng tấm chắn khi cần và bảo vệ dàn nóng khỏi tuyết tích tụ.
+- Giữ đường ống sạch: Không để vật lạ, kể cả dầu khoáng hoặc ẩm, lọt vào đường ống; giữ đầu ống kín đến khi nối.
+- Giới hạn chiều dài theo cấu hình: Giới hạn chiều dài và chênh cao thay đổi theo model, cỡ ống và bố trí; phải dùng đúng bảng cấu hình thay vì một giá trị chung.
+- Bu-lông M12 và lỗ thoát nước: Dàn nóng dùng bốn điểm cố định M12 theo bố trí chỉ dẫn và không được che lỗ thoát nước ở tấm đáy.
+- Thoát nước quanh móng: Chuẩn bị rãnh thoát quanh móng, tránh nước chảy lên lối đi và kê thiết bị phù hợp tại vùng có tuyết.
+- Xử lý lỗ knockout: Sau khi mở lỗ knockout phải loại bỏ ba via và xử lý mép để tránh gỉ hoặc làm hỏng dây, ống.
+- Chỉ dùng môi chất được chỉ định: Không để bất kỳ chất nào ngoài môi chất được chỉ định hòa vào chu trình và tránh đưa không khí vào hệ thống.
+- Mô-men flare theo cỡ ống: Mô-men và kích thước flare phụ thuộc đường kính ống, ví dụ Ø9,5 mm dùng 33-39 Nm; phải tra đúng cỡ.
+- Thổi nitơ khi hàn: Khi hàn đường ống phải thổi nitơ để tránh tạo màng oxy hóa; không dùng chất chống oxy hóa gây tắc.
+- Dùng hai cờ lê đúng cách: Khi nối flare dùng một cờ lê giữ và một cờ lê lực; không đặt lực sai lên van chặn.
+- Giữ đường ống ngắn và được bảo vệ: Giữ đường ống hiện trường ngắn nhất có thể và bảo vệ khỏi hư hỏng vật lý.
+- Tránh hư hỏng khi mở knockout: Khi mở knockout phải tránh làm hỏng vỏ và ống bên dưới; sau đó xử lý ba via, sơn sửa và bảo vệ dây/ống.
+- Không chặn lỗ thông gió: Không chặn lỗ thông gió; đồng thời bịt khe để ngăn động vật nhỏ vào gây lỗi điện hoặc khói.
+- Khí thử kín phù hợp: Kiểm tra kín phải theo áp suất và khí được hướng dẫn; không dùng oxy hoặc khí dễ cháy để tăng áp.
+- Không dùng nước xà phòng thử rò: Chỉ dùng dung dịch thử bọt được khuyến nghị; nước xà phòng có thể làm nứt đai ốc flare hoặc gây ăn mòn.
+- Nạp đúng môi chất R32: Chỉ dùng R32, dụng cụ dành riêng cho loại môi chất và cân để nạp lượng bổ sung theo tính toán.
+- Thông gió khi môi chất rò: Nếu môi chất rò trong phòng phải thông gió ngay; tiếp xúc với lửa có thể tạo khí độc.
+- Tính lượng nạp theo model và ống: Lượng nạp bổ sung hoặc nạp lại phụ thuộc model, cỡ ống và chiều dài; không dùng một lượng chung.
+- Đóng nắp và van sau công việc: Sau công việc phải lắp lại nắp hộp điện, nắp trước và bảo đảm các van chặn ở trạng thái yêu cầu.
+- Ghi nhãn lượng môi chất: Nhãn khí nhà kính phải ghi lượng nạp nhà máy, lượng bổ sung và tổng lượng theo quy định áp dụng.
+- Trễ cảnh báo nhiệt độ 10 phút: Với ứng dụng có cảnh báo nhiệt độ, khuyến nghị trễ 10 phút để tránh báo giả khi vượt ngưỡng tạm thời.
+- Đầu cốt và dây đúng phương pháp: Dây lõi đơn và dây bện phải được lắp theo phương pháp minh họa; dùng đầu cốt tròn khi được yêu cầu và không kẹp nhiều dây tùy ý.
+- Thiết bị bảo vệ theo luật: Aptomat chống rò và bảo vệ nguồn phải tuân thủ luật áp dụng và thông số model; không chọn theo suy đoán.
+- Checklist trước commissioning: Trước cấp nguồn phải kiểm tra lắp đặt, dây, tiếp địa, bảo vệ, cỡ ống, cách nhiệt, van chặn, hư hỏng và rò môi chất.
+- Trình tự test run: Test run chỉ sau checklist; mở van lỏng và gas, cấp nguồn theo thời gian yêu cầu, chạy chế độ test và dừng qua giao diện service.
+- Mã E3 E4 L8 U2 khi test: Bảng test run liên kết E3/E4 với áp suất, L8 với dòng máy nén và U2 với nguồn/pha; phải theo bảng và người đủ chuẩn.
+- Bảo trì bởi đơn vị ủy quyền: Bảo trì phải do người lắp đặt hoặc service được ủy quyền; khuyến nghị ít nhất hằng năm, có thể ngắn hơn theo luật.
+- Chờ 10 phút và đo dưới 50 VDC: Sau ngắt nguồn phải chờ 10 phút, xác nhận mất điện và đo tụ mạch chính dưới 50 VDC trước công việc điện.
+- Khử tĩnh điện trước khi chạm PCB: Trước rút hoặc cắm đầu nối phải chạm phần kim loại không phủ để khử tĩnh điện, tránh hỏng PCB.
+- Cô lập quạt bằng X106A: Trước service biến tần phải rút X106A vì gió có thể làm quạt phát điện; cắm lại sau service, nếu thiếu sẽ báo E7.
+- Kiểm tra bộ trao đổi nhiệt hằng năm: Checklist hằng năm yêu cầu kiểm tra bộ trao đổi nhiệt; tắc bẩn có thể làm giảm hiệu suất và tăng áp suất.
+- Giới hạn troubleshooting và reset bảo vệ: Một số tiếng xì/óc sau xả đá là bình thường; không được cấp nguồn qua thiết bị tự reset làm vô hiệu bảo vệ nhiệt và công việc sâu phải do service.
+- Pump-down chỉ khi mạch kín: Pump-down chỉ dùng khi mạch không rò, theo nút BS2 và trình tự van trong hướng dẫn; có rò phải dừng và thu hồi riêng.
+An toàn: airflow, alarm_management, brazing, burn_hazard, chemical_compatibility, commissioning, corrosion, drainage, electrical, electrical_isolation, electrostatic_discharge, escalation, explosion, falling_objects, fan_rotation, fire, grounding, installation, model_applicability, personal_injury, pressure_system, preventive, procedure_order, qualified_personnel, quality_control, refrigerant, regulatory_compliance, safety_interlock, sharp_edges, site_selection, slip_hazard, source_currentness, stored_energy, torque_control, toxic_gas, variant_applicability, vibration, weather
+Giới hạn: VERIFIED_CURRENT; SME pending; không tự động quyết định bảo trì.
+Tài liệu tham khảo: SRC-DAIKIN-RZAG-4P695307-1B; EV2-HVAC-001 PDF 1 printed 1 Cover | EV2-HVAC-002 PDF 2 printed 2 Document footer | EV2-HVAC-003 PDF 4 printed 4 1 About this document | EV2-HVAC-004 PDF 7 printed 7 2.1.1 General | EV2-HVAC-005 PDF 8 printed 8 2.1.1 General | EV2-HVAC-006 PDF 9 printed 9 2 General safety precautions | EV2-HVAC-007 PDF 11 printed 11 2.1.3 Refrigerant | EV2-HVAC-008 PDF 11 printed 11 2.1.3 Refrigerant | EV2-HVAC-009 PDF 12 printed 12 2.1.3 Refrigerant | EV2-HVAC-010 PDF 14 printed 14 2.1.6 Electrical | EV2-HVAC-011 PDF 14 printed 14 2.1.6 Electrical | EV2-HVAC-012 PDF 18 printed 18 3 Specific installer safety instructions | EV2-HVAC-013 PDF 19 printed 19 3 Specific installer safety instructions | EV2-HVAC-014 PDF 20 printed 20 3 Specific installer safety instructions | EV2-HVAC-015 PDF 20 printed 20 3 Specific installer safety instructions | EV2-HVAC-016 PDF 21 printed 21 3 Specific installer safety instructions | EV2-HVAC-017 PDF 22 printed 22 4 About the box | EV2-HVAC-018 PDF 28 printed 28 6.2.1 Installation site requirements | EV2-HVAC-019 PDF 29 printed 29 6.2.2 Cold climate requirements | EV2-HVAC-020 PDF 30 printed 30 6.3 Refrigerant piping preparation | EV2-HVAC-021 PDF 32 printed 32 6.3.3 Refrigerant piping requirements | EV2-HVAC-022 PDF 37 printed 37 7.3.3 Mounting the outdoor unit | EV2-HVAC-023 PDF 38 printed 38 7.3.4 To provide drainage | EV2-HVAC-024 PDF 39 printed 39 7.3.5 To prevent the outdoor unit from falling over | EV2-HVAC-025 PDF 41 printed 41 7.4.2 Refrigerant piping precautions | EV2-HVAC-026 PDF 42 printed 42 7.4.5 Flare connection guidelines | EV2-HVAC-027 PDF 43 printed 43 7.4.6 To braze the pipe end | EV2-HVAC-028 PDF 44 printed 44 7.4.7 Stop valve use | EV2-HVAC-029 PDF 45 printed 45 7.4.8 Connect piping to outdoor unit | EV2-HVAC-030 PDF 46 printed 46 7.4.8 Connect piping to outdoor unit | EV2-HVAC-031 PDF 47 printed 47 7.4.8 Connect piping to outdoor unit | EV2-HVAC-032 PDF 48 printed 48 7.5.2 Checking refrigerant piping | EV2-HVAC-033 PDF 49 printed 49 7.5.4 To check for leaks | EV2-HVAC-034 PDF 55 printed 55 7.6.5 Charging additional refrigerant | EV2-HVAC-035 PDF 52 printed 52 7.6 Charging refrigerant | EV2-HVAC-036 PDF 53 printed 53-56 7.6.5 Additional refrigerant amount | EV2-HVAC-037 PDF 57 printed 57 7.6.6 To completely recharge | EV2-HVAC-038 PDF 58 printed 58 7.6.7 Fluorinated gas label | EV2-HVAC-039 PDF 59 printed 59 7.7 Electrical installation | EV2-HVAC-040 PDF 60 printed 60 7.7.5 Wiring methods | EV2-HVAC-041 PDF 61 printed 61 7.7.6 Standard wiring components | EV2-HVAC-042 PDF 66 printed 66 8.3 Checklist before commissioning | EV2-HVAC-043 PDF 67 printed 67-68 8.4 To perform a test run | EV2-HVAC-044 PDF 68 printed 68 8.5 Error codes during test run | EV2-HVAC-045 PDF 71 printed 71 10 Maintenance and service | EV2-HVAC-046 PDF 71 printed 71 10.2.1 Prevent electrical hazards | EV2-HVAC-047 PDF 72 printed 72 10.2.1 Prevent electrical hazards | EV2-HVAC-048 PDF 72 printed 72 10.2.1 Prevent electrical hazards | EV2-HVAC-049 PDF 72 printed 72 10.3 Yearly maintenance checklist | EV2-HVAC-050 PDF 73 printed 73-74 11 Troubleshooting | EV2-HVAC-051 PDF 75 printed 75-76 12.2-12.3 Pump down",vi
+P2V2-GEN-DOC-001,Generac Mobile — captured OEM manual evidence collection,Hướng dẫn xử lý sự cố,Máy phát điện dự phòng,https://www.generac.com/globalassets/products/business/mobile-power--light-solutions/mobile-generators/owners-manual/mlg15_diesel-generator_owners-manual.pdf,"Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Các đơn vị bằng chứng:
+- Phạm vi MLG15 theo serial: Tài liệu dành cho Generac Mobile MLG15 có số serial từ 3004595385 trở lên.
+- Mã A0000381158 Rev. A: Chân trang ghi Part No. A0000381158 Rev. A, ngày in 09/10/2019 và thông số có thể thay đổi không báo trước.
+- Thông tin đúng tại thời điểm xuất bản: Manual nói dữ liệu đúng theo sản phẩm tại thời điểm xuất bản và hãng có thể cập nhật, sửa hoặc đổi sản phẩm không báo trước.
+- Đọc kỹ manual trước vận hành: Người vận hành phải đọc kỹ manual; nếu không hiểu phần nào phải liên hệ đại lý hoặc Technical Support trước khi vận hành.
+- Thông tin cần khi yêu cầu service: Khi yêu cầu service phải chuẩn bị model, serial và thông tin trên nhãn để xác định đúng cấu hình.
+- Nguy cơ carbon monoxide: Động cơ tạo khí CO không màu, không mùi và độc; vận hành nơi thông gió và đưa khí xả ra ngoài nếu ở khu vực kín.
+- Không vận hành khi xả hỏng: Không vận hành máy nếu hệ thống xả không hoạt động đúng; không sửa đổi hoặc can thiệp hệ thống xả.
+- Không dùng cho ứng dụng cứu sinh: Sản phẩm không được thiết kế cho ứng dụng hỗ trợ sự sống quan trọng; sử dụng sai có thể gây chết người hoặc thương tích.
+- Giữ xa bộ phận chuyển động: Giữ quần áo, tóc và cơ thể tránh quạt, dây đai và chi tiết đang chuyển động; lắp lại bảo vệ trước vận hành.
+- Bề mặt nóng sau vận hành: Bề mặt động cơ và ống xả có thể gây bỏng; để nguội trước khi chạm hoặc bảo trì.
+- Ứng phó tai nạn điện: Trong tai nạn điện phải ngắt nguồn, dùng vật không dẫn điện tách nạn nhân, sơ cứu và gọi trợ giúp y tế.
+- Tránh nước tại nguồn điện: Tiếp xúc nước với nguồn điện có thể gây điện giật chết người; giữ khu vực và tay khô.
+- Sửa điện bởi người đủ chuẩn: Nối dây và sửa hệ thống điện phải do người đủ chuẩn theo mã điện áp dụng; không tự thao tác dây đang mang điện.
+- Nâng bằng điểm nâng chỉ định: Chỉ dùng điểm nâng được chỉ định, thiết bị đủ tải và giữ người ngoài vùng dưới tải treo.
+- Kiểm soát lửa gần nhiên liệu: Không hút thuốc hoặc có lửa/tia lửa gần nhiên liệu; giữ bình chữa cháy phù hợp và xử lý rò trước vận hành.
+- Nguy cơ ắc quy: Ắc quy có thể gây bỏng hóa chất, điện giật và nổ; dùng PPE, tháo cực âm trước và tránh dụng cụ gây chập.
+- Tái chế ắc quy theo luật: Ắc quy phải được tái chế theo luật địa phương; không bỏ vào rác thông thường.
+- Không tiếp nhiên liệu khi máy chạy: Không đổ nhiên liệu gần lửa, khi hút thuốc hoặc khi động cơ đang chạy; để máy nguội và lau sạch tràn đổ.
+- Chỉ dùng diesel sulfur cực thấp: Nhãn máy yêu cầu nhiên liệu diesel sulfur cực thấp; nhiên liệu phải sạch và đúng yêu cầu động cơ.
+- Khu vực quanh máy sạch khô: Khu vực quanh máy phải khô, sạch, không mảnh vụn và đủ thông gió; tuân thủ yêu cầu tiếp địa địa phương.
+- Kiểm tra trailer trước kéo: Trước kéo phải kiểm tra xe kéo, trailer, khớp nối, xích an toàn, đèn, lốp và tải; khóa mọi cửa và panel.
+- Thay nhãn an toàn khó đọc: Nhãn vận hành và cảnh báo cung cấp hướng dẫn quan trọng; thay nhãn mất hoặc khó đọc theo mã parts manual.
+- Động cơ Mitsubishi MVS4L2-W464ML: Bảng thông số ghi động cơ Mitsubishi MVS4L2-W464ML, bốn xy-lanh, 1,8 L, tốc độ vận hành 1.800 rpm.
+- Thông số đầu ra theo cấu hình: Điện áp, pha, dòng và công suất phải đọc theo bảng và cấu hình ổ cắm; không suy rộng từ tên MLG15.
+- Kích thước và khoảng trống máy: Hình kích thước ghi khoảng 105 x 68 x 56 inch; vận chuyển và bố trí phải tính đủ kích thước thực tế.
+- Nhận diện điểm nâng và tiếp địa: Hình ngoài chỉ vị trí emergency stop, túi càng nâng, điểm nâng trung tâm, cọc tiếp địa, panel ổ cắm và két nước.
+- Nhận diện thành phần bên trong: Hình trong chỉ lọc gió, két nước, bình tràn, ắc quy, que thăm dầu, lọc nhiên liệu, hộp điều khiển và starter.
+- Đèn báo breaker chính: Khi đèn chỉ thị breaker sáng, phải mở/tắt breaker chính trước khi khởi động động cơ.
+- Đèn glow plug: Đèn glow plug cho biết bugi sấy đang hoạt động; trình tự khởi động phải đợi chỉ thị theo manual.
+- Ghi model serial VIN từ nhãn: Ghi model, serial, VIN và tải lốp từ nhãn để đặt parts và nhận hỗ trợ đúng cấu hình.
+- Xác nhận bảo trì trước khởi động: Trước khởi động phải xác nhận mọi hạng mục bảo trì đã cập nhật theo lịch cơ bản và manual động cơ.
+- Đặt máy cân bằng và khô: Trước khởi động xác nhận máy cân bằng, không có nước bên trong hoặc gần máy và làm khô nếu cần.
+- Kiểm tra dầu nước nhiên liệu: Kiểm tra dầu động cơ, nước làm mát, nhiên liệu và rò rỉ trước khởi động; chỉ châm theo manual động cơ.
+- Breaker chính OFF trước đề: Tải và breaker chính phải ở OFF trước khi khởi động để tránh cấp tải ngoài ý muốn.
+- Giới hạn đề 10 giây: Không giữ khóa START quá 10 giây; giữa các lần đề phải chờ để starter nguội theo chỉ dẫn.
+- Áp suất dầu phải lên trong 15 giây: Nếu không có áp suất dầu trong 15 giây sau khi khóa về RUN, bảo vệ áp suất dầu thấp sẽ cắt nhiên liệu và dừng máy.
+- Chỉ reset sau khi tìm nguyên nhân: Khi máy tự dừng do áp suất dầu thấp hoặc nhiệt độ nước cao, chỉ đưa khóa OFF để reset sau khi xác định và khắc phục nguyên nhân.
+- Không tự chỉnh bộ điều áp: Bộ điều áp được chỉnh tại nhà máy; liên hệ Generac Mobile trước khi chỉnh biến trở điện áp, ổn định hoặc U/F.
+- Wet stacking dưới 30% tải: Chạy dưới 30% tải có thể gây nhiên liệu chưa cháy tích tụ, khói đen liên tục, bẩn kim phun và đóng cặn xupap.
+- Vùng tải vận hành 30-100%: Manual nêu dải vận hành phù hợp 30-100% tải; chỉ tăng tải sau khi xác nhận hệ thống và tải nhận an toàn.
+- Trình tự tắt bình thường: Báo người dùng điện, tháo tải, tắt từng breaker ổ cắm, tắt breaker chính rồi mới đưa khóa OFF.
+- E-stop chỉ dùng khẩn cấp: Emergency stop chỉ dùng tình huống khẩn cấp, không thay cho trình tự tắt bình thường.
+- Giới hạn tốc độ kéo: Tốc độ kéo đường cao tốc khuyến nghị tối đa 45 mph (72 km/h), ngoài đường không quá 10 mph (16 km/h); sau lần đầu phải siết lại.
+- Điểm nâng trung tâm và túi càng: Điểm nâng trung tâm dùng cho sling/xích/móc; túi càng trên/dưới chỉ dùng theo hình và thiết bị đúng tải.
+- Walk-around hằng ngày: Hằng ngày kiểm tra rò dầu/nước/nhiên liệu, lỗ thông bị chặn, phần cứng lỏng/mất, kết nối điện và dây quạt.
+- Mức dầu giữa ADD và FULL: Không khởi động nếu dầu dưới ADD; mức bình thường ở vùng gạch giữa ADD và FULL, không châm quá đầy.
+- Manual động cơ là nguồn lịch đầy đủ: Lịch đầy đủ, cấp dầu, coolant và chu kỳ thực tế phải theo manual động cơ OEM; bỏ qua có thể mất bảo hành và gây hỏng.
+- Bôi trơn jack hằng năm: Hằng năm bôi trơn bánh răng, bạc và vít jack theo kiểu side-wind hoặc top-wind; xoay tay quay để phân bố mỡ.
+- Chỉ xử lý nguyên nhân đơn giản: Bảng chỉ dành cho kiểm tra nguyên nhân đơn giản; vấn đề cần kiến thức sâu phải chuyển kỹ thuật viên và tra manual động cơ.
+- Ngưỡng 5 psi trong 5 giây: Sau khởi động lại, nếu áp suất không đạt 5 psi (34 kPa) trong 5 giây phải dừng ngay; kiểm tra mức dầu và rò trước.
+- Ngưỡng 210°F / 99°C: Để máy nguội rồi kiểm tra mức, két, ống, rò và dây đai; dừng ngay nếu đạt 210°F (99°C) hoặc tiếp tục quá nhiệt.
+An toàn: _, a, application_boundary, asphyxiation, battery, burn, carbon_monoxide, chemical, d, e, electrical, electrocution, emergency, engine, engine_applicability, engine_damage, environmental, equipment_identification, evidence_boundary, exhaust, explosion, falling_objects, fire, fuel, g, hazard_communication, hot_coolant, hot_surfaces, i, lifting, load_management, load_shedding, m, model_applicability, n, pressure, preventive, procedure_order, qualified_personnel, rotating_parts, safety_interlock, site_safety, site_selection, source_currentness, stability, starter_damage, startup, towing
+Giới hạn: VERSION_AMBIGUOUS; SME pending; không tự động quyết định bảo trì.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158; EV2-GEN-001 PDF 1 printed cover Cover | EV2-GEN-002 PDF 36 printed back cover Document footer | EV2-GEN-003 PDF 5 printed 1 Introduction | EV2-GEN-004 PDF 5 printed 1 Read This Manual Thoroughly | EV2-GEN-005 PDF 5 printed 1 How to Obtain Service | EV2-GEN-006 PDF 6 printed 2 General Hazards | EV2-GEN-007 PDF 6 printed 2 General Hazards | EV2-GEN-008 PDF 6 printed 2 General Hazards | EV2-GEN-009 PDF 6 printed 2 General Hazards | EV2-GEN-010 PDF 6 printed 2 General Hazards | EV2-GEN-011 PDF 7 printed 3 Electrical Hazards | EV2-GEN-012 PDF 7 printed 3 Electrical Hazards | EV2-GEN-013 PDF 7 printed 3 Electrical Hazards | EV2-GEN-014 PDF 7 printed 3 Lifting Hazards | EV2-GEN-015 PDF 7 printed 3 Explosion and Fire Hazards | EV2-GEN-016 PDF 8 printed 4 Battery Hazards | EV2-GEN-017 PDF 8 printed 4 Battery Hazards | EV2-GEN-018 PDF 8 printed 4 Fuel Hazards | EV2-GEN-019 PDF 8 printed 4 Fuel Hazards | EV2-GEN-020 PDF 9 printed 5 Operating Safety | EV2-GEN-021 PDF 9 printed 5 Towing Safety | EV2-GEN-022 PDF 10 printed 6 Operating and Safety Decals | EV2-GEN-023 PDF 13 printed 9 Specifications | EV2-GEN-024 PDF 13 printed 9 Specifications | EV2-GEN-025 PDF 14 printed 10 Unit Dimensions | EV2-GEN-026 PDF 15 printed 11 Component Locations Exterior | EV2-GEN-027 PDF 16 printed 12 Component Locations Interior | EV2-GEN-028 PDF 17 printed 13 Control Panel | EV2-GEN-029 PDF 17 printed 13 Control Panel | EV2-GEN-030 PDF 18 printed 14 Unit and Serial Number Locations | EV2-GEN-031 PDF 19 printed 15 Prestart Checklist | EV2-GEN-032 PDF 19 printed 15 Prestart Checklist | EV2-GEN-033 PDF 19 printed 15 Prestart Checklist | EV2-GEN-034 PDF 19 printed 15 Starting the Unit | EV2-GEN-035 PDF 20 printed 16 Starting the Unit | EV2-GEN-036 PDF 20 printed 16 Starting the Unit | EV2-GEN-037 PDF 20 printed 16 Automatic Shutdown | EV2-GEN-038 PDF 20 printed 16 Voltage Regulator | EV2-GEN-039 PDF 21 printed 17 Wet Stacking | EV2-GEN-040 PDF 21 printed 17 Wet Stacking | EV2-GEN-041 PDF 21 printed 17 Shutting Down the Unit | EV2-GEN-042 PDF 21 printed 17 Shutting Down the Unit | EV2-GEN-043 PDF 22 printed 18 Towing the Unit | EV2-GEN-044 PDF 22 printed 18 Lifting the Unit | EV2-GEN-045 PDF 23 printed 19 Daily Walk Around Inspection | EV2-GEN-046 PDF 23 printed 19 General Maintenance | EV2-GEN-047 PDF 24 printed 20 Basic Maintenance Schedule | EV2-GEN-048 PDF 25 printed 21 Jacks | EV2-GEN-049 PDF 27 printed 23 General Troubleshooting | EV2-GEN-050 PDF 27 printed 23 Low Oil Pressure Shutdown | EV2-GEN-051 PDF 27 printed 23 High Coolant Temperature Shutdown",2026-08-12T00:00:00+07:00,,2.0.0,2026-08-12,"Phạm vi: MLG15 diesel generator, serial number 3004595385 and above
+Các đơn vị bằng chứng:
+- Phạm vi MLG15 theo serial: Tài liệu dành cho Generac Mobile MLG15 có số serial từ 3004595385 trở lên.
+- Mã A0000381158 Rev. A: Chân trang ghi Part No. A0000381158 Rev. A, ngày in 09/10/2019 và thông số có thể thay đổi không báo trước.
+- Thông tin đúng tại thời điểm xuất bản: Manual nói dữ liệu đúng theo sản phẩm tại thời điểm xuất bản và hãng có thể cập nhật, sửa hoặc đổi sản phẩm không báo trước.
+- Đọc kỹ manual trước vận hành: Người vận hành phải đọc kỹ manual; nếu không hiểu phần nào phải liên hệ đại lý hoặc Technical Support trước khi vận hành.
+- Thông tin cần khi yêu cầu service: Khi yêu cầu service phải chuẩn bị model, serial và thông tin trên nhãn để xác định đúng cấu hình.
+- Nguy cơ carbon monoxide: Động cơ tạo khí CO không màu, không mùi và độc; vận hành nơi thông gió và đưa khí xả ra ngoài nếu ở khu vực kín.
+- Không vận hành khi xả hỏng: Không vận hành máy nếu hệ thống xả không hoạt động đúng; không sửa đổi hoặc can thiệp hệ thống xả.
+- Không dùng cho ứng dụng cứu sinh: Sản phẩm không được thiết kế cho ứng dụng hỗ trợ sự sống quan trọng; sử dụng sai có thể gây chết người hoặc thương tích.
+- Giữ xa bộ phận chuyển động: Giữ quần áo, tóc và cơ thể tránh quạt, dây đai và chi tiết đang chuyển động; lắp lại bảo vệ trước vận hành.
+- Bề mặt nóng sau vận hành: Bề mặt động cơ và ống xả có thể gây bỏng; để nguội trước khi chạm hoặc bảo trì.
+- Ứng phó tai nạn điện: Trong tai nạn điện phải ngắt nguồn, dùng vật không dẫn điện tách nạn nhân, sơ cứu và gọi trợ giúp y tế.
+- Tránh nước tại nguồn điện: Tiếp xúc nước với nguồn điện có thể gây điện giật chết người; giữ khu vực và tay khô.
+- Sửa điện bởi người đủ chuẩn: Nối dây và sửa hệ thống điện phải do người đủ chuẩn theo mã điện áp dụng; không tự thao tác dây đang mang điện.
+- Nâng bằng điểm nâng chỉ định: Chỉ dùng điểm nâng được chỉ định, thiết bị đủ tải và giữ người ngoài vùng dưới tải treo.
+- Kiểm soát lửa gần nhiên liệu: Không hút thuốc hoặc có lửa/tia lửa gần nhiên liệu; giữ bình chữa cháy phù hợp và xử lý rò trước vận hành.
+- Nguy cơ ắc quy: Ắc quy có thể gây bỏng hóa chất, điện giật và nổ; dùng PPE, tháo cực âm trước và tránh dụng cụ gây chập.
+- Tái chế ắc quy theo luật: Ắc quy phải được tái chế theo luật địa phương; không bỏ vào rác thông thường.
+- Không tiếp nhiên liệu khi máy chạy: Không đổ nhiên liệu gần lửa, khi hút thuốc hoặc khi động cơ đang chạy; để máy nguội và lau sạch tràn đổ.
+- Chỉ dùng diesel sulfur cực thấp: Nhãn máy yêu cầu nhiên liệu diesel sulfur cực thấp; nhiên liệu phải sạch và đúng yêu cầu động cơ.
+- Khu vực quanh máy sạch khô: Khu vực quanh máy phải khô, sạch, không mảnh vụn và đủ thông gió; tuân thủ yêu cầu tiếp địa địa phương.
+- Kiểm tra trailer trước kéo: Trước kéo phải kiểm tra xe kéo, trailer, khớp nối, xích an toàn, đèn, lốp và tải; khóa mọi cửa và panel.
+- Thay nhãn an toàn khó đọc: Nhãn vận hành và cảnh báo cung cấp hướng dẫn quan trọng; thay nhãn mất hoặc khó đọc theo mã parts manual.
+- Động cơ Mitsubishi MVS4L2-W464ML: Bảng thông số ghi động cơ Mitsubishi MVS4L2-W464ML, bốn xy-lanh, 1,8 L, tốc độ vận hành 1.800 rpm.
+- Thông số đầu ra theo cấu hình: Điện áp, pha, dòng và công suất phải đọc theo bảng và cấu hình ổ cắm; không suy rộng từ tên MLG15.
+- Kích thước và khoảng trống máy: Hình kích thước ghi khoảng 105 x 68 x 56 inch; vận chuyển và bố trí phải tính đủ kích thước thực tế.
+- Nhận diện điểm nâng và tiếp địa: Hình ngoài chỉ vị trí emergency stop, túi càng nâng, điểm nâng trung tâm, cọc tiếp địa, panel ổ cắm và két nước.
+- Nhận diện thành phần bên trong: Hình trong chỉ lọc gió, két nước, bình tràn, ắc quy, que thăm dầu, lọc nhiên liệu, hộp điều khiển và starter.
+- Đèn báo breaker chính: Khi đèn chỉ thị breaker sáng, phải mở/tắt breaker chính trước khi khởi động động cơ.
+- Đèn glow plug: Đèn glow plug cho biết bugi sấy đang hoạt động; trình tự khởi động phải đợi chỉ thị theo manual.
+- Ghi model serial VIN từ nhãn: Ghi model, serial, VIN và tải lốp từ nhãn để đặt parts và nhận hỗ trợ đúng cấu hình.
+- Xác nhận bảo trì trước khởi động: Trước khởi động phải xác nhận mọi hạng mục bảo trì đã cập nhật theo lịch cơ bản và manual động cơ.
+- Đặt máy cân bằng và khô: Trước khởi động xác nhận máy cân bằng, không có nước bên trong hoặc gần máy và làm khô nếu cần.
+- Kiểm tra dầu nước nhiên liệu: Kiểm tra dầu động cơ, nước làm mát, nhiên liệu và rò rỉ trước khởi động; chỉ châm theo manual động cơ.
+- Breaker chính OFF trước đề: Tải và breaker chính phải ở OFF trước khi khởi động để tránh cấp tải ngoài ý muốn.
+- Giới hạn đề 10 giây: Không giữ khóa START quá 10 giây; giữa các lần đề phải chờ để starter nguội theo chỉ dẫn.
+- Áp suất dầu phải lên trong 15 giây: Nếu không có áp suất dầu trong 15 giây sau khi khóa về RUN, bảo vệ áp suất dầu thấp sẽ cắt nhiên liệu và dừng máy.
+- Chỉ reset sau khi tìm nguyên nhân: Khi máy tự dừng do áp suất dầu thấp hoặc nhiệt độ nước cao, chỉ đưa khóa OFF để reset sau khi xác định và khắc phục nguyên nhân.
+- Không tự chỉnh bộ điều áp: Bộ điều áp được chỉnh tại nhà máy; liên hệ Generac Mobile trước khi chỉnh biến trở điện áp, ổn định hoặc U/F.
+- Wet stacking dưới 30% tải: Chạy dưới 30% tải có thể gây nhiên liệu chưa cháy tích tụ, khói đen liên tục, bẩn kim phun và đóng cặn xupap.
+- Vùng tải vận hành 30-100%: Manual nêu dải vận hành phù hợp 30-100% tải; chỉ tăng tải sau khi xác nhận hệ thống và tải nhận an toàn.
+- Trình tự tắt bình thường: Báo người dùng điện, tháo tải, tắt từng breaker ổ cắm, tắt breaker chính rồi mới đưa khóa OFF.
+- E-stop chỉ dùng khẩn cấp: Emergency stop chỉ dùng tình huống khẩn cấp, không thay cho trình tự tắt bình thường.
+- Giới hạn tốc độ kéo: Tốc độ kéo đường cao tốc khuyến nghị tối đa 45 mph (72 km/h), ngoài đường không quá 10 mph (16 km/h); sau lần đầu phải siết lại.
+- Điểm nâng trung tâm và túi càng: Điểm nâng trung tâm dùng cho sling/xích/móc; túi càng trên/dưới chỉ dùng theo hình và thiết bị đúng tải.
+- Walk-around hằng ngày: Hằng ngày kiểm tra rò dầu/nước/nhiên liệu, lỗ thông bị chặn, phần cứng lỏng/mất, kết nối điện và dây quạt.
+- Mức dầu giữa ADD và FULL: Không khởi động nếu dầu dưới ADD; mức bình thường ở vùng gạch giữa ADD và FULL, không châm quá đầy.
+- Manual động cơ là nguồn lịch đầy đủ: Lịch đầy đủ, cấp dầu, coolant và chu kỳ thực tế phải theo manual động cơ OEM; bỏ qua có thể mất bảo hành và gây hỏng.
+- Bôi trơn jack hằng năm: Hằng năm bôi trơn bánh răng, bạc và vít jack theo kiểu side-wind hoặc top-wind; xoay tay quay để phân bố mỡ.
+- Chỉ xử lý nguyên nhân đơn giản: Bảng chỉ dành cho kiểm tra nguyên nhân đơn giản; vấn đề cần kiến thức sâu phải chuyển kỹ thuật viên và tra manual động cơ.
+- Ngưỡng 5 psi trong 5 giây: Sau khởi động lại, nếu áp suất không đạt 5 psi (34 kPa) trong 5 giây phải dừng ngay; kiểm tra mức dầu và rò trước.
+- Ngưỡng 210°F / 99°C: Để máy nguội rồi kiểm tra mức, két, ống, rò và dây đai; dừng ngay nếu đạt 210°F (99°C) hoặc tiếp tục quá nhiệt.
+An toàn: _, a, application_boundary, asphyxiation, battery, burn, carbon_monoxide, chemical, d, e, electrical, electrocution, emergency, engine, engine_applicability, engine_damage, environmental, equipment_identification, evidence_boundary, exhaust, explosion, falling_objects, fire, fuel, g, hazard_communication, hot_coolant, hot_surfaces, i, lifting, load_management, load_shedding, m, model_applicability, n, pressure, preventive, procedure_order, qualified_personnel, rotating_parts, safety_interlock, site_safety, site_selection, source_currentness, stability, starter_damage, startup, towing
+Giới hạn: VERSION_AMBIGUOUS; SME pending; không tự động quyết định bảo trì.
+Tài liệu tham khảo: SRC-GENERAC-MLG15-A0000381158; EV2-GEN-001 PDF 1 printed cover Cover | EV2-GEN-002 PDF 36 printed back cover Document footer | EV2-GEN-003 PDF 5 printed 1 Introduction | EV2-GEN-004 PDF 5 printed 1 Read This Manual Thoroughly | EV2-GEN-005 PDF 5 printed 1 How to Obtain Service | EV2-GEN-006 PDF 6 printed 2 General Hazards | EV2-GEN-007 PDF 6 printed 2 General Hazards | EV2-GEN-008 PDF 6 printed 2 General Hazards | EV2-GEN-009 PDF 6 printed 2 General Hazards | EV2-GEN-010 PDF 6 printed 2 General Hazards | EV2-GEN-011 PDF 7 printed 3 Electrical Hazards | EV2-GEN-012 PDF 7 printed 3 Electrical Hazards | EV2-GEN-013 PDF 7 printed 3 Electrical Hazards | EV2-GEN-014 PDF 7 printed 3 Lifting Hazards | EV2-GEN-015 PDF 7 printed 3 Explosion and Fire Hazards | EV2-GEN-016 PDF 8 printed 4 Battery Hazards | EV2-GEN-017 PDF 8 printed 4 Battery Hazards | EV2-GEN-018 PDF 8 printed 4 Fuel Hazards | EV2-GEN-019 PDF 8 printed 4 Fuel Hazards | EV2-GEN-020 PDF 9 printed 5 Operating Safety | EV2-GEN-021 PDF 9 printed 5 Towing Safety | EV2-GEN-022 PDF 10 printed 6 Operating and Safety Decals | EV2-GEN-023 PDF 13 printed 9 Specifications | EV2-GEN-024 PDF 13 printed 9 Specifications | EV2-GEN-025 PDF 14 printed 10 Unit Dimensions | EV2-GEN-026 PDF 15 printed 11 Component Locations Exterior | EV2-GEN-027 PDF 16 printed 12 Component Locations Interior | EV2-GEN-028 PDF 17 printed 13 Control Panel | EV2-GEN-029 PDF 17 printed 13 Control Panel | EV2-GEN-030 PDF 18 printed 14 Unit and Serial Number Locations | EV2-GEN-031 PDF 19 printed 15 Prestart Checklist | EV2-GEN-032 PDF 19 printed 15 Prestart Checklist | EV2-GEN-033 PDF 19 printed 15 Prestart Checklist | EV2-GEN-034 PDF 19 printed 15 Starting the Unit | EV2-GEN-035 PDF 20 printed 16 Starting the Unit | EV2-GEN-036 PDF 20 printed 16 Starting the Unit | EV2-GEN-037 PDF 20 printed 16 Automatic Shutdown | EV2-GEN-038 PDF 20 printed 16 Voltage Regulator | EV2-GEN-039 PDF 21 printed 17 Wet Stacking | EV2-GEN-040 PDF 21 printed 17 Wet Stacking | EV2-GEN-041 PDF 21 printed 17 Shutting Down the Unit | EV2-GEN-042 PDF 21 printed 17 Shutting Down the Unit | EV2-GEN-043 PDF 22 printed 18 Towing the Unit | EV2-GEN-044 PDF 22 printed 18 Lifting the Unit | EV2-GEN-045 PDF 23 printed 19 Daily Walk Around Inspection | EV2-GEN-046 PDF 23 printed 19 General Maintenance | EV2-GEN-047 PDF 24 printed 20 Basic Maintenance Schedule | EV2-GEN-048 PDF 25 printed 21 Jacks | EV2-GEN-049 PDF 27 printed 23 General Troubleshooting | EV2-GEN-050 PDF 27 printed 23 Low Oil Pressure Shutdown | EV2-GEN-051 PDF 27 printed 23 High Coolant Temperature Shutdown",vi
