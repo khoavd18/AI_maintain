@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 
 from evaluation.phase2_calibration.retrieval import run_calibration_retrieval
+from evaluation.phase2_calibration.remediation import REMEDIATIONS
 from evaluation.phase2_calibration.validation import validate_calibration_dataset
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,6 +44,41 @@ def test_calibration_has_bounded_traceable_cases_and_evidence() -> None:
         assert case["promotion_eligible"] is False
         if case["calibration_status"] == "READY_FOR_SME":
             assert set(case["required_evidence_ids"]).issubset(verified)
+
+
+def test_five_rendered_page_remediations_are_machine_verified_not_sme_attestations() -> None:
+    verification = {row["evidence_id"]: row for row in _rows("evidence_verification.jsonl")}
+    assert set(REMEDIATIONS) == {
+        "EV2-HVAC-026",
+        "EV2-HVAC-043",
+        "EV2-GEN-027",
+        "EV2-GEN-035",
+        "EV2-GEN-036",
+    }
+    for evidence_id, decision in REMEDIATIONS.items():
+        row = verification[evidence_id]
+        assert row["semantic_verification_status"] == "MACHINE_VERIFIED"
+        assert row["locator_verification_status"] == "MACHINE_VERIFIED"
+        assert row["source_anchor_max_12_words"] == decision.source_anchor
+        assert (
+            row["normalized_source_fragment_sha256"]
+            == hashlib.sha256(
+                " ".join(decision.source_anchor.split()).casefold().encode("utf-8")
+            ).hexdigest()
+        )
+        assert row["sme_status"] == "pending"
+        assert row["remediation"]["verification_kind"] == "automated_rendered_page_not_sme"
+    assert verification["EV2-HVAC-026"]["section"] == "7.4.5 To flare the pipe end"
+    assert (
+        verification["EV2-HVAC-026"]["remediation"]["old_section"]
+        == "7.4.5 Flare connection guidelines"
+    )
+
+
+def test_cal_p2_gen_002_is_ready_when_its_crank_limit_evidence_is_verified() -> None:
+    cases = {row["calibration_case_id"]: row for row in _rows("cases.jsonl")}
+    assert cases["CAL-P2-GEN-002"]["required_evidence_ids"] == ["EV2-GEN-035"]
+    assert cases["CAL-P2-GEN-002"]["calibration_status"] == "READY_FOR_SME"
 
 
 def test_calibration_validation_and_checksums_pass() -> None:

@@ -1,5 +1,5 @@
 # Calibration validation
 
-Status: **FAIL**
+Status: **PASS**
 
-Errors: 1
+Errors: 0

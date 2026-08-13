@@ -5,7 +5,9 @@
     "evidence_reviews": 152,
     "generator_cases": 10,
     "hvac_cases": 10,
+    "machine_verified_evidence": 152,
     "pump_cases": 10,
+    "rendered_page_remediations": 5,
     "review_queue_rows": 30
   },
   "dataset_id": "phase2-semantic-calibration-v1",

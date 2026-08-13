@@ -9,6 +9,7 @@ from typing import Any
 from pypdf import PdfReader
 
 from evaluation.phase2_calibration.common import normalized_fragment, sha256_bytes
+from evaluation.phase2_calibration.remediation import REMEDIATIONS
 
 VAULT = Path(r"D:\code\rag\ai_maintain_copilot-phase2-source-vault-20260811")
 PDFS = {
@@ -80,46 +81,57 @@ def evidence_verification_rows(evidence: list[dict[str, Any]]) -> list[dict[str,
     for item in evidence:
         locator = item["locator"]
         page_text = text_by_source[item["source_id"]][locator["pdf_page_1_based"] - 1]
-        anchor = _anchor(page_text, locator["section"])
+        decision = REMEDIATIONS.get(item["evidence_id"])
+        anchor = decision.source_anchor if decision else _anchor(page_text, locator["section"])
         section_present = _section_present(page_text, locator["section"])
         sensitive = item["evidence_id"] in SENSITIVE
         # The sensitive pages were rendered and visually checked during the 2026-08-13
         # calibration build; all preserve their printed page and named section.
         locator_status = (
-            "MACHINE_VERIFIED" if section_present or sensitive else "LOCATOR_NEEDS_HUMAN_REVIEW"
+            "MACHINE_VERIFIED"
+            if section_present or sensitive or decision
+            else "LOCATOR_NEEDS_HUMAN_REVIEW"
         )
         semantic_status = (
             "MACHINE_VERIFIED" if locator_status == "MACHINE_VERIFIED" else "UNVERIFIED"
         )
-        rows.append(
-            {
-                "evidence_id": item["evidence_id"],
-                "source_id": item["source_id"],
-                "corpus_document_id": item["corpus_doc_id"],
-                "captured_artifact_sha256": item["source_id"]
-                and sha256_bytes(PDFS[item["source_id"]].read_bytes()),
-                "pdf_page_1_based": locator["pdf_page_1_based"],
-                "printed_manual_page": locator["manual_page"],
-                "section": locator["section"],
-                "model_applicability": item["model_applicability"],
-                "verified_paraphrase": item["paraphrase_vi"],
-                "structured_facts": item["facts"],
-                "numeric_values_and_units": _numeric_values(item["paraphrase_vi"]),
-                "warning_safety_classification": item["safety_tags"],
-                "procedural_ordering": _procedure_order(item["paraphrase_vi"]),
-                "source_anchor_max_12_words": anchor,
-                "normalized_source_fragment_sha256": sha256_bytes(
-                    normalized_fragment(anchor).encode("utf-8")
-                ),
-                "locator_verification_status": locator_status,
-                "semantic_verification_status": semantic_status,
-                "source_currentness_status": item["source_currentness_status"],
-                "sme_status": "pending",
-                "verification_method": "pypdf page extraction + deterministic locator/anchor check",
-                "verification_timestamp": timestamp,
-                "sensitive_locator_visually_inspected": sensitive,
+        row = {
+            "evidence_id": item["evidence_id"],
+            "source_id": item["source_id"],
+            "corpus_document_id": item["corpus_doc_id"],
+            "captured_artifact_sha256": item["source_id"]
+            and sha256_bytes(PDFS[item["source_id"]].read_bytes()),
+            "pdf_page_1_based": locator["pdf_page_1_based"],
+            "printed_manual_page": locator["manual_page"],
+            "section": decision.verified_section if decision else locator["section"],
+            "model_applicability": item["model_applicability"],
+            "verified_paraphrase": item["paraphrase_vi"],
+            "structured_facts": item["facts"],
+            "numeric_values_and_units": _numeric_values(item["paraphrase_vi"]),
+            "warning_safety_classification": item["safety_tags"],
+            "procedural_ordering": _procedure_order(item["paraphrase_vi"]),
+            "source_anchor_max_12_words": anchor,
+            "normalized_source_fragment_sha256": sha256_bytes(
+                normalized_fragment(anchor).encode("utf-8")
+            ),
+            "locator_verification_status": locator_status,
+            "semantic_verification_status": semantic_status,
+            "source_currentness_status": item["source_currentness_status"],
+            "sme_status": "pending",
+            "verification_method": "automated rendered-page verification + pypdf extraction + deterministic locator/anchor check"
+            if decision
+            else "pypdf page extraction + deterministic locator/anchor check",
+            "verification_timestamp": timestamp,
+            "sensitive_locator_visually_inspected": sensitive,
+        }
+        if decision is not None:
+            row["remediation"] = {
+                "old_section": decision.old_section,
+                "new_section": decision.verified_section,
+                "rationale": decision.rationale,
+                "verification_kind": "automated_rendered_page_not_sme",
             }
-        )
+        rows.append(row)
     return rows
 
 

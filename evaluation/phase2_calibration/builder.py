@@ -251,6 +251,12 @@ def _manifest(
             "evidence_reviews": len(verification),
             "evidence_chunks": len(chunks),
             "review_queue_rows": 30,
+            "machine_verified_evidence": sum(
+                row["semantic_verification_status"] == "MACHINE_VERIFIED" for row in verification
+            ),
+            "rendered_page_remediations": sum(
+                row.get("remediation") is not None for row in verification
+            ),
         },
         "limitations": [
             "The v2 270 generated cases are not remediated.",
@@ -282,13 +288,14 @@ def _schema() -> dict[str, Any]:
 
 
 def _readme() -> str:
-    return "# Phase 2 semantic calibration v1\n\nA 30-case, document-derived draft calibration set. It does not validate the remaining 270 generated v2 cases, constitute SME approval, or report live-LLM results. Grundfos and Generac remain promotion-blocked.\n"
+    return "# Phase 2 semantic calibration v1\n\nA 30-case, document-derived draft calibration set. Five previous locator-extraction gaps were resolved by automated rendered-page verification of the captured OEM PDFs; this is not human or SME approval. The set does not validate the remaining 270 generated v2 cases, constitute SME approval, or report live-LLM results. Grundfos and Generac remain promotion-blocked.\n"
 
 
 def _qa_report(cases: list[dict[str, Any]], verification: list[dict[str, Any]]) -> str:
     ready = sum(c["calibration_status"] == "READY_FOR_SME" for c in cases)
     verified = sum(r["semantic_verification_status"] == "MACHINE_VERIFIED" for r in verification)
-    return f"# QA report\n\n- Calibration cases: {len(cases)}\n- Ready for SME review: {ready}\n- Machine-verified evidence rows: {verified}/{len(verification)}\n- No live LLM ran.\n"
+    remediated = sum(r.get("remediation") is not None for r in verification)
+    return f"# QA report\n\n- Calibration cases: {len(cases)}\n- Ready for SME review: {ready}\n- Machine-verified evidence rows: {verified}/{len(verification)}\n- Rendered-page evidence remediations: {remediated}\n- No live LLM ran.\n"
 
 
 def _write_checksums(output: Path) -> None:
