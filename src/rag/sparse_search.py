@@ -10,12 +10,17 @@ import re
 from threading import Lock
 import time
 import unicodedata
+from typing import Literal
 
 from src.rag.retriever import RetrievalResult
-from src.rag.vector_store import QdrantVectorStore, VectorSearchResult
+from src.rag.vector_store import QdrantVectorStore, VectorSearchResult, VectorStoreError
 from src.rag.text_normalization import fold_accents
 
 _TOKEN_PATTERN = re.compile(r"[\w]+(?:[-_.][\w]+)*", flags=re.UNICODE)
+_UNIT_FORMAT_PATTERN = re.compile(
+    r"(?<!\w)(\d+(?:[.,]\d+)?)\s*(k\s*pa|m\s*pa|psi|rpm|hz|n\s*[·.]?\s*m)(?!\w)",
+    flags=re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -23,6 +28,17 @@ class _IndexedDocument:
     result: RetrievalResult
     term_frequencies: Counter[str]
     length: int
+
+
+@dataclass(frozen=True)
+class BM25Snapshot:
+    """An immutable, atomically published sparse-search snapshot."""
+
+    index: "BM25Index"
+    version: int
+    record_count: int
+    build_duration_ms: float
+    refreshed_at: float
 
 
 class BM25Index:
@@ -34,11 +50,13 @@ class BM25Index:
         *,
         k1: float = 1.5,
         b: float = 0.75,
+        profile: Literal["legacy", "full"] = "full",
     ) -> None:
         if k1 <= 0 or not 0 <= b <= 1:
             raise ValueError("BM25 requires k1 > 0 and 0 <= b <= 1.")
         self.k1 = k1
         self.b = b
+        self.profile = profile
         self._documents = [self._index_document(document) for document in documents]
         self._average_length = (
             sum(document.length for document in self._documents) / len(self._documents)
@@ -102,19 +120,28 @@ class BM25Index:
             )
         return score
 
-    @staticmethod
-    def _index_document(document: RetrievalResult) -> _IndexedDocument:
-        tokens = tokenize(
-            " ".join(
-                (
-                    document.doc_id,
-                    document.title,
-                    document.asset_type,
-                    document.failure_category,
-                    document.text,
-                )
+    def _index_document(self, document: RetrievalResult) -> _IndexedDocument:
+        fields = (
+            (
+                document.doc_id,
+                document.title,
+                document.asset_type,
+                document.failure_category,
+                document.text,
+            )
+            if self.profile == "legacy"
+            else (
+                document.title,
+                document.text,
+                document.doc_type,
+                document.failure_category,
+                document.source,
+                document.asset_type,
+                document.version,
             )
         )
+        tokenizer = tokenize_legacy if self.profile == "legacy" else tokenize
+        tokens = tokenizer(" ".join(fields))
         return _IndexedDocument(
             result=document,
             term_frequencies=Counter(tokens),
@@ -131,6 +158,7 @@ class QdrantBM25Retriever:
         *,
         max_chunks: int = 10000,
         refresh_interval_seconds: float = 60.0,
+        profile: Literal["legacy", "full"] = "legacy",
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if refresh_interval_seconds <= 0:
@@ -138,20 +166,33 @@ class QdrantBM25Retriever:
         self.vector_store = vector_store
         self.max_chunks = max_chunks
         self.refresh_interval_seconds = refresh_interval_seconds
+        self.profile = profile
         self._monotonic = monotonic
-        self._index: BM25Index | None = None
-        self._refreshed_at: float | None = None
+        self._snapshot: BM25Snapshot | None = None
+        self._last_failure_category: str | None = None
+        self._version = 0
         self._lock = Lock()
 
     def search(self, query: str, *, limit: int, **filters: str | None) -> list[RetrievalResult]:
         return self._get_index().search(query, limit=limit, **filters)
 
     def refresh(self) -> None:
-        """Invalidate cached sparse state after an explicit indexing operation."""
+        """Build and atomically publish a fresh snapshot from Qdrant chunks."""
 
         with self._lock:
-            self._index = None
-            self._refreshed_at = None
+            self._refresh_locked()
+
+    def diagnostics(self) -> dict[str, int | float | str | None]:
+        """Return bounded operational state without query or source content."""
+
+        snapshot = self._snapshot
+        return {
+            "snapshot_version": snapshot.version if snapshot else None,
+            "record_count": snapshot.record_count if snapshot else 0,
+            "build_duration_ms": snapshot.build_duration_ms if snapshot else None,
+            "last_successful_refresh": snapshot.refreshed_at if snapshot else None,
+            "last_failure_category": self._last_failure_category,
+        }
 
     def _get_index(self) -> BM25Index:
         now = self._now()
@@ -159,18 +200,36 @@ class QdrantBM25Retriever:
             with self._lock:
                 now = self._now()
                 if self._is_stale(now):
-                    payloads = self.vector_store.list_chunks(max_chunks=self.max_chunks)
-                    self._index = BM25Index([_from_vector_result(item) for item in payloads])
-                    self._refreshed_at = now
-        if self._index is None:  # pragma: no cover - guarded by the refresh branch
+                    self._refresh_locked(now)
+        if self._snapshot is None:
             raise RuntimeError("BM25 index initialization failed.")
-        return self._index
+        return self._snapshot.index
+
+    def _refresh_locked(self, now: float | None = None) -> None:
+        started = time.perf_counter()
+        try:
+            payloads = self.vector_store.list_chunks(max_chunks=self.max_chunks)
+            index = BM25Index(
+                [_from_vector_result(item) for item in payloads], profile=self.profile
+            )
+        except VectorStoreError as exc:
+            self._last_failure_category = type(exc).__name__
+            if self._snapshot is None:
+                raise
+            return
+        self._version += 1
+        self._snapshot = BM25Snapshot(
+            index=index,
+            version=self._version,
+            record_count=len(payloads),
+            build_duration_ms=(time.perf_counter() - started) * 1000.0,
+            refreshed_at=now if now is not None else self._now(),
+        )
+        self._last_failure_category = None
 
     def _is_stale(self, now: float) -> bool:
-        return (
-            self._index is None
-            or self._refreshed_at is None
-            or (now - self._refreshed_at >= self.refresh_interval_seconds)
+        return self._snapshot is None or (
+            now - self._snapshot.refreshed_at >= self.refresh_interval_seconds
         )
 
     def _now(self) -> float:
@@ -181,6 +240,22 @@ class QdrantBM25Retriever:
 def tokenize(text: str) -> list[str]:
     """Keep exact tokens and add distinct accent-folded Vietnamese variants."""
 
+    normalized = _UNIT_FORMAT_PATTERN.sub(
+        _normalize_unit, unicodedata.normalize("NFC", text).casefold()
+    )
+    tokens: list[str] = []
+    for match in _TOKEN_PATTERN.finditer(normalized):
+        token = match.group(0)
+        tokens.append(token)
+        folded = fold_accents(token)
+        if folded != token:
+            tokens.append(folded)
+    return tokens
+
+
+def tokenize_legacy(text: str) -> list[str]:
+    """Preserve the historical sparse token stream used by disabled mode."""
+
     normalized = unicodedata.normalize("NFC", text).casefold()
     tokens: list[str] = []
     for match in _TOKEN_PATTERN.finditer(normalized):
@@ -190,6 +265,14 @@ def tokenize(text: str) -> list[str]:
         if folded != token:
             tokens.append(folded)
     return tokens
+
+
+def _normalize_unit(match: re.Match[str]) -> str:
+    """Join common technical number/unit renderings without changing identifiers."""
+
+    number = match.group(1).replace(",", ".")
+    unit = re.sub(r"[\s·.]", "", match.group(2))
+    return f"{number}{unit}"
 
 
 def _matches_filters(

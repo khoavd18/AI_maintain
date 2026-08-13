@@ -14,6 +14,7 @@ from src.rag.hybrid_retriever import HybridRetrievalConfig, HybridRetriever
 from src.rag.reranking import CrossEncoderReranker
 from src.rag.retriever import QdrantRetriever, Retriever
 from src.rag.sparse_search import QdrantBM25Retriever
+from src.rag.sparse_modes import FallbackSparseRetriever, ShadowSparseRetriever
 from src.rag.vector_store import QdrantVectorStore
 
 
@@ -37,13 +38,15 @@ def get_copilot_service() -> MaintenanceCopilot:
         vector_store=vector_store,
         minimum_relevance_score=settings.rag_relevance_threshold,
     )
-    retriever = HybridRetriever(
+    legacy_sparse = QdrantBM25Retriever(
+        vector_store,
+        max_chunks=settings.rag_sparse_max_chunks,
+        refresh_interval_seconds=settings.rag_sparse_refresh_seconds,
+        profile="legacy",
+    )
+    existing_retriever = HybridRetriever(
         dense_retriever=retriever,
-        sparse_retriever=QdrantBM25Retriever(
-            vector_store,
-            max_chunks=settings.rag_sparse_max_chunks,
-            refresh_interval_seconds=settings.rag_sparse_refresh_seconds,
-        ),
+        sparse_retriever=legacy_sparse,
         reranker=CrossEncoderReranker(
             settings.rag_reranker_model,
             device=settings.rag_reranker_device,
@@ -62,6 +65,32 @@ def get_copilot_service() -> MaintenanceCopilot:
             relevance_threshold=settings.rag_relevance_threshold,
         ),
     )
+    if settings.rag_sparse_mode == "shadow":
+        sparse = QdrantBM25Retriever(
+            vector_store,
+            max_chunks=settings.rag_sparse_max_chunks,
+            refresh_interval_seconds=settings.rag_sparse_refresh_seconds,
+            profile="full",
+        )
+        try:
+            sparse.refresh()
+        except Exception:
+            pass
+        retriever = ShadowSparseRetriever(existing_retriever, sparse)
+    elif settings.rag_sparse_mode == "bm25":
+        sparse = QdrantBM25Retriever(
+            vector_store,
+            max_chunks=settings.rag_sparse_max_chunks,
+            refresh_interval_seconds=settings.rag_sparse_refresh_seconds,
+            profile="full",
+        )
+        try:
+            sparse.refresh()
+        except Exception:
+            pass
+        retriever = FallbackSparseRetriever(sparse, existing_retriever)
+    else:
+        retriever = existing_retriever
     return MaintenanceCopilot(
         asset_context_provider=ProcessedDataAssetContextAdapter(get_asset_context_source()),
         retriever=retriever,

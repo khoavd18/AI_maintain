@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     rag_reranker_device: str = "auto"
     rag_sparse_max_chunks: int = Field(default=10000, ge=100, le=100000)
     rag_sparse_refresh_seconds: int = Field(default=60, ge=5, le=3600)
+    rag_sparse_mode: Literal["disabled", "shadow", "bm25"] = "disabled"
     rag_debug_enabled: bool = False
     llm_enabled: bool = False
     llm_provider: Literal["ollama", "openai_compatible"] = "ollama"

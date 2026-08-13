@@ -22,7 +22,9 @@ from src.rag.hybrid_retriever import (
 )
 from src.rag.query_analysis import QueryAnalyzer
 from src.rag.retriever import RetrievalResult
-from src.rag.sparse_search import BM25Index
+from src.rag.sparse_search import BM25Index, QdrantBM25Retriever, tokenize
+from src.rag.sparse_modes import FallbackSparseRetriever, ShadowSparseRetriever
+from src.rag.vector_store import VectorSearchResult
 
 
 def test_document_validation_reports_every_invalid_record(tmp_path: Path) -> None:
@@ -80,6 +82,91 @@ def test_bm25_recovers_exact_equipment_identifiers() -> None:
 
     assert results[0].doc_id == "A"
     assert results[0].sparse_score is not None
+
+
+def test_bm25_uses_title_source_metadata_and_stable_tie_breaking() -> None:
+    index = BM25Index(
+        [
+            _retrieval("B", "nội dung khác", failure_category="Lỗi điện"),
+            _retrieval("A", "nội dung khác", failure_category="Lỗi điện"),
+        ]
+    )
+
+    results = index.search("lỗi điện", limit=5, asset_type="Máy bơm nước")
+
+    assert [result.doc_id for result in results] == ["A", "B"]
+
+
+def test_bm25_handles_accent_unit_and_identifier_tokens() -> None:
+    index = BM25Index([_retrieval("A", "RZAG71 M8 cần 31 N·m ở áp suất 34 kPa")])
+
+    results = index.search("rzag71 m8 31 nm ap suat 34kpa", limit=1)
+
+    assert [result.doc_id for result in results] == ["A"]
+
+
+def test_bm25_tokenization_normalizes_common_unit_renderings() -> None:
+    assert "31nm" in tokenize("31 N·m")
+    assert "34kpa" in tokenize("34 kPa")
+    assert "p-101" in tokenize("P-101")
+
+
+def test_sparse_modes_preserve_primary_or_fallback_results() -> None:
+    primary = _StaticChannel([_retrieval("primary", "kết quả chính", score=0.9)])
+    shadow = _StaticSparse([_retrieval("shadow", "kết quả shadow", score=0.9)])
+
+    shadow_mode = ShadowSparseRetriever(primary, shadow)
+    assert [item.doc_id for item in shadow_mode.search("query")] == ["primary"]
+    assert shadow_mode.diagnostics()["shadow_queries"] == 1
+
+    class BrokenSparse:
+        def search(self, query: str, limit: int = 5, **filters: str | None):
+            raise RuntimeError("unavailable")
+
+    fallback = FallbackSparseRetriever(BrokenSparse(), primary)  # type: ignore[arg-type]
+    assert [item.doc_id for item in fallback.search("query")] == ["primary"]
+    assert fallback.diagnostics()["fallback_count"] == 1
+
+
+def test_bm25_snapshot_refresh_preserves_previous_index_on_failure() -> None:
+    class Store:
+        def __init__(self) -> None:
+            self.fail = False
+            self.calls = 0
+
+        def list_chunks(self, *, max_chunks: int):
+            self.calls += 1
+            if self.fail:
+                from src.rag.vector_store import VectorStoreError
+
+                raise VectorStoreError("unavailable")
+            return [
+                VectorSearchResult(
+                    chunk_id="chunk-a",
+                    doc_id="A",
+                    title="M8 torque",
+                    doc_type="Checklist",
+                    asset_type="Máy bơm nước",
+                    source="manual",
+                    text="Siết M8 31 Nm",
+                    score=0.0,
+                )
+            ]
+
+    clock = iter((0.0, 0.0, 61.0, 61.0))
+    store = Store()
+    retriever = QdrantBM25Retriever(
+        store,  # type: ignore[arg-type]
+        max_chunks=100,
+        refresh_interval_seconds=60,
+        monotonic=lambda: next(clock),
+    )
+
+    assert retriever.search("m8", limit=1)[0].doc_id == "A"
+    store.fail = True
+    assert retriever.search("m8", limit=1)[0].doc_id == "A"
+    assert retriever.diagnostics()["snapshot_version"] == 1
+    assert retriever.diagnostics()["last_failure_category"] == "VectorStoreError"
 
 
 def test_hybrid_recovers_dense_only_and_sparse_only_candidates() -> None:
