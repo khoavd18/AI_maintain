@@ -1,0 +1,397 @@
+{
+  "answerable_retrieval": {
+    "count": 27,
+    "evidence_recall_at_1": 0.2962962962962963,
+    "evidence_recall_at_3": 0.3333333333333333,
+    "evidence_recall_at_5": 0.48148148148148145,
+    "metadata_filter_accuracy": 1.0,
+    "mrr": 0.34629629629629627,
+    "ndcg_at_5": 0.37859869382772127,
+    "per_family": {
+      "Máy bơm nước": {
+        "candidate_pool_after_filter": 50,
+        "count": 8,
+        "recall_at_1": 0.125
+      },
+      "Máy lạnh": {
+        "candidate_pool_after_filter": 51,
+        "count": 10,
+        "recall_at_1": 0.3
+      },
+      "Máy phát điện dự phòng": {
+        "candidate_pool_after_filter": 51,
+        "count": 9,
+        "recall_at_1": 0.4444444444444444
+      }
+    }
+  },
+  "candidate_pool_before_filter": 152,
+  "conversation_state": {
+    "count": 0,
+    "metric": "n/a; this bounded calibration set preserves original single-turn cases"
+  },
+  "dataset": "evaluation\\datasets\\phase2_semantic_calibration_v1",
+  "failures": [
+    {
+      "candidate_pool_after_filter": 50,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-PUMP-015"
+      ],
+      "id": "CAL-P2-PUMP-001",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-PUMP-016",
+        "EV2-PUMP-003",
+        "EV2-PUMP-013",
+        "EV2-PUMP-018",
+        "EV2-PUMP-023"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 50,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-PUMP-019"
+      ],
+      "id": "CAL-P2-PUMP-002",
+      "rank": 2,
+      "ranked_evidence_ids": [
+        "EV2-PUMP-013",
+        "EV2-PUMP-019",
+        "EV2-PUMP-001",
+        "EV2-PUMP-012",
+        "EV2-PUMP-050"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 50,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-PUMP-023"
+      ],
+      "id": "CAL-P2-PUMP-003",
+      "rank": 5,
+      "ranked_evidence_ids": [
+        "EV2-PUMP-021",
+        "EV2-PUMP-024",
+        "EV2-PUMP-029",
+        "EV2-PUMP-022",
+        "EV2-PUMP-023"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 50,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-PUMP-026"
+      ],
+      "id": "CAL-P2-PUMP-004",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-PUMP-018",
+        "EV2-PUMP-027",
+        "EV2-PUMP-032",
+        "EV2-PUMP-021",
+        "EV2-PUMP-022"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 50,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-PUMP-030"
+      ],
+      "id": "CAL-P2-PUMP-005",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-PUMP-001",
+        "EV2-PUMP-036",
+        "EV2-PUMP-041",
+        "EV2-PUMP-013",
+        "EV2-PUMP-016"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 50,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-PUMP-040"
+      ],
+      "id": "CAL-P2-PUMP-006",
+      "rank": 5,
+      "ranked_evidence_ids": [
+        "EV2-PUMP-017",
+        "EV2-PUMP-018",
+        "EV2-PUMP-023",
+        "EV2-PUMP-032",
+        "EV2-PUMP-040"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 50,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-PUMP-041"
+      ],
+      "id": "CAL-P2-PUMP-007",
+      "rank": 5,
+      "ranked_evidence_ids": [
+        "EV2-PUMP-003",
+        "EV2-PUMP-019",
+        "EV2-PUMP-023",
+        "EV2-PUMP-031",
+        "EV2-PUMP-041"
+      ]
+    },
+    {
+      "category": "manual_review",
+      "id": "CAL-P2-PUMP-009",
+      "predicted_status": "parameter_confirmation_required",
+      "ranked_evidence_ids": []
+    },
+    {
+      "category": "manual_review",
+      "id": "CAL-P2-PUMP-010",
+      "predicted_status": "model_context_mismatch",
+      "ranked_evidence_ids": []
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-HVAC-045"
+      ],
+      "id": "CAL-P2-HVAC-001",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-HVAC-012",
+        "EV2-HVAC-019",
+        "EV2-HVAC-022",
+        "EV2-HVAC-050",
+        "EV2-HVAC-001"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-HVAC-046"
+      ],
+      "id": "CAL-P2-HVAC-002",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-HVAC-007",
+        "EV2-HVAC-009",
+        "EV2-HVAC-016",
+        "EV2-HVAC-030",
+        "EV2-HVAC-005"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-HVAC-048"
+      ],
+      "id": "CAL-P2-HVAC-004",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-HVAC-050",
+        "EV2-HVAC-017",
+        "EV2-HVAC-032",
+        "EV2-HVAC-042",
+        "EV2-HVAC-007"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-HVAC-044"
+      ],
+      "id": "CAL-P2-HVAC-006",
+      "rank": 4,
+      "ranked_evidence_ids": [
+        "EV2-HVAC-017",
+        "EV2-HVAC-014",
+        "EV2-HVAC-032",
+        "EV2-HVAC-044",
+        "EV2-HVAC-007"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-HVAC-044"
+      ],
+      "id": "CAL-P2-HVAC-007",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-HVAC-014",
+        "EV2-HVAC-007",
+        "EV2-HVAC-009",
+        "EV2-HVAC-049",
+        "EV2-HVAC-008"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-HVAC-050"
+      ],
+      "id": "CAL-P2-HVAC-008",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-HVAC-014",
+        "EV2-HVAC-017",
+        "EV2-HVAC-024",
+        "EV2-HVAC-026",
+        "EV2-HVAC-030"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-HVAC-050"
+      ],
+      "id": "CAL-P2-HVAC-009",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-HVAC-016",
+        "EV2-HVAC-007",
+        "EV2-HVAC-008",
+        "EV2-HVAC-009",
+        "EV2-HVAC-014"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-GEN-031"
+      ],
+      "id": "CAL-P2-GEN-001",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-GEN-004",
+        "EV2-GEN-007",
+        "EV2-GEN-021",
+        "EV2-GEN-033",
+        "EV2-GEN-038"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-GEN-035"
+      ],
+      "id": "CAL-P2-GEN-002",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-GEN-001",
+        "EV2-GEN-021",
+        "EV2-GEN-033",
+        "EV2-GEN-038",
+        "EV2-GEN-045"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-GEN-041"
+      ],
+      "id": "CAL-P2-GEN-006",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-GEN-042",
+        "EV2-GEN-013",
+        "EV2-GEN-035",
+        "EV2-GEN-046",
+        "EV2-GEN-003"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-GEN-046"
+      ],
+      "id": "CAL-P2-GEN-007",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-GEN-033",
+        "EV2-GEN-045",
+        "EV2-GEN-050",
+        "EV2-GEN-021",
+        "EV2-GEN-027"
+      ]
+    },
+    {
+      "candidate_pool_after_filter": 51,
+      "candidate_pool_before_filter": 152,
+      "category": "answerable",
+      "expected_evidence_ids": [
+        "EV2-GEN-051"
+      ],
+      "id": "CAL-P2-GEN-009",
+      "rank": null,
+      "ranked_evidence_ids": [
+        "EV2-GEN-033",
+        "EV2-GEN-037",
+        "EV2-GEN-021",
+        "EV2-GEN-032",
+        "EV2-GEN-043"
+      ]
+    },
+    {
+      "category": "manual_review",
+      "id": "CAL-P2-GEN-010",
+      "predicted_status": "parameter_confirmation_required",
+      "ranked_evidence_ids": []
+    }
+  ],
+  "fixture_components": [
+    "deterministic lexical ChunkRetriever"
+  ],
+  "insufficient_evidence": {
+    "count": 2,
+    "no_answer_routing_accuracy": 1.0
+  },
+  "live_llm_called": false,
+  "manual_review": {
+    "count": 3
+  },
+  "production_components": [
+    "RequestAnalysisService",
+    "QueryAnalyzer",
+    "Retriever protocol"
+  ],
+  "wrong_model_applicability": {
+    "count": 1,
+    "wrong_model_rejection_accuracy": 1.0
+  }
+}

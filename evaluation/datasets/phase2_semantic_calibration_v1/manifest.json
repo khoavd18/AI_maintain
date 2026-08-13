@@ -1,0 +1,21 @@
+{
+  "counts": {
+    "cases": 30,
+    "evidence_chunks": 152,
+    "evidence_reviews": 152,
+    "generator_cases": 10,
+    "hvac_cases": 10,
+    "pump_cases": 10,
+    "review_queue_rows": 30
+  },
+  "dataset_id": "phase2-semantic-calibration-v1",
+  "limitations": [
+    "The v2 270 generated cases are not remediated.",
+    "No case is SME-approved and machine verification is not SME verification.",
+    "No live generation benchmark was run.",
+    "Grundfos and Generac remain source-currentness blocked."
+  ],
+  "provenance_type": "document_derived",
+  "readiness": "DRAFT_SME_REVIEW_REQUIRED",
+  "version": "1.0.0-draft"
+}

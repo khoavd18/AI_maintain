@@ -1,0 +1,19 @@
+{
+  "error_count": 1,
+  "errors": [
+    "checksum mismatch: deterministic_retrieval_report.json"
+  ],
+  "observed_counts": {
+    "cases": 30,
+    "checksums": 14,
+    "evidence_reviews": 152
+  },
+  "status": "FAIL",
+  "warning_count": 4,
+  "warnings": [
+    "document-derived only",
+    "all SME review pending",
+    "Grundfos and Generac currentness blocked",
+    "no live LLM benchmark"
+  ]
+}

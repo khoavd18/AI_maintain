@@ -1,0 +1,17 @@
+{
+  "case_required": [
+    "calibration_case_id",
+    "original_v1_case_id",
+    "original_v2_case_id",
+    "required_evidence_ids",
+    "atomic_required_claims",
+    "promotion_eligible"
+  ],
+  "evidence_review_required": [
+    "evidence_id",
+    "source_anchor_max_12_words",
+    "normalized_source_fragment_sha256",
+    "semantic_verification_status"
+  ],
+  "version": "1.0.0-draft"
+}
