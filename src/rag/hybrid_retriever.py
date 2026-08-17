@@ -248,4 +248,6 @@ def _copy_result(
         sparse_score=sparse_score if sparse_score is not None else result.sparse_score,
         reranker_score=(reranker_score if reranker_score is not None else result.reranker_score),
         metadata_prior=(metadata_prior if metadata_prior is not None else result.metadata_prior),
+        equipment_model_identifiers=result.equipment_model_identifiers,
+        document_revision_reference=result.document_revision_reference,
     )

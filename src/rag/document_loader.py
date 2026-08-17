@@ -26,6 +26,12 @@ DOCUMENT_COLUMNS = [
 SUPPORTED_ASSET_TYPES = frozenset(ASSET_TYPE_CODE_TO_VI.values())
 _VERSION_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+){0,2}(?:[-+][A-Za-z0-9.-]+)?$")
 _LANGUAGE_PATTERN = re.compile(r"^[a-z]{2,3}(?:-[A-Z]{2})?$")
+_MODEL_IDENTITY_PATTERN = re.compile(
+    r"\b[A-Za-z]{2,10}[\s._-]*\d{1,6}(?:[\s._-]*\d{1,6})?[A-Za-z]?\b",
+    flags=re.IGNORECASE,
+)
+_SOURCE_MODEL_SEGMENT_PATTERN = re.compile(r"^[A-Za-z]{2,10}\d{1,6}[A-Za-z0-9._-]*$")
+_SOURCE_REVISION_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ ]{0,31}$")
 
 
 class DocumentLoadError(ValueError):
@@ -81,6 +87,14 @@ class ValidatedDocumentBatch:
 
 
 @dataclass(frozen=True)
+class DocumentIdentityMetadata:
+    """Canonical equipment-model and document-revision metadata for one source."""
+
+    equipment_model_identifiers: tuple[str, ...] = ()
+    document_revision_reference: str = ""
+
+
+@dataclass(frozen=True)
 class MaintenanceDocument:
     """A validated source document from the controlled knowledge corpus."""
 
@@ -96,6 +110,21 @@ class MaintenanceDocument:
     effective_date: str = ""
     raw_text: str = ""
     language: str = "vi"
+    equipment_model_identifiers: tuple[str, ...] = ()
+    document_revision_reference: str = ""
+
+    def __post_init__(self) -> None:
+        metadata = resolve_document_identity_metadata(
+            source=self.source,
+            equipment_model_identifiers=self.equipment_model_identifiers,
+            document_revision_reference=self.document_revision_reference,
+        )
+        object.__setattr__(
+            self, "equipment_model_identifiers", metadata.equipment_model_identifiers
+        )
+        object.__setattr__(
+            self, "document_revision_reference", metadata.document_revision_reference
+        )
 
     @property
     def document_id(self) -> str:
@@ -274,9 +303,70 @@ def _validate_record(
             effective_date=effective_date[:10],
             raw_text=raw_text,
             language=language,
+            equipment_model_identifiers=_first_text(
+                record.get("equipment_model_identity"),
+                record.get("model_applicability"),
+                record.get("model_scope"),
+            ),
+            document_revision_reference=_first_text(
+                record.get("document_revision_reference"),
+                record.get("document_revision"),
+            ),
         ),
         [],
     )
+
+
+def resolve_document_identity_metadata(
+    *,
+    source: str,
+    equipment_model_identifiers: tuple[str, ...] | list[str] | str = (),
+    document_revision_reference: str = "",
+) -> DocumentIdentityMetadata:
+    """Keep controlled source model tokens separate from provenance revision text."""
+
+    source_model, source_revision = _controlled_source_identity(source)
+    identifiers = canonicalize_equipment_model_identifiers(equipment_model_identifiers)
+    return DocumentIdentityMetadata(
+        equipment_model_identifiers=identifiers or source_model,
+        document_revision_reference=canonicalize_document_revision_reference(
+            document_revision_reference or source_revision
+        ),
+    )
+
+
+def canonicalize_equipment_model_identifiers(
+    value: tuple[str, ...] | list[str] | str,
+) -> tuple[str, ...]:
+    """Return exact, punctuation-insensitive model identifiers without prefix matching."""
+
+    text = value if isinstance(value, str) else " ".join(str(item) for item in value)
+    identifiers = {
+        re.sub(r"[^A-Za-z0-9]", "", match.group(0)).upper()
+        for match in _MODEL_IDENTITY_PATTERN.finditer(text)
+    }
+    return tuple(sorted(identifiers))
+
+
+def canonicalize_document_revision_reference(value: str) -> str:
+    """Canonicalize a document reference without interpreting it as a model token."""
+
+    return re.sub(r"[^A-Za-z0-9]", "", value).upper()
+
+
+def _controlled_source_identity(source: str) -> tuple[tuple[str, ...], str]:
+    """Read only the bounded ``SRC-...-MODEL-REVISION`` metadata convention."""
+
+    parts = source.strip().split("-")
+    if len(parts) < 4 or parts[0].upper() != "SRC":
+        return (), ""
+    model_segment, revision_segment = parts[-2], parts[-1]
+    if not _SOURCE_MODEL_SEGMENT_PATTERN.fullmatch(model_segment):
+        return (), ""
+    if not _SOURCE_REVISION_SEGMENT_PATTERN.fullmatch(revision_segment):
+        return (), ""
+    identifiers = canonicalize_equipment_model_identifiers(model_segment)
+    return identifiers, revision_segment
 
 
 def _issue(

@@ -10,6 +10,7 @@ from qdrant_client import QdrantClient, models
 
 from src.config.settings import get_settings
 from src.rag.chunking import DocumentChunk
+from src.rag.document_loader import resolve_document_identity_metadata
 
 
 class VectorStoreError(RuntimeError):
@@ -53,6 +54,21 @@ class VectorSearchResult:
     effective_date: str = ""
     language: str = "vi"
     chunk_index: int = 0
+    equipment_model_identifiers: tuple[str, ...] = ()
+    document_revision_reference: str = ""
+
+    def __post_init__(self) -> None:
+        metadata = resolve_document_identity_metadata(
+            source=self.source,
+            equipment_model_identifiers=self.equipment_model_identifiers,
+            document_revision_reference=self.document_revision_reference,
+        )
+        object.__setattr__(
+            self, "equipment_model_identifiers", metadata.equipment_model_identifiers
+        )
+        object.__setattr__(
+            self, "document_revision_reference", metadata.document_revision_reference
+        )
 
     def to_dict(self) -> dict[str, object]:
         """Return an API-safe dictionary."""
@@ -249,6 +265,8 @@ class QdrantVectorStore:
                     effective_date=str(payload.get("effective_date", "")),
                     language=str(payload.get("language", "vi")),
                     chunk_index=int(payload.get("chunk_index", 0)),
+                    equipment_model_identifiers=payload.get("equipment_model_identifiers", ()),
+                    document_revision_reference=str(payload.get("document_revision_reference", "")),
                 )
             )
         return results
@@ -344,6 +362,8 @@ class QdrantVectorStore:
             effective_date=str(payload.get("effective_date", "")),
             language=str(payload.get("language", "vi")),
             chunk_index=int(payload.get("chunk_index", 0)),
+            equipment_model_identifiers=payload.get("equipment_model_identifiers", ()),
+            document_revision_reference=str(payload.get("document_revision_reference", "")),
         )
 
     def _ensure_payload_indexes(self) -> None:

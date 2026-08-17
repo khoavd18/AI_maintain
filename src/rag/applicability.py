@@ -6,11 +6,17 @@ from dataclasses import dataclass
 import re
 from typing import Any
 
+from src.rag.document_loader import canonicalize_document_revision_reference
 from src.rag.retriever import RetrievalResult
 
 
 _MODEL_IDENTIFIER_PATTERN = re.compile(
     r"\b(?P<family>[A-Za-z]{2,10})[\s._-]*(?P<number>\d{1,6}(?:[-_.]\d{1,6})?[A-Za-z]?)\b",
+    flags=re.IGNORECASE,
+)
+_REVISION_REFERENCE_PATTERN = re.compile(
+    r"\b(?:revision|rev|bản\s+in|phiên\s+bản)\s*[:#]?\s*"
+    r"(?P<reference>\d{4}(?:[./-]\d{1,2})?(?:\s*[A-Za-z]{1,3})?|[A-Za-z]\d{5,})\b",
     flags=re.IGNORECASE,
 )
 
@@ -29,6 +35,7 @@ class ApplicabilityConstraint:
 
     selected_identifiers: tuple[ModelIdentifier, ...] = ()
     requested_identifiers: tuple[ModelIdentifier, ...] = ()
+    requested_document_revision_reference: str = ""
 
     @property
     def question_conflicts_with_selected_model(self) -> bool:
@@ -42,13 +49,19 @@ class ApplicabilityConstraint:
         return False
 
     def allows(self, result: RetrievalResult) -> bool:
-        """Reject explicit same-family evidence when it names only another model."""
+        """Reject explicit model or requested-document-revision conflicts."""
 
+        if self.requested_document_revision_reference:
+            if (
+                not result.document_revision_reference
+                or self.requested_document_revision_reference != result.document_revision_reference
+            ):
+                return False
         if not self.selected_identifiers:
             return True
-        document_identifiers = extract_model_identifiers(
-            f"{result.title}\n{result.text}\n{result.source}"
-        )
+        document_identifiers = _document_model_identifiers(result)
+        if document_identifiers is None:
+            return False
         document_by_family = _values_by_family(document_identifiers)
         selected_by_family = _values_by_family(self.selected_identifiers)
         for family, selected_values in selected_by_family.items():
@@ -69,6 +82,7 @@ def build_applicability_constraint(
     return ApplicabilityConstraint(
         selected_identifiers=extract_model_identifiers(selected_text),
         requested_identifiers=extract_model_identifiers(question),
+        requested_document_revision_reference=extract_requested_document_revision(question),
     )
 
 
@@ -83,6 +97,32 @@ def extract_model_identifiers(text: str) -> tuple[ModelIdentifier, ...]:
         for match in _MODEL_IDENTIFIER_PATTERN.finditer(text)
     }
     return tuple(sorted(identifiers))
+
+
+def extract_requested_document_revision(question: str) -> str:
+    """Return a revision only when the request names one with an explicit label."""
+
+    match = _REVISION_REFERENCE_PATTERN.search(question)
+    return canonicalize_document_revision_reference(match.group("reference")) if match else ""
+
+
+def _document_model_identifiers(
+    result: RetrievalResult,
+) -> tuple[ModelIdentifier, ...] | None:
+    """Prefer canonical source metadata; never concatenate provenance into a model token."""
+
+    metadata_identifiers = extract_model_identifiers(" ".join(result.equipment_model_identifiers))
+    text_identifiers = extract_model_identifiers(f"{result.title}\n{result.text}")
+    if not metadata_identifiers:
+        return text_identifiers
+
+    metadata_by_family = _values_by_family(metadata_identifiers)
+    text_by_family = _values_by_family(text_identifiers)
+    for family, metadata_values in metadata_by_family.items():
+        text_values = text_by_family.get(family)
+        if text_values and metadata_values.isdisjoint(text_values):
+            return None
+    return metadata_identifiers
 
 
 def _values_by_family(

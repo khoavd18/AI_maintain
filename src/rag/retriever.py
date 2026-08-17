@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from src.rag.embeddings import EmbeddingProvider
+from src.rag.document_loader import resolve_document_identity_metadata
 from src.rag.vector_store import QdrantVectorStore
 
 DETERMINISTIC_HASH_RELEVANCE_THRESHOLD = 0.15
@@ -35,6 +36,21 @@ class RetrievalResult:
     sparse_score: float | None = None
     reranker_score: float | None = None
     metadata_prior: float | None = None
+    equipment_model_identifiers: tuple[str, ...] = ()
+    document_revision_reference: str = ""
+
+    def __post_init__(self) -> None:
+        metadata = resolve_document_identity_metadata(
+            source=self.source,
+            equipment_model_identifiers=self.equipment_model_identifiers,
+            document_revision_reference=self.document_revision_reference,
+        )
+        object.__setattr__(
+            self, "equipment_model_identifiers", metadata.equipment_model_identifiers
+        )
+        object.__setattr__(
+            self, "document_revision_reference", metadata.document_revision_reference
+        )
 
     def to_dict(self, *, include_diagnostics: bool = False) -> dict[str, object]:
         """Return an API-safe dictionary."""
@@ -149,6 +165,8 @@ class QdrantRetriever:
                 language=result.language,
                 chunk_index=result.chunk_index,
                 dense_score=result.score,
+                equipment_model_identifiers=result.equipment_model_identifiers,
+                document_revision_reference=result.document_revision_reference,
             )
             for result in results
         ]

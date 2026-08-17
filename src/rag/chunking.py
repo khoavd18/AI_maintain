@@ -8,7 +8,7 @@ from hashlib import blake2b
 from typing import Iterable
 import unicodedata
 
-from src.rag.document_loader import MaintenanceDocument
+from src.rag.document_loader import MaintenanceDocument, resolve_document_identity_metadata
 
 SECTION_MARKERS = [
     "Phạm vi:",
@@ -44,11 +44,26 @@ class DocumentChunk:
     effective_date: str = ""
     language: str = "vi"
     chunk_index: int = 0
+    equipment_model_identifiers: tuple[str, ...] = ()
+    document_revision_reference: str = ""
 
-    def to_payload(self) -> dict[str, str | int]:
+    def __post_init__(self) -> None:
+        metadata = resolve_document_identity_metadata(
+            source=self.source,
+            equipment_model_identifiers=self.equipment_model_identifiers,
+            document_revision_reference=self.document_revision_reference,
+        )
+        object.__setattr__(
+            self, "equipment_model_identifiers", metadata.equipment_model_identifiers
+        )
+        object.__setattr__(
+            self, "document_revision_reference", metadata.document_revision_reference
+        )
+
+    def to_payload(self) -> dict[str, str | int | tuple[str, ...]]:
         """Return a Qdrant payload for this chunk."""
 
-        payload: dict[str, str | int] = asdict(self)
+        payload: dict[str, str | int | tuple[str, ...]] = asdict(self)
         payload.update(
             {
                 "document_id": self.doc_id,
@@ -110,6 +125,8 @@ def chunk_document(
                 effective_date=document.effective_date,
                 language=document.language,
                 chunk_index=index,
+                equipment_model_identifiers=document.equipment_model_identifiers,
+                document_revision_reference=document.document_revision_reference,
             )
         )
     return chunks
