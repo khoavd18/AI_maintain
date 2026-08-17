@@ -196,7 +196,7 @@ class MaintenanceCopilot:
         if prepared.early_status == "unsafe_conversation":
             return fallback_response(
                 question=prepared.normalized_question,
-                asset_id=asset_id,
+                asset_id=prepared.asset_id,
                 asset_context=None,
                 retrieval_status="unsafe_conversation",
                 filters={},
@@ -205,7 +205,7 @@ class MaintenanceCopilot:
         if prepared.early_status in {"prompt_injection", "unsafe_operation"}:
             return fallback_response(
                 question=prepared.normalized_question,
-                asset_id=asset_id,
+                asset_id=prepared.asset_id,
                 asset_context=None,
                 retrieval_status=prepared.early_status,
                 filters={},
@@ -264,7 +264,7 @@ class MaintenanceCopilot:
                 if prepared.analysis and prepared.analysis.follow_up_reference
                 else None
             ),
-            asset_id=asset_id,
+            asset_id=prepared.asset_id,
             asset_context=prepared.asset_context,
             retrievals=retrieval.relevant,
             filters=retrieval.filters_applied or prepared.filters,
@@ -281,6 +281,7 @@ class MaintenanceCopilot:
             response,
             conversation_state=build_conversation_state(
                 intent=prepared.analysis.intent,
+                asset_id=prepared.asset_id,
                 inferred_failure_category=prepared.analysis.failure_category,
                 filters_applied=retrieval.filters_applied or prepared.filters,
                 sources=response.sources,

@@ -6,7 +6,10 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from src.rag.adapters.asset_context import AssetContextProvider
-from src.rag.applicability import ApplicabilityConstraint, build_applicability_constraint
+from src.rag.applicability import (
+    ApplicabilityConstraint,
+    build_applicability_constraint,
+)
 from src.rag.conversation import ConversationContext, parse_conversation_context
 from src.rag.evidence_boundary import missing_exact_parameter_context
 from src.rag.query_analysis import (
@@ -83,7 +86,18 @@ class RequestAnalysisService:
                 pre_analysis=pre_analysis,
             )
 
-        asset_context = self._load_asset_context(asset_id)
+        contextual_asset_id = (
+            conversation.resolved_asset_id
+            if (
+                conversation
+                and pre_analysis.follow_up_reference
+                and not asset_id
+                and not pre_analysis.asset_type
+            )
+            else None
+        )
+        effective_asset_id = asset_id or contextual_asset_id
+        asset_context = self._load_asset_context(effective_asset_id)
         selected_asset_type = self._asset_type_from_context(asset_context)
         contextual_asset_type = (
             conversation.resolved_asset_type
@@ -113,6 +127,7 @@ class RequestAnalysisService:
         if effective_conversation and (current_asset_changed or current_topic_changed):
             effective_conversation = replace(
                 effective_conversation,
+                resolved_asset_id=None,
                 resolved_asset_type=(
                     pre_analysis.asset_type or effective_conversation.resolved_asset_type
                 ),
@@ -147,12 +162,16 @@ class RequestAnalysisService:
         guard_status = None
         if applicability.question_conflicts_with_selected_model:
             guard_status = "model_context_mismatch"
+        elif (
+            effective_conversation and asset_context is None and applicability.requested_identifiers
+        ):
+            guard_status = "missing_asset_context"
         elif missing_exact_parameter_context(normalized_question):
             guard_status = "parameter_confirmation_required"
         if guard_status:
             return PreparedCopilotRequest(
                 normalized_question=normalized_question,
-                asset_id=asset_id,
+                asset_id=effective_asset_id,
                 conversation=effective_conversation,
                 pre_analysis=pre_analysis,
                 analysis=analysis,
@@ -166,7 +185,7 @@ class RequestAnalysisService:
         if analysis.status != "supported":
             return PreparedCopilotRequest(
                 normalized_question=normalized_question,
-                asset_id=asset_id,
+                asset_id=effective_asset_id,
                 conversation=effective_conversation,
                 pre_analysis=pre_analysis,
                 analysis=analysis,
@@ -188,7 +207,7 @@ class RequestAnalysisService:
         )
         return PreparedCopilotRequest(
             normalized_question=normalized_question,
-            asset_id=asset_id,
+            asset_id=effective_asset_id,
             conversation=effective_conversation,
             pre_analysis=pre_analysis,
             analysis=analysis,

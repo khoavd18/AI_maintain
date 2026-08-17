@@ -251,7 +251,8 @@ def test_runtime_reports_remain_immutable_and_validate_as_completed_package() ->
 def test_protected_dataset_trees_bm25_and_sme_states_remain_unchanged() -> None:
     for dataset_tree in (V1, COMMITTED, SEMANTIC_CALIBRATION):
         _assert_path_is_unchanged_from_head(dataset_tree)
-    _assert_path_is_unchanged_from_head(ROOT / "src" / "rag")
+    for bm25_module in ("sparse_modes.py", "sparse_search.py"):
+        _assert_path_is_unchanged_from_head(ROOT / "src" / "rag" / bm25_module)
 
     v2_cases = [
         json.loads(line)

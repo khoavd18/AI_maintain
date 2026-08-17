@@ -608,6 +608,7 @@ class ConversationContextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     recent_intent: str | None = Field(default=None, max_length=40)
+    resolved_asset_id: str | None = Field(default=None, max_length=128)
     resolved_asset_type: str | None = Field(default=None, max_length=80)
     resolved_failure_category: str | None = Field(default=None, max_length=80)
     previous_source_ids: list[str] = Field(default_factory=list, max_length=10)

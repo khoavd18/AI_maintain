@@ -100,6 +100,8 @@ _SYMPTOM_PHRASES = (
 _FOLLOW_UP_PHRASES = (
     "nguyên nhân thứ",
     "bước thứ",
+    "bước tiếp",
+    "tiếp theo làm gì",
     "bước đó",
     "cảnh báo trước",
     "phần trên",
@@ -110,6 +112,8 @@ _FOLLOW_UP_PHRASES = (
     "nguyên nhân kia",
     "what about",
     "second cause",
+    "next step",
+    "what should i do next",
     "how do i check",
     "same apply",
     "previous warning",

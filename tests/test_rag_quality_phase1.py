@@ -212,9 +212,9 @@ def test_follow_up_context_reaches_retrieval_and_grounded_prompt() -> None:
         "recent_intent": "troubleshooting",
         "resolved_asset_type": HVAC,
         "resolved_failure_category": COOLING,
-        "previous_answer_summary": context["previous_answer_summary"],
     }
     assert "previous_source_ids" not in prompt_payload["conversation_context"]
+    assert "previous_answer_summary" not in prompt_payload["conversation_context"]
     assert response.conversation_state is not None
     assert response.conversation_state["resolved_asset_type"] == HVAC
     assert response.conversation_state["recent_intent"] == "troubleshooting"

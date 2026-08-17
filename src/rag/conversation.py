@@ -10,8 +10,10 @@ from src.llm.prompt_security import contains_unsafe_instruction
 from src.rag.query_analysis import FOCUSED_ASSET_TYPES, normalize_failure_category
 
 _SOURCE_ID_PATTERN = re.compile(r"^S[1-9][0-9]{0,2}$")
+_ASSET_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _ALLOWED_KEYS = {
     "recent_intent",
+    "resolved_asset_id",
     "resolved_asset_type",
     "resolved_failure_category",
     "previous_source_ids",
@@ -39,6 +41,7 @@ class ConversationContext:
     """Minimum previous-turn facts accepted by retrieval orchestration."""
 
     recent_intent: str | None = None
+    resolved_asset_id: str | None = None
     resolved_asset_type: str | None = None
     resolved_failure_category: str | None = None
     previous_source_ids: tuple[str, ...] = ()
@@ -61,7 +64,11 @@ class ConversationContext:
         )
 
     def to_prompt_data(self) -> dict[str, str]:
-        """Return the allow-listed prior-turn facts that may reach retrieval/generation."""
+        """Return non-content prior-turn facts allowed to reach generation.
+
+        The prior-answer summary can refine the retrieval query, but it is client
+        supplied state and must never become generation context or evidence.
+        """
 
         return {
             key: value
@@ -69,7 +76,6 @@ class ConversationContext:
                 "recent_intent": self.recent_intent,
                 "resolved_asset_type": self.resolved_asset_type,
                 "resolved_failure_category": self.resolved_failure_category,
-                "previous_answer_summary": self.previous_answer_summary,
             }.items()
             if value
         }
@@ -86,6 +92,9 @@ def parse_conversation_context(value: dict[str, Any] | None) -> ConversationCont
     recent_intent = _optional_text(value.get("recent_intent"), 40, "recent_intent")
     if recent_intent and recent_intent not in _ALLOWED_RECENT_INTENTS:
         raise ValueError("conversation_context recent_intent is unsupported.")
+    resolved_asset_id = _optional_text(value.get("resolved_asset_id"), 128, "resolved_asset_id")
+    if resolved_asset_id and not _ASSET_ID_PATTERN.fullmatch(resolved_asset_id):
+        raise ValueError("conversation_context resolved_asset_id is unsupported.")
     resolved_asset_type = _optional_text(
         value.get("resolved_asset_type"),
         80,
@@ -120,6 +129,7 @@ def parse_conversation_context(value: dict[str, Any] | None) -> ConversationCont
             source_ids.append(source_id)
     return ConversationContext(
         recent_intent=recent_intent,
+        resolved_asset_id=resolved_asset_id,
         resolved_asset_type=resolved_asset_type,
         resolved_failure_category=resolved_failure_category,
         previous_source_ids=tuple(source_ids),
@@ -130,6 +140,7 @@ def parse_conversation_context(value: dict[str, Any] | None) -> ConversationCont
 def build_conversation_state(
     *,
     intent: str,
+    asset_id: str | None,
     inferred_failure_category: str | None,
     filters_applied: dict[str, str],
     sources: list[dict[str, Any]],
@@ -164,6 +175,7 @@ def build_conversation_state(
         key: value
         for key, value in {
             "recent_intent": intent,
+            "resolved_asset_id": asset_id,
             "resolved_asset_type": filters_applied.get("asset_type"),
             "resolved_failure_category": (
                 inferred_failure_category or filters_applied.get("failure_category")

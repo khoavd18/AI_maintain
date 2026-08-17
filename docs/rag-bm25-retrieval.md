@@ -8,6 +8,17 @@ The frozen general-purpose parameters are `k1=1.5` and `b=0.75`. The indexed rep
 
 `RAG_SPARSE_MODE` is server-only and defaults to `disabled`.
 
+For a local development query with BM25 selected for that process only (after
+the normal local Qdrant/document setup), use PowerShell:
+
+```powershell
+$env:RAG_SPARSE_MODE = "bm25"
+.venv\Scripts\python.exe -m src.rag.query "Máy bơm cần kiểm tra gì?" --asset-id PUMP_001
+```
+
+Close the shell or set `RAG_SPARSE_MODE=disabled` to return to the global
+default. Do not put this setting or credentials into a user-owned `.env` file.
+
 - `disabled` preserves the existing hybrid retriever behavior and does no additional eager BM25 work.
 - `shadow` invokes BM25 after the existing response path and returns the existing result unchanged. Diagnostics contain only bounded counters, never questions or source content.
 - `bm25` uses the snapshot ranking at the existing retrieval boundary. A missing or unhealthy sparse snapshot falls back to the existing hybrid retriever.

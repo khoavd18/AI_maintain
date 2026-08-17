@@ -88,6 +88,30 @@ def test_copilot_api_serializes_bounded_conversation_response() -> None:
     }
 
 
+def test_copilot_api_passes_bounded_resolved_asset_context() -> None:
+    app = create_app()
+    copilot = ContextRecordingCopilot()
+    app.dependency_overrides[_copilot_service] = lambda: copilot
+    authorize_app(app)
+    client = TestClient(app)
+    context = {
+        "recent_intent": "troubleshooting",
+        "resolved_asset_id": "HVAC-001",
+        "resolved_asset_type": "Máy lạnh",
+        "resolved_failure_category": "Lỗi làm lạnh",
+        "previous_source_ids": ["S1"],
+        "previous_answer_summary": "Bước đầu đã kiểm tra luồng gió.",
+    }
+
+    response = client.post(
+        "/copilot/ask",
+        json={"question": "Bước tiếp theo là gì?", "conversation_context": context},
+    )
+
+    assert response.status_code == 200
+    assert copilot.conversation_context == context
+
+
 def test_copilot_api_returns_safe_fallback_when_qdrant_is_unavailable() -> None:
     """RAG availability should not turn the Copilot response into an internal error."""
 
@@ -208,6 +232,17 @@ class ConversationCopilot:
             evidence_status="not_applicable",
             confidence="not_applicable",
         )
+
+
+class ContextRecordingCopilot(FakeCopilot):
+    def __init__(self) -> None:
+        self.conversation_context: dict[str, object] | None = None
+
+    def ask(self, question: str, **kwargs: object) -> CopilotAnswer:
+        conversation = kwargs.get("conversation_context")
+        assert isinstance(conversation, dict)
+        self.conversation_context = conversation
+        return super().ask(question=question, asset_id=None)
 
 
 class ApiAssetService:
