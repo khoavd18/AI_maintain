@@ -36,6 +36,7 @@ class OllamaProvider:
         payload = {
             "model": self.model_name,
             "stream": False,
+            "think": False,
             "messages": [
                 {"role": "system", "content": request.system_prompt},
                 {"role": "user", "content": request.user_prompt},
@@ -54,6 +55,8 @@ class OllamaProvider:
             max_retries=self.max_retries,
             client=self.client,
         )
+        if response.get("done_reason") == "length":
+            raise LLMProviderError("Ollama trả về phản hồi bị cắt do đạt giới hạn đầu ra.")
         message = response.get("message")
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, str) or not content.strip():

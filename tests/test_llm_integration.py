@@ -12,6 +12,7 @@ from src.config.settings import Settings
 from src.llm.base import (
     LLMGenerationRequest,
     LLMGenerationResult,
+    LLMProviderError,
     LLMTimeoutError,
     LLMUnavailableError,
 )
@@ -119,6 +120,7 @@ def test_provider_failures_use_deterministic_grounded_fallback(
     ("variant", "reason"),
     [
         ("not-json", "invalid_llm_output"),
+        ("schema-invalid", "invalid_llm_output"),
         ("invalid-citation", "invalid_citations"),
         ("english", "invalid_llm_output"),
     ],
@@ -129,6 +131,7 @@ def test_invalid_output_language_or_citations_cannot_escape(
 ) -> None:
     content = {
         "not-json": "not-json",
+        "schema-invalid": json.dumps({"summary": "Thiết bị cần được kiểm tra."}),
         "invalid-citation": _answer_json(source_id="S999"),
         "english": _answer_json(english=True),
     }[variant]
@@ -289,7 +292,7 @@ def test_llm_disabled_preserves_deterministic_answer_and_sources() -> None:
     assert "Checklist hoặc bước kiểm tra" in response.answer
 
 
-def test_ollama_provider_sends_schema_and_parses_chat_content() -> None:
+def test_ollama_provider_sends_non_thinking_exact_schema_and_parses_chat_content() -> None:
     captured: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -303,12 +306,80 @@ def test_ollama_provider_sends_schema_and_parses_chat_content() -> None:
         max_retries=0,
         client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
-    result = provider.generate(_generation_request())
+    request = _generation_request()
+    result = provider.generate(request)
 
     assert result.provider == "ollama"
     assert result.model == "configured-model"
-    assert captured["format"]["type"] == "object"
-    assert captured["options"]["temperature"] == 0.0
+    assert captured["stream"] is False
+    assert captured["think"] is False
+    assert captured["format"] == request.json_schema
+    assert captured["options"] == {
+        "temperature": request.temperature,
+        "num_predict": request.max_tokens,
+    }
+
+
+@pytest.mark.parametrize(
+    ("response", "expected_message"),
+    [
+        ({"message": {"thinking": "private reasoning must not escape"}}, "nội dung"),
+        ({"message": {"content": ""}}, "nội dung"),
+        ({"done_reason": "length", "message": {"content": "partial JSON"}}, "bị cắt"),
+    ],
+)
+def test_ollama_provider_rejects_thinking_only_empty_and_truncated_responses(
+    response: dict[str, Any],
+    expected_message: str,
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=response)
+
+    provider = OllamaProvider(
+        base_url="http://ollama.test",
+        model_name="configured-model",
+        timeout_seconds=5,
+        max_retries=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(LLMProviderError, match=expected_message):
+        provider.generate(_generation_request())
+
+
+def test_ollama_thinking_content_never_enters_copilot_response_or_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    thinking = "private-reasoning-must-not-be-disclosed"
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"message": {"content": _answer_json(), "thinking": thinking}},
+        )
+
+    provider = OllamaProvider(
+        base_url="http://ollama.test",
+        model_name="configured-model",
+        timeout_seconds=5,
+        max_retries=0,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    response = _copilot(provider=provider).ask("HVAC này cần kiểm tra gì?", asset_id="HVAC_001")
+
+    assert response.response_mode == "llm_grounded"
+    assert response.citation_validation == {
+        "valid": True,
+        "cited_source_ids": ["S1"],
+        "invalid_source_ids": [],
+        "coverage_complete": True,
+        "support_complete": True,
+        "unsupported_claims": [],
+        "source_ids_canonicalized": False,
+        "top_level_union_exact": True,
+    }
+    assert thinking not in json.dumps(response.to_dict(), ensure_ascii=False)
+    assert thinking not in caplog.text
 
 
 def test_openai_compatible_provider_uses_strict_schema_and_bearer_key() -> None:
@@ -334,6 +405,7 @@ def test_openai_compatible_provider_uses_strict_schema_and_bearer_key() -> None:
 
     assert result.provider == "openai_compatible"
     assert captured["authorization"] == "Bearer secret-test-key"
+    assert "think" not in captured["payload"]
     response_format = captured["payload"]["response_format"]
     assert response_format["type"] == "json_schema"
     assert response_format["json_schema"]["strict"] is True
