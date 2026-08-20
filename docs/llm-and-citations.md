@@ -4,7 +4,9 @@ Generation remains operator-configurable. Local Docker enables Ollama by default
 
 For every Ollama structured-generation request, the non-streaming chat payload sets `think: false`, passes the request JSON Schema through `format`, and preserves the configured output-token limit. The application does not consume reasoning traces: blank content and `done_reason="length"` are provider failures, and thinking text is never parsed, cited, logged, or returned.
 
-Generated output must match `GroundedLLMAnswer`: unknown fields are forbidden, claims are non-empty, normal answers contain at least one recommended check, insufficient evidence requires escalation, and visible content must pass Vietnamese-language and prompt-leak checks.
+Generated output must match `GroundedLLMAnswer`: unknown fields are forbidden, claims are non-empty, normal answers contain at least one recommended check, insufficient evidence requires escalation, and visible content must pass the requested-language and prompt-leak checks. The current grounded production prompt still requests Vietnamese by default.
+
+Vietnamese validation evaluates only user-visible answer prose after NFC normalization. Citation labels, equipment identifiers, numbers, symbols, and common units do not influence the decision. Accented Vietnamese requires a substantive density of Vietnamese-specific characters; unaccented Vietnamese requires several distinct Vietnamese lexical markers and phrases. This permits ordinary technical English nouns inside otherwise Vietnamese guidance without allowing one or two marker words to make English instructions pass. Explicit English and mixed-language validation policies remain separate, while genuine language mismatches continue to fail closed.
 
 Every summary, possible cause, check, and source-derived warning carries one or more response-local IDs (`S1`, `S2`, …). Validation requires:
 
