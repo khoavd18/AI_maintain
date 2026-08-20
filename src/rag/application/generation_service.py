@@ -7,6 +7,7 @@ from typing import Any
 
 from src.llm.base import (
     LLMGenerationRequest,
+    LLMGenerationResult,
     LLMOutputError,
     LLMProvider,
     LLMProviderError,
@@ -17,7 +18,9 @@ from src.llm.citation_validator import validate_citations
 from src.llm.models import GroundedLLMAnswer
 from src.llm.output_parser import parse_grounded_answer
 from src.llm.prompt_builder import (
+    GroundedPrompt,
     build_grounded_prompt,
+    build_validation_repair_prompt,
     retrieval_alias_key,
     safe_asset_context_contains_prompt_injection,
 )
@@ -164,17 +167,59 @@ class GenerationService:
                 for source in prompt.sources
             },
         )
+        repaired = False
         if not citation_result.valid:
-            return self._generation_fallback(
-                reason="invalid_citations",
-                question=question,
-                asset_id=asset_id,
-                asset_context=asset_context,
-                retrievals=prompt_retrievals,
-                filters=filters,
-                context_warnings=context_warnings,
-                citation_validation=citation_result.to_dict(),
+            initial_validation = citation_result
+            repair_prompt = build_validation_repair_prompt(
+                prompt,
+                unsupported_claims=citation_result.unsupported_claims,
+                invalid_source_ids=citation_result.invalid_source_ids,
+                coverage_complete=citation_result.coverage_complete,
             )
+            try:
+                generation, grounded_answer = self._invoke_provider(repair_prompt)
+            except (LLMTimeoutError, LLMUnavailableError, LLMProviderError, LLMOutputError):
+                return self._generation_fallback(
+                    reason="invalid_citations",
+                    question=question,
+                    asset_id=asset_id,
+                    asset_context=asset_context,
+                    retrievals=prompt_retrievals,
+                    filters=filters,
+                    context_warnings=[
+                        *context_warnings,
+                        "generation_validation_repair_attempted",
+                        "generation_validation_repair_failed",
+                    ],
+                    citation_validation=initial_validation.to_dict(),
+                )
+            citation_result = validate_citations(
+                grounded_answer,
+                repair_prompt.allowed_source_ids,
+                source_text_by_id={
+                    source.citation_id: (
+                        f"{source.retrieval.title}\n{source.retrieval.failure_category}\n"
+                        f"{source.retrieval.text}"
+                    )
+                    for source in repair_prompt.sources
+                },
+            )
+            if not citation_result.valid:
+                return self._generation_fallback(
+                    reason="invalid_citations",
+                    question=question,
+                    asset_id=asset_id,
+                    asset_context=asset_context,
+                    retrievals=prompt_retrievals,
+                    filters=filters,
+                    context_warnings=[
+                        *context_warnings,
+                        "generation_validation_repair_attempted",
+                        "generation_validation_repair_failed",
+                    ],
+                    citation_validation=citation_result.to_dict(),
+                )
+            repaired = True
         if grounded_answer.insufficient_evidence:
             return insufficient_generation_response(
                 question=question,
@@ -184,7 +229,10 @@ class GenerationService:
                 provider=generation.provider,
                 model=generation.model,
                 citation_validation=citation_result.to_dict(),
-                context_warnings=context_warnings,
+                context_warnings=[
+                    *context_warnings,
+                    *(["generation_validation_repair_insufficient"] if repaired else []),
+                ],
             )
 
         grounded_answer = grounded_answer.model_copy(
@@ -207,9 +255,29 @@ class GenerationService:
             llm_model=generation.model,
             evidence_status=("limited" if grounded_answer.confidence == "low" else "sufficient"),
             citation_validation=citation_result.to_dict(),
-            context_warnings=context_warnings,
+            context_warnings=[
+                *context_warnings,
+                *(["generation_validation_repair_succeeded"] if repaired else []),
+            ],
             confidence=grounded_answer.confidence,
         )
+
+    def _invoke_provider(
+        self,
+        prompt: GroundedPrompt,
+    ) -> tuple[LLMGenerationResult, GroundedLLMAnswer]:
+        if self.llm_provider is None:
+            raise LLMUnavailableError("LLM provider is unavailable.")
+        generation = self.llm_provider.generate(
+            LLMGenerationRequest(
+                system_prompt=prompt.system_prompt,
+                user_prompt=prompt.user_prompt,
+                json_schema=GroundedLLMAnswer.model_json_schema(),
+                temperature=self.generation_config.temperature,
+                max_tokens=self.generation_config.max_tokens,
+            )
+        )
+        return generation, parse_grounded_answer(generation.content)
 
     def _generation_fallback(
         self,

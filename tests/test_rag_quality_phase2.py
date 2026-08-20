@@ -104,21 +104,16 @@ class _TrackingProvider:
         return LLMGenerationResult(
             content=json.dumps(
                 {
-                    "summary": "Đối chiếu hướng dẫn theo tài liệu đã truy xuất.",
+                    "summary": "Kiểm tra khe hai bên bằng nhau trước và sau khi siết chéo.",
                     "summary_source_ids": ["S1"],
                     "possible_causes": [],
                     "recommended_checks": [
                         {
-                            "text": "Cô lập nguồn và kiểm tra khe hai bên trước khi chạy thử.",
+                            "text": "Kiểm tra khe hai bên bằng nhau trước và sau khi siết chéo.",
                             "source_ids": ["S1"],
                         }
                     ],
-                    "safety_warnings": [
-                        {
-                            "text": "Kỹ thuật viên phải xác nhận căn chỉnh trước khi vận hành.",
-                            "source_ids": ["S1"],
-                        }
-                    ],
+                    "safety_warnings": [],
                     "escalation_required": False,
                     "source_ids": ["S1"],
                     "confidence": "medium",
