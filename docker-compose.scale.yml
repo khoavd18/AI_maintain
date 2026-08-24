@@ -1,0 +1,223 @@
+name: ai-maintenance-copilot-stage9
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: data_platform/airflow/Dockerfile
+  image: ai-maintenance-copilot-stage9-airflow:3.3.1
+  environment: &airflow-common-environment
+    AIRFLOW__API_AUTH__JWT_SECRET: ${STAGE9_AIRFLOW_JWT_SECRET:-stage9-local-airflow-jwt-secret-change-before-sharing}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Ho_Chi_Minh
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://stage9-airflow-api-server:8080/execution/
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "1"
+    AIRFLOW__CORE__PARALLELISM: "2"
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_scale:${STAGE9_AIRFLOW_DB_PASSWORD:-airflow_scale_local_only}@stage9-airflow-postgres:5432/airflow_scale
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN_ASYNC: postgresql+asyncpg://airflow_scale:${STAGE9_AIRFLOW_DB_PASSWORD:-airflow_scale_local_only}@stage9-airflow-postgres:5432/airflow_scale
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    DATA_PLATFORM_BATCH_SIZE: ${DATA_PLATFORM_BATCH_SIZE:-50000}
+    DATA_PLATFORM_CONNECT_TIMEOUT_SECONDS: ${DATA_PLATFORM_CONNECT_TIMEOUT_SECONDS:-10}
+    DATA_PLATFORM_DATA_ROOT: /opt/maintenance-platform/data/scale
+    DATA_PLATFORM_DB_HOST: scale-postgres
+    DATA_PLATFORM_DB_NAME: ${DATA_PLATFORM_DB_NAME:-maintenance_copilot_scale}
+    DATA_PLATFORM_DB_PASSWORD: ${DATA_PLATFORM_DB_PASSWORD:-maintenance_scale_local_only}
+    DATA_PLATFORM_DB_PORT: "5432"
+    DATA_PLATFORM_DB_USER: ${DATA_PLATFORM_DB_USER:-maintenance_scale}
+    DATA_PLATFORM_OBJECT_STORE: local
+    DATA_PLATFORM_STATEMENT_TIMEOUT_SECONDS: ${DATA_PLATFORM_STATEMENT_TIMEOUT_SECONDS:-1800}
+    DBT_PROFILES_DIR: /opt/maintenance-platform/data_platform/dbt/profiles
+    DBT_LOG_PATH: /opt/maintenance-platform/data/scale/dbt/logs
+    DBT_TARGET_PATH: /opt/maintenance-platform/data/scale/dbt/target
+    PYTHONPATH: /opt/maintenance-platform:/opt/airflow/dags
+    PYTHONUNBUFFERED: "1"
+  depends_on:
+    stage9-scale-postgres:
+      condition: service_healthy
+    stage9-airflow-postgres:
+      condition: service_healthy
+  networks:
+    - stage9-network
+  volumes:
+    - ./data_platform:/opt/maintenance-platform/data_platform:ro
+    - ./data_platform/airflow/dags:/opt/airflow/dags:ro
+    - ./data/scale:/opt/maintenance-platform/data/scale
+    - stage9_airflow_logs_v1:/opt/airflow/logs
+  working_dir: /opt/maintenance-platform
+
+services:
+  stage9-scale-postgres:
+    image: postgres:17-alpine
+    container_name: stage9-scale-postgres
+    environment:
+      POSTGRES_DB: ${STAGE9_POSTGRES_INITIAL_DB:-maintenance_copilot_scale}
+      POSTGRES_PASSWORD: ${DATA_PLATFORM_DB_PASSWORD:-maintenance_scale_local_only}
+      POSTGRES_USER: ${DATA_PLATFORM_DB_USER:-maintenance_scale}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - max_connections=50
+      - -c
+      - timezone=UTC
+    ports:
+      - "127.0.0.1:${DATA_PLATFORM_DB_PORT:-25432}:5432"
+    volumes:
+      - stage9_scale_postgres_data_v1:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    mem_limit: ${STAGE9_SCALE_POSTGRES_MEMORY_LIMIT:-2g}
+    mem_reservation: ${STAGE9_SCALE_POSTGRES_MEMORY_RESERVATION:-512m}
+    shm_size: 256m
+    stop_grace_period: 1m
+    restart: unless-stopped
+    networks:
+      stage9-network:
+        aliases:
+          - scale-postgres
+
+  stage9-airflow-postgres:
+    image: postgres:17-alpine
+    container_name: stage9-airflow-postgres
+    environment:
+      POSTGRES_DB: airflow_scale
+      POSTGRES_PASSWORD: ${STAGE9_AIRFLOW_DB_PASSWORD:-airflow_scale_local_only}
+      POSTGRES_USER: airflow_scale
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=30
+      - -c
+      - timezone=UTC
+    volumes:
+      - stage9_airflow_postgres_data_v1:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    mem_limit: ${STAGE9_AIRFLOW_DB_MEMORY_LIMIT:-512m}
+    mem_reservation: ${STAGE9_AIRFLOW_DB_MEMORY_RESERVATION:-128m}
+    shm_size: 128m
+    stop_grace_period: 30s
+    restart: unless-stopped
+    networks:
+      - stage9-network
+
+  stage9-airflow-init:
+    <<: *airflow-common
+    container_name: stage9-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -euo pipefail
+        airflow db migrate
+        airflow version
+    restart: "no"
+    mem_limit: ${STAGE9_AIRFLOW_INIT_MEMORY_LIMIT:-768m}
+
+  stage9-airflow-api-server:
+    <<: *airflow-common
+    container_name: stage9-airflow-api-server
+    command: api-server
+    depends_on:
+      stage9-airflow-init:
+        condition: service_completed_successfully
+      stage9-scale-postgres:
+        condition: service_healthy
+      stage9-airflow-postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${STAGE9_AIRFLOW_API_PORT:-18081}:8080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v2/monitor/health', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: ${STAGE9_AIRFLOW_API_MEMORY_LIMIT:-768m}
+    restart: unless-stopped
+
+  stage9-airflow-scheduler:
+    <<: *airflow-common
+    container_name: stage9-airflow-scheduler
+    command: scheduler
+    depends_on:
+      stage9-airflow-init:
+        condition: service_completed_successfully
+      stage9-scale-postgres:
+        condition: service_healthy
+      stage9-airflow-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8974/health', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: ${STAGE9_AIRFLOW_SCHEDULER_MEMORY_LIMIT:-1536m}
+    restart: unless-stopped
+
+  stage9-airflow-dag-processor:
+    <<: *airflow-common
+    container_name: stage9-airflow-dag-processor
+    command: dag-processor
+    depends_on:
+      stage9-airflow-init:
+        condition: service_completed_successfully
+      stage9-scale-postgres:
+        condition: service_healthy
+      stage9-airflow-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    mem_limit: ${STAGE9_AIRFLOW_DAG_PROCESSOR_MEMORY_LIMIT:-512m}
+    restart: unless-stopped
+
+networks:
+  stage9-network:
+    name: ai_maintenance_copilot_stage9_network_v1
+
+volumes:
+  stage9_scale_postgres_data_v1:
+    name: ai_maintenance_copilot_stage9_scale_pgdata_v1
+  stage9_airflow_postgres_data_v1:
+    name: ai_maintenance_copilot_stage9_airflow_pgdata_v1
+  stage9_airflow_logs_v1:
+    name: ai_maintenance_copilot_stage9_airflow_logs_v1

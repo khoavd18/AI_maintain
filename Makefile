@@ -1,4 +1,4 @@
-.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query llm-smoke evaluate-rag graduation-smoke bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job retry-outbox evaluate-operational-alerts job-status reliability-load backup-restore-drill attachment-integrity pilot-contract-validate pilot-decision-validate pilot-release-validate pilot-rehearsal-plan pilot-rehearsal-execute pilot-rehearsal-cleanup pilot-backup-schedule pilot-step-load frontend-lint frontend-typecheck frontend-test frontend-build
+.PHONY: install test test-postgres lint services-up services-down postgres-up postgres-down qdrant-up qdrant-down worker-docker-up worker-docker-down init-db migrate-db reset-db create-test-db generate-data validate-data import-dry-run load-data replace-data seed-maintenance seed-inventory generate-work-orders generation-dry-run seed-ticketing escalation-dry-run evaluate-escalations export-analytics-snapshot build-features detect-anomalies score-risk build-preventive build-recurring build-kpis index-documents rag-query llm-smoke evaluate-rag graduation-smoke bootstrap-admin seed-demo-users run-api run-dashboard run-frontend run-worker worker-once run-job set-job-enabled retry-job retry-outbox evaluate-operational-alerts job-status reliability-load backup-restore-drill attachment-integrity pilot-contract-validate pilot-decision-validate pilot-release-validate pilot-rehearsal-plan pilot-rehearsal-execute pilot-rehearsal-cleanup pilot-backup-schedule pilot-step-load frontend-lint frontend-typecheck frontend-test frontend-build scale-postgres-up scale-airflow-up scale-stop scale-config
 
 PYTHON ?= python
 ANALYTICS_INPUT_DIR ?= data/analytics_input
@@ -214,3 +214,16 @@ frontend-test:
 
 frontend-build:
 	npm --prefix frontend run build
+
+scale-config:
+	docker compose -f docker-compose.scale.yml config --quiet
+
+scale-postgres-up:
+	docker compose -f docker-compose.scale.yml up -d stage9-scale-postgres
+
+scale-airflow-up:
+	docker compose -f docker-compose.scale.yml up -d --build stage9-airflow-api-server stage9-airflow-scheduler stage9-airflow-dag-processor
+
+# Safe stop preserves all three dedicated Stage 9 volumes.
+scale-stop:
+	docker compose -f docker-compose.scale.yml stop

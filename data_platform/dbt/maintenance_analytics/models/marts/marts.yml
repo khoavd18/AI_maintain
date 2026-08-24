@@ -1,0 +1,168 @@
+version: 2
+
+models:
+  - name: daily_site_work_orders
+    description: >
+      Daily site/date mart with a zero-filled calendar spine. Count metrics are
+      additive. Cost totals stay NULL when no canonical cost observations exist.
+    columns:
+      - name: daily_site_work_orders_key
+        data_tests: [not_null, unique]
+      - name: site_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_site')
+                field: site_key
+      - name: site_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_site')
+                field: site_id
+      - name: site_code
+        data_tests: [not_null]
+      - name: site_name
+        data_tests: [not_null]
+      - name: location_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [building, floor, room, area, plant]
+      - name: site_is_active
+        data_tests: [not_null]
+      - name: created_date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: created_date
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: year_number
+        data_tests: [not_null]
+      - name: quarter_number
+        data_tests: [not_null]
+      - name: month_number
+        data_tests: [not_null]
+      - name: day_of_month
+        data_tests: [not_null]
+      - name: day_of_week
+        data_tests: [not_null]
+      - name: is_weekend
+        data_tests: [not_null]
+      - name: total_work_orders
+        data_tests: [not_null]
+      - name: completed_work_orders
+        data_tests: [not_null]
+      - name: critical_work_orders
+        data_tests: [not_null]
+      - name: unassigned_work_orders
+        data_tests: [not_null]
+      - name: total_estimated_cost
+        description: >
+          Nullable sum of explicit estimated costs only. It is NULL for the
+          current target because work-order costs are not modeled canonically.
+      - name: total_actual_cost
+        description: >
+          Nullable sum of explicit actual costs only. It is NULL for the current
+          target because work-order costs are not modeled canonically.
+      - name: total_cost_variance
+        description: >
+          Nullable sum of explicit cost variances; NULL in the current target.
+      - name: repair_duration_work_orders
+        data_tests: [not_null]
+      - name: completion_rate_percent
+        data_tests: [not_null]
+      - name: dbt_loaded_at
+        data_tests: [not_null]
+
+  - name: monthly_site_work_orders
+    description: >
+      Monthly site mart rolled up from the daily mart. Count metrics reconcile
+      exactly to daily and fact grains; unavailable cost totals remain NULL.
+    columns:
+      - name: monthly_site_work_orders_key
+        data_tests: [not_null, unique]
+      - name: site_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_site')
+                field: site_key
+      - name: site_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_site')
+                field: site_id
+      - name: site_code
+        data_tests: [not_null]
+      - name: site_name
+        data_tests: [not_null]
+      - name: location_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [building, floor, room, area, plant]
+      - name: site_is_active
+        data_tests: [not_null]
+      - name: month_key
+        data_tests: [not_null]
+      - name: month_date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: month_start_date
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: year_number
+        data_tests: [not_null]
+      - name: quarter_number
+        data_tests: [not_null]
+      - name: month_number
+        data_tests: [not_null]
+      - name: total_work_orders
+        data_tests: [not_null]
+      - name: completed_work_orders
+        data_tests: [not_null]
+      - name: critical_work_orders
+        data_tests: [not_null]
+      - name: unassigned_work_orders
+        data_tests: [not_null]
+      - name: total_estimated_cost
+        description: >
+          Nullable sum of explicit estimated costs only. It is NULL for the
+          current target because work-order costs are not modeled canonically.
+      - name: total_actual_cost
+        description: >
+          Nullable sum of explicit actual costs only. It is NULL for the current
+          target because work-order costs are not modeled canonically.
+      - name: total_cost_variance
+        description: >
+          Nullable sum of explicit cost variances; NULL in the current target.
+      - name: repair_duration_work_orders
+        data_tests: [not_null]
+      - name: completion_rate_percent
+        data_tests: [not_null]
+      - name: dbt_loaded_at
+        data_tests: [not_null]

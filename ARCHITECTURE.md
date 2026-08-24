@@ -48,6 +48,29 @@ src/operations/worker.py --> four allow-listed jobs --> the same domain services
 - The dedicated PostgreSQL test workflow uses only the local `_test` database
   on port `15433`; see [`docs/testing-postgresql.md`](docs/testing-postgresql.md).
 
+### Stage 9 structured analytics boundary
+
+`data_platform/` là bounded local analytics capability, không phải background
+worker hoặc second transactional application. Scale Compose dùng PostgreSQL và
+volumes riêng; stable `analytics_source` views project application entities sang
+raw append-only versions, dbt staging/dimensions/incremental fact và daily/monthly
+marts. Airflow orchestration có 9 idempotent tasks; S3/AWS, external LLM,
+embeddings và Qdrant đều bị loại khỏi scale run.
+
+```text
+isolated public OLTP fixture -> analytics_source -> tuple-watermark extract
+  -> local object/raw/audit -> dbt warehouse/marts -> BI or closed SQL adapter
+manuals/SOPs --------------------------------------------------> RAG/Qdrant
+```
+
+Target chưa có canonical work-order cost fields hoặc dedicated work-order status
+history. Cost compatibility fields giữ `NULL`; raw snapshots không được mô tả là
+complete event history. Mapping, safety và evidence status ở
+[`docs/data-platform-integration.md`](docs/data-platform-integration.md); full
+procedure ở [`docs/scale-test-1m.md`](docs/scale-test-1m.md), report marker ở
+[`docs/benchmark-results-1m.md`](docs/benchmark-results-1m.md), và AI boundary ở
+[`docs/structured-data-vs-rag.md`](docs/structured-data-vs-rag.md).
+
 ## Applications and entry points
 
 | Runtime or tool | Entry point | Responsibility |
@@ -59,6 +82,7 @@ src/operations/worker.py --> four allow-listed jobs --> the same domain services
 | Migrations | `python -m alembic` | PostgreSQL schema versioning |
 | Domain CLIs | `src/*_management/cli.py` | Explicit maintenance, ticket, inventory, and operator commands |
 | Batch analytics | canonical modules under `src/features`, `src/models`, and `src/risk` | Snapshot-based feature, anomaly, risk, and report generation |
+| Stage 9 Data Platform | `data_platform.generator`, `loader`, `pipeline`, dbt project và `maintenance_scale_pipeline` DAG | Isolated deterministic scale fixture, incremental raw ingestion, warehouse/marts, reconciliation và measured benchmark |
 | RAG tools | `src.rag.index_documents`, `src.rag.query` | Explicit indexing and query workflows |
 | Reliability tools | `src/reliability/` | Bounded deployment, validation, load, backup, and recovery rehearsal |
 

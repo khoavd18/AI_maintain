@@ -1,0 +1,15 @@
+maintenance_analytics:
+  target: scale
+
+  outputs:
+    scale:
+      type: postgres
+      host: "{{ env_var('DATA_PLATFORM_DB_HOST', 'scale-postgres') }}"
+      port: "{{ env_var('DATA_PLATFORM_DB_PORT', '5432') | int }}"
+      user: "{{ env_var('DATA_PLATFORM_DB_USER', 'maintenance_scale') }}"
+      password: "{{ env_var('DATA_PLATFORM_DB_PASSWORD') }}"
+      dbname: "{{ env_var('DATA_PLATFORM_DB_NAME', 'maintenance_copilot_scale') }}"
+      schema: "{{ env_var('DATA_PLATFORM_DB_SCHEMA', 'analytics') }}"
+      sslmode: "{{ env_var('DATA_PLATFORM_DB_SSLMODE', 'disable') }}"
+      threads: 4
+      connect_timeout: 10

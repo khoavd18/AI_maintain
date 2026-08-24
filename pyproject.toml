@@ -39,9 +39,12 @@ dashboard = [
     "streamlit>=1.36,<2.0",
 ]
 postgres = []
+data-platform-s3 = [
+    "boto3>=1.35,<2.0",
+]
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+include = ["src*", "data_platform*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

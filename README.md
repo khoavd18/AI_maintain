@@ -106,6 +106,30 @@ centralized observability/on-call, managed secrets, object storage, malware
 scanning, multi-tenancy, Kubernetes và cloud deployment vẫn ngoài completed
 boundary.
 
+## Stage 9 Data Platform
+
+`data_platform/` bổ sung local-only structured analytics trong database/container
+scale riêng: compatibility views, tuple-watermark ingestion, raw versions, dbt
+warehouse/marts, Airflow DAG 9 tasks và bounded read-only aggregate adapter. RAG
+vẫn dành cho documents; không embed một triệu work orders. Full local benchmark
+đã reconcile 1,100,000 final unique rows, 1,110,000 raw versions và 10,000
+updates; incremental/empty Airflow runs đều 9/9 tasks, 0 retries; dbt pass 307
+tests và focused Data Platform pass 42 tests. Đây vẫn là synthetic local
+evidence, không phải production traffic hoặc company usage.
+
+```powershell
+docker compose -f docker-compose.scale.yml config --quiet
+docker compose -f docker-compose.scale.yml up -d --wait --wait-timeout 180 stage9-scale-postgres
+.\scripts\generate_scale_data.ps1 -WorkOrderCount 1000000 -Seed 20260823 -Phase baseline -BatchSize 50000 -BaselineCount 1000000 -UpdateCount 0 -RunId stage9-1m-seed-20260823
+```
+
+Full baseline/incremental/Airflow/dbt commands và safe stop/confirmed cleanup ở
+[scale-test-1m](docs/scale-test-1m.md). Xem [integration/domain mapping](docs/data-platform-integration.md),
+[measured benchmark report](docs/benchmark-results-1m.md),
+[machine JSON](docs/benchmark-results-1m.json),
+[dataset manifest](docs/benchmark-manifest-1m.json) và
+[structured data vs RAG](docs/structured-data-vs-rag.md).
+
 ## Canonical Architecture
 
 Architecture là **PostgreSQL-primary cho transactional data** và **CSV batch-first cho analytics**.

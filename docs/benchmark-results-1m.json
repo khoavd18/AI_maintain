@@ -1,0 +1,376 @@
+{
+  "schema_version": "stage9-benchmark-report-v1",
+  "status": "complete_local_synthetic_scale_workflow",
+  "run_id": "stage9-1m-seed-20260823",
+  "seed": 20260823,
+  "dataset_schema_version": "stage9-scale-v1",
+  "database": "maintenance_copilot_benchmark_scale",
+  "evidence_captured_at": "2026-08-24T06:31:46.867976+00:00",
+  "scope": {
+    "aws_mutations": "none",
+    "s3_uploads": 0,
+    "qdrant_rows_indexed": 0,
+    "external_llm_calls": 0,
+    "external_embedding_calls": 0,
+    "production_claim": false
+  },
+  "host": {
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200 64-bit",
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13620H",
+    "physical_cores": 10,
+    "logical_processors": 16,
+    "physical_memory_kib": 16387496,
+    "docker_memory_bytes": 8126656512
+  },
+  "generation": {
+    "baseline": {
+      "new_work_orders": 1000000,
+      "updates": 0,
+      "maintenance_logs": 499438,
+      "files": 44,
+      "bytes_excluding_manifest": 711990756,
+      "duration_seconds": 105.060353,
+      "new_work_orders_per_second": 9518.34
+    },
+    "incremental": {
+      "new_work_orders": 100000,
+      "updates": 10000,
+      "maintenance_logs": 49792,
+      "files": 5,
+      "bytes_excluding_manifest": 75242408,
+      "duration_seconds": 14.18899,
+      "new_work_orders_per_second": 7047.72
+    },
+    "combined": {
+      "unique_work_orders": 1100000,
+      "updates": 10000,
+      "maintenance_logs": 549230,
+      "files": 49,
+      "bytes_excluding_manifests": 787233164,
+      "duration_seconds": 119.249343,
+      "new_work_orders_per_second": 9224.37
+    }
+  },
+  "source_load": {
+    "baseline": {
+      "rows": 1540138,
+      "duration_seconds": 339.198045,
+      "rows_per_second": 4540.53
+    },
+    "incremental": {
+      "rows": 159792,
+      "engine_duration_seconds": 34.016827,
+      "wall_duration_seconds": 34.704,
+      "rows_per_second": 4697.44
+    }
+  },
+  "counts": {
+    "source_work_orders": 1100000,
+    "raw_work_order_versions": 1110000,
+    "raw_unique_work_orders": 1100000,
+    "raw_update_versions": 10000,
+    "staging_work_orders": 1100000,
+    "fact_work_orders": 1100000,
+    "fact_duplicate_ids": 0,
+    "maintenance_logs": 549230,
+    "source_locations": 201,
+    "generated_sites": 200,
+    "assets": 20000,
+    "technicians": 500,
+    "preventive_plans": 20000,
+    "tickets": 0,
+    "spare_parts": 0,
+    "cost_comparable_work_orders": 0,
+    "daily_mart": 267732,
+    "monthly_mart": 8844
+  },
+  "reconciliation": {
+    "reconciled": true,
+    "unvalidated_constraints": 0,
+    "source_duplicates": 0,
+    "fact_duplicates": 0,
+    "baseline_extracted_rows": 1000000,
+    "incremental_extracted_rows": 110000,
+    "idempotent_extracted_rows": 0,
+    "watermark_unchanged_on_empty": true,
+    "watermark_version": 3,
+    "watermark_updated_at": "2026-08-24T04:00:00.010000+00:00",
+    "watermark_work_order_id": "00050000-0000-0000-0000-000000002710"
+  },
+  "pipeline_runs": [
+    {
+      "run_id": "stage9-baseline-host",
+      "orchestrator": "host_pipeline",
+      "state": "success",
+      "duration_seconds": 630.106,
+      "extract_seconds": 73.233,
+      "raw_load_seconds": 151.417
+    },
+    {
+      "run_id": "stage9-incremental-airflow",
+      "orchestrator": "airflow",
+      "state": "success",
+      "successful_tasks": 9,
+      "total_tasks": 9,
+      "retries": 0,
+      "duration_seconds": 111.11628,
+      "task_duration_seconds": {
+        "start_pipeline_audit": 5.428213,
+        "check_source_database": 0.570204,
+        "snapshot_dimensions": 1.04176,
+        "extract_work_orders_incremental": 7.878395,
+        "load_work_orders_raw": 8.580005,
+        "dbt_run": 32.44445,
+        "dbt_test": 44.346403,
+        "reconcile": 2.951787,
+        "complete_pipeline_audit": 2.141844
+      }
+    },
+    {
+      "run_id": "stage9-idempotency-airflow",
+      "orchestrator": "airflow",
+      "state": "success",
+      "successful_tasks": 9,
+      "total_tasks": 9,
+      "retries": 0,
+      "duration_seconds": 90.897764,
+      "task_duration_seconds": {
+        "start_pipeline_audit": 0.465203,
+        "check_source_database": 0.756157,
+        "snapshot_dimensions": 0.949256,
+        "extract_work_orders_incremental": 0.975497,
+        "load_work_orders_raw": 0.455723,
+        "dbt_run": 25.817095,
+        "dbt_test": 50.286226,
+        "reconcile": 3.446273,
+        "complete_pipeline_audit": 2.417458
+      }
+    }
+  ],
+  "dbt": {
+    "version": "1.10.23",
+    "adapter": "dbt-postgres 1.10.0",
+    "models": 11,
+    "tests": 307,
+    "baseline": {
+      "models_passed": 11,
+      "tests_passed": 307,
+      "run_engine_seconds": 122.86,
+      "run_wall_seconds": 146.933,
+      "test_engine_seconds": 102.7,
+      "test_wall_seconds": 129.613
+    },
+    "incremental": {
+      "models_passed": 11,
+      "tests_passed": 307,
+      "run_task_seconds": 32.44445,
+      "test_task_seconds": 44.346403
+    },
+    "empty": {
+      "models_passed": 11,
+      "tests_passed": 307,
+      "run_task_seconds": 25.817095,
+      "test_task_seconds": 50.286226
+    },
+    "standalone_parse_seconds": 8.483,
+    "standalone_build_engine_seconds": 66.88,
+    "standalone_build_wall_seconds": 71.867,
+    "standalone_build_nodes_passed": 318,
+    "standalone_build_models": 11,
+    "standalone_build_tests": 307
+  },
+  "queries": [
+    {"name":"work_orders_by_site_date","returned_rows":28,"p50_ms":117.6542,"p95_ms":121.3458,"plan":"Parallel Seq Scan","rows_examined":1100002},
+    {"name":"latest_status_per_work_order","returned_rows":1000,"p50_ms":3.1203,"p95_ms":3.8065,"plan":"Index Scan ix_raw_work_orders_latest","rows_examined":1999},
+    {"name":"critical_open_work_orders","returned_rows":100,"p50_ms":154.8635,"p95_ms":159.6508,"plan":"Parallel Seq Scan","rows_examined":1100001},
+    {"name":"technician_workload","returned_rows":100,"p50_ms":162.5417,"p95_ms":216.1472,"plan":"Parallel Seq Scan","rows_examined":1100001},
+    {"name":"monthly_completion_rate","returned_rows":240,"p50_ms":3.4813,"p95_ms":3.8654,"plan":"Seq Scan monthly mart","rows_examined":8844},
+    {"name":"cost_variance_availability","returned_rows":1,"p50_ms":133.1925,"p95_ms":148.7834,"plan":"Parallel Seq Scan","rows_examined":1100001},
+    {"name":"asset_failure_frequency","returned_rows":100,"p50_ms":206.7767,"p95_ms":350.3992,"plan":"Parallel Seq Scan","rows_examined":1100001},
+    {"name":"daily_mart","returned_rows":500,"p50_ms":29.7768,"p95_ms":36.6726,"plan":"Parallel Seq Scan","rows_examined":267732},
+    {"name":"monthly_mart","returned_rows":44,"p50_ms":3.3365,"p95_ms":4.1069,"plan":"Seq Scan monthly mart","rows_examined":8844},
+    {"name":"incremental_watermark_query","returned_rows":50000,"p50_ms":121.5171,"p95_ms":140.4021,"plan":"Index Only Scan ix_work_orders_updated_at_id","rows_examined":50000,"explain_execution_ms":13.334,"shared_hit_blocks":3134,"shared_read_blocks":0,"temp_blocks":0}
+  ],
+  "optimization": {
+    "index": "ix_work_orders_updated_at_id",
+    "definition": "CREATE INDEX ix_work_orders_updated_at_id ON public.work_orders USING btree (updated_at, id)",
+    "build_seconds": 4.741,
+    "size_bytes": 44990464,
+    "valid": true,
+    "ready": true,
+    "before": {"returned_rows":128,"p50_ms":109.6859,"p95_ms":135.8747,"plan":"Parallel Seq Scan","rows_examined":1000002,"shared_read_blocks":35394,"explain_execution_ms":103.136},
+    "after": {"returned_rows":128,"p50_ms":4.5078,"p95_ms":10.1295,"plan":"Index Only Scan","rows_examined":128,"shared_read_blocks":0,"explain_execution_ms":0.126},
+    "p50_speedup": 24.33,
+    "p95_speedup": 13.41
+  },
+  "storage": {
+    "database_size_bytes": 2532267699,
+    "table_bytes": 1814298624,
+    "index_bytes": 705781760,
+    "included_physical_bytes": 2521473024,
+    "generated_dataset_bytes": 787233164,
+    "pipeline_object_bytes": 583213938,
+    "postgres_data_directory_kib": 3564180,
+    "airflow_metadata_directory_kib": 50800,
+    "postgres_temp_files_since_start": 1594,
+    "postgres_temp_bytes_since_start": 18663417128
+  },
+  "resources": {
+    "pre_full_run_captured_at": "2026-08-24T05:27:45.287185+00:00",
+    "pre_full_run_host_free_c_bytes": 55268294656,
+    "pre_full_run_host_free_d_bytes": 53599600640,
+    "final_host_free_c_bytes": 47548452864,
+    "final_host_free_d_bytes": 52222353408,
+    "host_free_c_decrease_bytes": 7719841792,
+    "host_free_d_decrease_bytes": 1377247232,
+    "pre_full_run_scale_postgres_memory": "58.05MiB",
+    "scale_postgres_current_memory_bytes": 1824301056,
+    "scale_postgres_peak_memory_bytes": 2148196352,
+    "scale_postgres_limit_bytes": 2147483648,
+    "scale_postgres_oom_events": 0,
+    "scale_postgres_oom_kill_events": 0,
+    "airflow_api_peak_memory_bytes": 795762688,
+    "airflow_scheduler_peak_memory_bytes": 620003328,
+    "airflow_dag_processor_peak_memory_bytes": 372150272,
+    "airflow_metadata_postgres_peak_memory_bytes": 106639360,
+    "docker_disk_before": {"images":"13.66GB","containers":"253.6MB","volumes":"3.352GB","build_cache":"8.454GB"},
+    "docker_disk_after": {"images":"13.82GB","containers":"408MB","volumes":"6.97GB","build_cache":"8.454GB"}
+  },
+  "verification": {
+    "backend_pytest_passed": 1351,
+    "backend_pytest_skipped": 87,
+    "data_platform_tests_in_backend_total": 42,
+    "dbt_tests_passed": 307,
+    "dbt_tests_failed": 0,
+    "application_alembic_head": "20260726_0008",
+    "data_platform_alembic_head": "20260824_dp0002",
+    "backend_seconds": 98.69,
+    "backend_warning_count": 1,
+    "isolated_postgres_passed": 87,
+    "isolated_postgres_deselected": 1351,
+    "isolated_postgres_seconds": 251.49,
+    "isolated_postgres_warning_count": 1,
+    "data_platform_focused_seconds": 1.4,
+    "ruff": "pass",
+    "format_changed_scope_files": 25,
+    "format": "pass",
+    "compileall": "pass",
+    "frontend_lint_seconds": 123.92,
+    "frontend_typecheck_seconds": 21.89,
+    "frontend_tests_passed": 141,
+    "frontend_test_files": 23,
+    "frontend_test_seconds": 79.32,
+    "frontend_build_seconds": 53.29,
+    "frontend_pages_built": 32,
+    "compose_config_checks_passed": 4,
+    "airflow_dag_import_errors": 0,
+    "airflow_dag_tasks": 9,
+    "application_health_http_status": 200,
+    "application_health_status": "ok",
+    "raw_data_available": true,
+    "analytics_available": true,
+    "secret_scan_text_files": 967,
+    "secret_scan_text_bytes": 9836787,
+    "secret_scan_office_archives": 4,
+    "secret_scan_office_entries": 56,
+    "secret_scan_high_confidence_findings": 0,
+    "secret_scan_explicit_placeholder_non_findings": 29,
+    "gitignore_validation": "pass",
+    "reference_repository_status_entries": 0,
+    "reference_repository_head": "128ab5847f2c53bd83c55930cb6c37591a173e2e",
+    "cleanup_executed": false,
+    "dedicated_stage9_volumes_preserved": true,
+    "existing_application_volumes_touched": false
+  },
+  "artifact_sha256": {
+    "baseline_manifest": "F3DD0677265B97053242B1562834783F5F39782AB98712A344558FFC7FA33E8D",
+    "incremental_manifest": "E81CEC3967D9BB56CB447418189A51712F356909E07B3BD6D179CC6DDF5BE6E1",
+    "benchmark_final": "744FD22C9ED3607D53902C7BE75ECD3E52CA5A136CBD8553CD9E7CF5BD7A132E",
+    "evidence_final": "C77B46EF8C1B60655940B59761F9786DE7FBB7AD58CF4CFDFF111EDEAE344F7E"
+  },
+  "failures_encountered_and_fixes": [
+    {
+      "id": "data_platform_alembic_version_isolation",
+      "failure": "Data Platform Alembic initially read the application revision from a shared version table and could not resolve it in its own history.",
+      "fix": "Use data_platform_alembic_version independently from the application alembic_version table.",
+      "validation": "Application current/head/check passed at 20260726_0008; Data Platform current/head, offline full-history render, and isolated PostgreSQL upgrade passed at 20260824_dp0002; expected version-table/index SQL assertions and the broader 42 Data Platform tests passed.",
+      "known_validation_limitation": "Data Platform alembic check is unsupported because its raw-SQL migration history intentionally has target_metadata=None; current=head, offline full-history render, a real isolated upgrade, expected SQL assertions, and the broader Data Platform test suite are the validation substitute."
+    },
+    {
+      "id": "portable_object_key_and_published_recovery",
+      "failure": "An absolute Windows extraction object_path was not portable into the Airflow container, and a published object could exist before its audit row was recorded.",
+      "fix": "Persist a relative object key, resolve it under the current DATA_PLATFORM_DATA_ROOT, and checksum-recover a published object and missing audit record.",
+      "validation": "Host/container retries consumed the same immutable bytes; incremental and empty Airflow runs completed without duplicate raw versions."
+    },
+    {
+      "id": "resumed_copy_totals",
+      "failure": "A resumed COPY invocation reported only newly loaded rows and omitted chunks committed before the retry.",
+      "fix": "Derive completion totals from checksum-verified audit.dataset_load_chunks records committed with each COPY/upsert chunk.",
+      "validation": "Audit totals reconciled 1000000 baseline and 110000 incremental work-order rows/versions plus dependent chunks."
+    },
+    {
+      "id": "atomic_monotonic_tuple_watermark",
+      "failure": "The watermark needed protection from stale or concurrent retries and from advancing ahead of committed raw data.",
+      "fix": "Lock the tuple watermark with FOR UPDATE and advance only to a greater upper tuple in the same transaction as raw COPY and batch status.",
+      "validation": "The final watermark version was 3; the immediate empty run preserved the tuple and added zero raw versions."
+    },
+    {
+      "id": "strict_transformed_reconciliation",
+      "failure": "Raw-only reconciliation could hide absent or mismatched staging and fact layers.",
+      "fix": "Require transformed layers by default, equal source/raw-unique/staging/fact counts, and zero fact duplicates.",
+      "validation": "All four layers reconciled at 1100000 unique work orders with zero fact duplicates."
+    },
+    {
+      "id": "bounded_incremental_timestamps",
+      "failure": "The initial incremental fixture placed updated_at values in the future relative to the evidence window.",
+      "fix": "Bound new and update timestamps to 2026-08-23 and 2026-08-24, ending update ties at 2026-08-24T04:00:00.010000Z.",
+      "validation": "The final watermark stayed inside the benchmark window and the immediate rerun extracted zero rows."
+    },
+    {
+      "id": "asia_ho_chi_minh_reporting_boundaries",
+      "failure": "The closed analytics adapter used UTC date boundaries and could assign records to the wrong Vietnamese date at day boundaries.",
+      "fix": "Filter on (created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date and use the same reporting timezone in the dbt date spine, fact date keys, and marts.",
+      "validation": "Adapter coverage in the 42 Data Platform tests and dbt daily-to-fact reconciliation passed; final dbt build passed all 318 nodes."
+    },
+    {
+      "id": "writable_dbt_artifact_paths",
+      "failure": "dbt attempted to write target and logs inside the read-only project mount in Airflow.",
+      "fix": "Redirect DBT_TARGET_PATH and DBT_LOG_PATH to writable data/scale/dbt directories.",
+      "validation": "dbt run and test passed in both Airflow runs, and generated paths passed gitignore validation."
+    },
+    {
+      "id": "airflow_live_dag_and_unpause",
+      "failure": "The Airflow image did not see the latest DAG edit and the DAG was paused by default.",
+      "fix": "Bind-mount the live DAG directory and explicitly unpause maintenance_scale_pipeline.",
+      "validation": "Incremental and empty DAG runs each succeeded 9 of 9 tasks with zero retries."
+    },
+    {
+      "id": "dbt_core_image_pin",
+      "failure": "Airflow image dependency resolution was unstable when only the dbt adapter was pinned.",
+      "fix": "Pin dbt-core 1.10.23 together with dbt-postgres 1.10.0.",
+      "validation": "The image resolved and ran successfully; final dbt parse and build passed."
+    },
+    {
+      "id": "airflow_33_dagbag_invocation",
+      "failure": "The first final DagBag validation invocation was incompatible with the Airflow 3.3 API.",
+      "fix": "Use the supported Airflow 3.3 DagBag validation invocation.",
+      "validation": "DagBag reported zero import errors and exactly nine DAG tasks."
+    },
+    {
+      "id": "postgresql_17_catalog_columns",
+      "failure": "An auxiliary database snapshot query referenced checkpoint catalog columns from an older PostgreSQL release.",
+      "fix": "Use the PostgreSQL 17 catalog and column names for the evidence query.",
+      "validation": "The final database/resource snapshot reran successfully without changing benchmark data."
+    }
+  ],
+  "limitations": [
+    "local synthetic benchmark, not production traffic or company usage",
+    "five measured samples after one warmup per query",
+    "no canonical work-order cost fields",
+    "no dedicated work-order status-history table",
+    "tickets and inventory were not populated by the scale fixture",
+    "synthetic technicians are inactive and have deliberately invalid login-disabled password hashes",
+    "RAG and LLM quality were not measured",
+    "resource values are local point-in-time and cgroup captures, not production capacity guarantees"
+  ]
+}

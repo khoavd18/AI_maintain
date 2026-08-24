@@ -21,6 +21,13 @@ data/processed/*
 !data/processed/.gitkeep
 data/analytics_input/
 data/attachments/
+data/scale/
+
+# Data Platform runtime artifacts; source projects and benchmark evidence in docs stay tracked.
+data_platform/dbt/**/target/
+data_platform/dbt/**/logs/
+data_platform/dbt/**/dbt_packages/
+.user.yml
 
 reports/*
 sop_docs/*

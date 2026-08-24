@@ -39,6 +39,39 @@ chưa có capacity/HA sizing.
 
 Legacy `GET /health` vẫn giữ contract cũ để không phá client.
 
+## Stage 9 Scale Runtime
+
+Stage 9 không dùng normal application database/volume. Trước khi chạy phải kiểm
+tra disk, Docker memory/usage, ports và Compose config theo
+[full scale runbook](scale-test-1m.md). Start isolated PostgreSQL và migrate:
+
+```powershell
+$runId = "stage9-1m-seed-20260823"
+docker compose -f docker-compose.scale.yml config --quiet
+docker compose -f docker-compose.scale.yml up -d --wait --wait-timeout 180 stage9-scale-postgres
+.\.venv\Scripts\python.exe -m data_platform.loader migrate
+```
+
+Generator full baseline dùng 1,000,000; incremental dùng 100,000 new và 10,000
+updates. Airflow/dbt/reconciliation commands đầy đủ được giữ ở runbook để tránh
+hai procedure lệch nhau. Measured local result đã reconcile 1,100,000 unique,
+1,110,000 raw versions và 10,000 updates; incremental/empty Airflow đều 9/9,
+0 retries; dbt 307/307 và Data Platform 42/42. Xem exact timings/sizes ở
+[benchmark results](benchmark-results-1m.md).
+
+Safe stop giữ data và cả ba dedicated volumes:
+
+```powershell
+docker compose -f docker-compose.scale.yml stop
+```
+
+Không dùng `down --volumes`, `docker volume rm`, `docker system prune` hoặc xóa
+`data/scale` khi stop. Destructive cleanup chỉ được chạy bằng typed-confirmation
+snippets trong [scale-test-1m](scale-test-1m.md), sau khi operator xác nhận evidence
+đã được giữ. Domain mapping ở [data-platform integration](data-platform-integration.md),
+result template ở [benchmark results](benchmark-results-1m.md), và boundary SQL/RAG
+ở [structured data vs RAG](structured-data-vs-rag.md).
+
 ## Enable Hoặc Disable Job
 
 Job được seed disabled. Qua Next.js `/admin/jobs`, protected API hoặc CLI:
