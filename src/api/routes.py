@@ -75,6 +75,7 @@ from src.api.routers.copilot import (
     ask_copilot,
     router as copilot_router,
 )
+from src.api.routers.domain_analytics import router as domain_analytics_router
 from src.api.routers.dependencies import get_service
 from src.api.routers.system import health, rag_readiness, router as system_router
 from src.rag.vector_store import QdrantVectorStore
@@ -100,6 +101,7 @@ from src.security.principal import CurrentUser
 router = APIRouter()
 router.include_router(system_router)
 router.include_router(analytics_router)
+router.include_router(domain_analytics_router)
 router.include_router(copilot_router)
 
 

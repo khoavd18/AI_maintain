@@ -130,6 +130,26 @@ Full baseline/incremental/Airflow/dbt commands và safe stop/confirmed cleanup �
 [dataset manifest](docs/benchmark-manifest-1m.json) và
 [structured data vs RAG](docs/structured-data-vs-rag.md).
 
+## Stage 10 Multi-domain Scale
+
+Stage 10 giữ nguyên 1.100.000 work orders và mở rộng database scale cô lập đến
+3.300.000 status events, 300.000 tickets, 900.000 ticket events, 25.000 parts,
+1.500.000 inventory movements và 1.100.000 cost facts. Source/raw
+unique/staging/fact reconcile, tám integrity checks bằng 0, ba Airflow runs đều
+19/19 tasks success và final dbt build đạt 459/459 nodes.
+
+Authenticated site-scoped API benchmark đo 25/50 clients với 0 errors, lần lượt
+30,1753 và 23,6934 req/s. Structured rows không được vectorize; bounded evidence
+export ghi 5 candidates và 0 embedding/external calls. Đây là local synthetic
+evidence, không phải production SLA hoặc capacity claim.
+
+Xem [Stage 10 runbook](docs/stage10-domain-scale.md),
+[benchmark report](docs/benchmark-results-domain-scale.md),
+[failure recovery](docs/reliability-failure-recovery.md),
+[API load test](docs/analytics-api-load-test.md),
+[machine JSON](docs/benchmark-results-domain-scale.json) và
+[dataset checksums](docs/benchmark-manifest-domain-scale.json).
+
 ## Canonical Architecture
 
 Architecture là **PostgreSQL-primary cho transactional data** và **CSV batch-first cho analytics**.

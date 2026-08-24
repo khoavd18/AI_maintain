@@ -71,6 +71,25 @@ procedure ở [`docs/scale-test-1m.md`](docs/scale-test-1m.md), report marker �
 [`docs/benchmark-results-1m.md`](docs/benchmark-results-1m.md), và AI boundary ở
 [`docs/structured-data-vs-rag.md`](docs/structured-data-vs-rag.md).
 
+### Stage 10 multi-domain reliability boundary
+
+Stage 10 giữ nguyên Stage 9 work-order fact và thêm six-domain independent
+watermarks cho status history, tickets/events, parts/movements và costs. Data đi
+qua immutable local object/checksum, idempotent raw batch, dbt facts/marts và một
+authenticated closed-query API. Atomic finalization chỉ advance watermarks sau
+dbt tests và cross-layer reconciliation.
+
+```text
+six source contracts -> six batches/watermarks -> raw -> dbt facts/marts
+  -> authenticated allow-listed analytics (read-only, bounded, 30s timeout)
+approved text -> bounded evidence export -> optional governed RAG path
+```
+
+API backpressure giữ tối đa 8 analytical queries mỗi worker. Structured question
+router không tạo SQL và evidence export không gọi embedding/API. Chi tiết và
+measured results ở [`docs/stage10-domain-scale.md`](docs/stage10-domain-scale.md)
+và [`docs/benchmark-results-domain-scale.md`](docs/benchmark-results-domain-scale.md).
+
 ## Applications and entry points
 
 | Runtime or tool | Entry point | Responsibility |
@@ -83,6 +102,7 @@ procedure ở [`docs/scale-test-1m.md`](docs/scale-test-1m.md), report marker �
 | Domain CLIs | `src/*_management/cli.py` | Explicit maintenance, ticket, inventory, and operator commands |
 | Batch analytics | canonical modules under `src/features`, `src/models`, and `src/risk` | Snapshot-based feature, anomaly, risk, and report generation |
 | Stage 9 Data Platform | `data_platform.generator`, `loader`, `pipeline`, dbt project và `maintenance_scale_pipeline` DAG | Isolated deterministic scale fixture, incremental raw ingestion, warehouse/marts, reconciliation và measured benchmark |
+| Stage 10 domain scale | `data_platform.domain_generator`, `domain_loader`, `domain_pipeline`, `maintenance_domain_scale_pipeline` và `src.analytics.domain_adapter` | Multi-domain synthetic scale, independent watermarks, controlled recovery và authenticated bounded analytics |
 | RAG tools | `src.rag.index_documents`, `src.rag.query` | Explicit indexing and query workflows |
 | Reliability tools | `src/reliability/` | Bounded deployment, validation, load, backup, and recovery rehearsal |
 

@@ -210,6 +210,68 @@ services:
     mem_limit: ${STAGE9_AIRFLOW_DAG_PROCESSOR_MEMORY_LIMIT:-512m}
     restart: unless-stopped
 
+  stage10-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: core-runtime
+    image: ai-maintenance-copilot-stage10-api:local
+    container_name: stage10-api
+    command:
+      - python
+      - -m
+      - uvicorn
+      - src.api.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "2"
+    environment:
+      APP_ENVIRONMENT: development
+      STORAGE_BACKEND: postgresql
+      DATABASE_URL: postgresql+psycopg://maintenance_scale:${DATA_PLATFORM_DB_PASSWORD:-maintenance_scale_local_only}@scale-postgres:5432/${DATA_PLATFORM_DB_NAME:-maintenance_copilot_scale}
+      DATABASE_CONNECT_TIMEOUT_SECONDS: "10"
+      DATABASE_POOL_SIZE: "8"
+      DATABASE_MAX_OVERFLOW: "4"
+      DATABASE_POOL_TIMEOUT_SECONDS: "30"
+      DATABASE_STATEMENT_TIMEOUT_SECONDS: "30"
+      TOKEN_SIGNING_SECRET: ${STAGE10_TOKEN_SIGNING_SECRET:-stage10-local-token-signing-secret-change-before-sharing}
+      TRUSTED_HOSTS: localhost,127.0.0.1,stage10-api
+      AUTH_COOKIE_SECURE: "false"
+      LLM_ENABLED: "false"
+      DATA_PLATFORM_DB_HOST: scale-postgres
+      DATA_PLATFORM_DB_PORT: "5432"
+      DATA_PLATFORM_DB_NAME: ${DATA_PLATFORM_DB_NAME:-maintenance_copilot_scale}
+      DATA_PLATFORM_DB_USER: ${DATA_PLATFORM_DB_USER:-maintenance_scale}
+      DATA_PLATFORM_DB_PASSWORD: ${DATA_PLATFORM_DB_PASSWORD:-maintenance_scale_local_only}
+      DATA_PLATFORM_STATEMENT_TIMEOUT_SECONDS: "30"
+      DATA_PLATFORM_DATA_ROOT: /app/data/scale
+      DATA_PLATFORM_OBJECT_STORE: local
+    depends_on:
+      stage9-scale-postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${STAGE10_API_PORT:-18082}:8000"
+    volumes:
+      - ./data:/app/data:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: ${STAGE10_API_MEMORY_LIMIT:-1g}
+    mem_reservation: ${STAGE10_API_MEMORY_RESERVATION:-256m}
+    restart: unless-stopped
+    networks:
+      - stage9-network
+
 networks:
   stage9-network:
     name: ai_maintenance_copilot_stage9_network_v1

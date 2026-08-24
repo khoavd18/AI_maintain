@@ -445,3 +445,17 @@ reference repository hoặc user files khác.
 - Airflow queued mãi: DAG phải unpaused, scheduler/dag-processor/API và hai
   PostgreSQL services phải healthy.
 - Disk dưới gate: stop trước generation; báo required margin, không prune/xóa.
+
+## Stage 10 continuation
+
+Sau khi Stage 9 đã đạt đúng 1.100.000 unique work orders và volume được giữ
+nguyên, tiếp tục multi-domain scale theo
+[stage10-domain-scale.md](stage10-domain-scale.md). Không chạy lại Stage 9
+generator, không reset tuple watermark và không dùng cleanup section ở trên.
+
+Stage 10 dùng Data Platform head `20260824_dp0003`, DAG
+`maintenance_domain_scale_pipeline`, generator
+`scripts/generate_domain_scale_data.ps1` và database benchmark hiện hữu. Exact
+counts/timings/checksums ở
+[benchmark-results-domain-scale.md](benchmark-results-domain-scale.md) và
+[benchmark-manifest-domain-scale.json](benchmark-manifest-domain-scale.json).

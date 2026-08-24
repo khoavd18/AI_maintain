@@ -743,3 +743,11 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def generate_domain_scale_dataset(**kwargs: Any) -> dict[str, Any]:
+    """Lazy Stage 10 extension while preserving the Stage 9 CLI and imports."""
+
+    from data_platform.domain_generator import generate_domain_scale_dataset as generate
+
+    return generate(**kwargs)

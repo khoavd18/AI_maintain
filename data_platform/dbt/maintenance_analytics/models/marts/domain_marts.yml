@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: site_reliability
+    columns:
+      - name: site_id
+        data_tests: [not_null, unique]
+      - name: work_order_count
+        data_tests: [not_null]
+      - name: status_event_count
+        data_tests: [not_null]
+
+  - name: ticket_sla
+    columns:
+      - name: site_id
+        data_tests: [not_null]
+      - name: priority
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [low, medium, high, critical]}
+      - name: ticket_count
+        data_tests: [not_null]
+
+  - name: inventory_consumption
+    columns:
+      - name: part_id
+        data_tests: [not_null]
+      - name: issued_quantity
+        data_tests: [not_null]
+
+  - name: maintenance_cost
+    columns:
+      - name: month_start_date
+        data_tests: [not_null]
+      - name: site_id
+        data_tests: [not_null]
+      - name: work_order_count
+        data_tests: [not_null]

@@ -1,0 +1,95 @@
+{
+  "schema_version": "stage10-benchmark-manifest-v1",
+  "dataset_schema_version": "stage10-domain-scale-v1",
+  "run_id": "stage10-domain-seed-20260824",
+  "seed": 20260824,
+  "batch_size": 50000,
+  "checksum_contract": "Each local raw manifest contains ordered per-file SHA-256 entries. The tracked manifest SHA-256 below transitively attests that complete list without committing synthetic CSV payloads.",
+  "baseline": {
+    "manifest_path": "data/scale/stage10-domain-seed-20260824/baseline/manifest.json",
+    "manifest_sha256": "37d5569f33b54cabb19285d855af543c14b3a6655f43ac9853a1bd62361b9caf",
+    "file_count": 87,
+    "bytes_excluding_manifest": 2084094135,
+    "generated_at": "2026-08-24T10:22:01.221586+00:00",
+    "duration_seconds": 423.151899,
+    "rows_per_second": 18072.04,
+    "entity_rows": {
+      "business_calendars": 1,
+      "inventory_movements": 1475000,
+      "part_categories": 10,
+      "sla_policies": 1,
+      "sla_policy_targets": 4,
+      "spare_parts": 25000,
+      "stock_locations": 200,
+      "ticket_escalation_events": 57750,
+      "ticket_links": 300000,
+      "ticket_sla_events": 833250,
+      "ticket_sla_states": 300000,
+      "tickets": 300000,
+      "units_of_measure": 1,
+      "work_order_costs": 1089000,
+      "work_order_status_history": 3267000
+    },
+    "logical_domain_rows": {
+      "ticket_events": 891000,
+      "tickets": 300000,
+      "spare_parts": 25000,
+      "inventory_movements": 1475000,
+      "work_order_costs": 1089000,
+      "work_order_status_history": 3267000
+    },
+    "copy_result": {
+      "rows": 7647217,
+      "duration_seconds": 706.494767,
+      "rows_per_second": 10824.17,
+      "skipped_files": 0
+    }
+  },
+  "incremental": {
+    "manifest_path": "data/scale/stage10-domain-seed-20260824/incremental/manifest.json",
+    "manifest_sha256": "a9f3448c323e334944931d32692706f5391349470e36bec5ee28d89b8acfb3c7",
+    "file_count": 58,
+    "bytes_excluding_manifest": 22470540,
+    "generated_at": "2026-08-24T10:24:13.135728+00:00",
+    "duration_seconds": 121.751656,
+    "rows_per_second": 667.34,
+    "entity_rows": {
+      "inventory_movements": 25000,
+      "spare_part_updates": 250,
+      "ticket_escalation_events": 2250,
+      "ticket_sla_events": 6750,
+      "ticket_updates": 3000,
+      "work_order_costs": 11000,
+      "work_order_status_history": 33000
+    },
+    "logical_domain_rows": {
+      "ticket_events": 9000,
+      "ticket_updates": 3000,
+      "spare_part_updates": 250,
+      "inventory_movements": 25000,
+      "work_order_costs": 11000,
+      "work_order_status_history": 33000
+    },
+    "copy_result": {
+      "rows": 81250,
+      "duration_seconds": 15.494502,
+      "rows_per_second": 5243.8,
+      "skipped_files": 0
+    }
+  },
+  "final_counts": {
+    "work_orders": 1100000,
+    "work_order_status_history": 3300000,
+    "tickets": 300000,
+    "ticket_events": 900000,
+    "spare_parts": 25000,
+    "inventory_movements": 1500000,
+    "work_order_costs": 1100000
+  },
+  "benchmark_artifacts": [
+    {"path": "data/scale/stage10-query-benchmark.json", "bytes": 60057, "sha256": "5684e094c384320125b58ea7507dd9631b507774e37ef1a621d0838a43e57fa7"},
+    {"path": "data/scale/stage10-query-benchmark-after.json", "bytes": 58694, "sha256": "c180e2b15fdf7e60134a28b99b12e0639410d6728a9b6228f01d4bb29fb19c0d"},
+    {"path": "data/scale/stage10-api-benchmark.json", "bytes": 2495, "sha256": "17e6dd96066e619a934cfe773d762306921332a7d6affd8f5b482c07b98774a8"},
+    {"path": "data/scale/stage10-evidence-export.jsonl", "bytes": 2452, "sha256": "fdb722a7b3150e18a31a8b841587889c3576202f30a0b6db7c91ad71a9831da9"}
+  ]
+}

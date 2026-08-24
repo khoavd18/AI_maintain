@@ -108,3 +108,31 @@ reconcile mà không gọi RAG/LLM. Điều này không thay cho RAG quality ho�
 evaluation. Xem integration mapping ở
 [data-platform-integration.md](data-platform-integration.md) và scale procedure ở
 [scale-test-1m.md](scale-test-1m.md).
+
+## Stage 10 governed evidence update
+
+Stage 10 thêm một deterministic question router: analytical intents được route
+đến exact structured capability; semantic intents vẫn đi qua evidence policy.
+Router không nhận hoặc sinh SQL.
+
+`DomainAnalyticsAdapter` mở rộng structured catalog thành sáu capability:
+maintenance summary, site reliability, ticket SLA, technician workload,
+inventory consumption và maintenance cost variance. Date/UUID/limit đều được
+validate/bind; response tối đa 200 rows và transaction read-only.
+
+Local evidence export chỉ allow-list:
+
+- manuals và SOPs;
+- resolution summaries;
+- technician notes;
+- failure descriptions.
+
+Export loại candidate marked sensitive/ineligible, email/phone-like content,
+oversized text và duplicate fingerprint; giữ source ID/update time/provenance và
+enforce maximum candidates. Run Stage 10 xuất 5 candidates trong bound 1.000,
+SHA-256 `fdb722a7b3150e18a31a8b841587889c3576202f30a0b6db7c91ad71a9831da9`,
+`embedding_calls=0`, `external_api_calls=0`.
+
+Ticket, inventory, cost và status facts không được bulk vectorize. Synthetic free
+text chỉ trở thành candidate sau allow-list nói trên; export local không đồng
+nghĩa đã index Qdrant hoặc đã được duyệt cho production RAG.

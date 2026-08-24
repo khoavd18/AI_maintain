@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: fact_work_order_status_duration
+    columns:
+      - name: event_id
+        data_tests: [not_null, unique]
+      - name: work_order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('fact_work_order'), field: work_order_id}
+      - name: status
+        data_tests: [not_null]
+      - name: duration_seconds
+        data_tests: [not_null]
+
+  - name: fact_ticket_sla
+    columns:
+      - name: ticket_id
+        data_tests: [not_null, unique]
+      - name: site_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_site'), field: site_id}
+      - name: event_count
+        data_tests: [not_null]
+
+  - name: dim_spare_part
+    columns:
+      - name: part_key
+        data_tests: [not_null, unique]
+      - name: part_id
+        data_tests: [not_null, unique]
+      - name: part_number
+        data_tests: [not_null, unique]
+
+  - name: fact_inventory_movement
+    columns:
+      - name: movement_id
+        data_tests: [not_null, unique]
+      - name: part_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_spare_part'), field: part_key}
+      - name: movement_type
+        data_tests: [not_null]
+
+  - name: fact_work_order_cost
+    columns:
+      - name: work_order_id
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments: {to: ref('fact_work_order'), field: work_order_id}
+      - name: work_order_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('fact_work_order'), field: work_order_key}
+      - name: currency_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [VND]}

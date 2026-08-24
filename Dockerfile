@@ -16,6 +16,7 @@ RUN useradd --create-home --uid 10001 appuser
 
 COPY --chown=appuser:appuser pyproject.toml README.md ./
 COPY --chown=appuser:appuser src ./src
+COPY --chown=appuser:appuser data_platform ./data_platform
 RUN python -m pip install --no-cache-dir "."
 
 COPY --chown=appuser:appuser alembic.ini ./

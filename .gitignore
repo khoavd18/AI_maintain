@@ -21,6 +21,7 @@ data/processed/*
 !data/processed/.gitkeep
 data/analytics_input/
 data/attachments/
+# Stage 9/10 generated CSV, immutable objects, query/API evidence and local exports.
 data/scale/
 
 # Data Platform runtime artifacts; source projects and benchmark evidence in docs stay tracked.

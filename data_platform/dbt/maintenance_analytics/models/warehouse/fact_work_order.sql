@@ -7,6 +7,10 @@
         indexes=[
             {'columns': ['work_order_id'], 'unique': true},
             {'columns': ['source_updated_at', 'work_order_id']}
+        ],
+        post_hook=[
+            "create index if not exists ix_fact_work_order_site_created "
+            ~ "on {{ this }} (site_id, created_at, work_order_id)"
         ]
     )
 }}

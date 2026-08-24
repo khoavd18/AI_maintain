@@ -195,3 +195,136 @@ sources:
             data_tests: [not_null]
           - name: source_system
             data_tests: [not_null]
+
+      - name: work_order_status_history
+        config: {freshness: null}
+        columns:
+          - name: ingestion_batch_id
+            data_tests: [not_null]
+          - name: event_id
+            data_tests: [not_null, unique]
+          - name: work_order_id
+            data_tests: [not_null]
+          - name: sequence_number
+            data_tests: [not_null]
+          - name: status
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [planned, assigned, in_progress, on_hold, completed, verified, cancelled]
+          - name: transitioned_at
+            data_tests: [not_null]
+          - name: source_available_at
+            data_tests: [not_null]
+          - name: source_extracted_at
+            data_tests: [not_null]
+          - name: ingested_at
+            data_tests: [not_null]
+
+      - name: tickets
+        config: {freshness: null}
+        columns:
+          - name: ingestion_batch_id
+            data_tests: [not_null]
+          - name: ticket_id
+            data_tests: [not_null]
+          - name: asset_id
+            data_tests: [not_null]
+          - name: site_id
+            data_tests: [not_null]
+          - name: severity
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [low, medium, high, critical]
+          - name: status
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [open, assigned, in_progress, waiting, resolved, closed, cancelled, reopened]
+          - name: opened_at
+            data_tests: [not_null]
+          - name: source_available_at
+            data_tests: [not_null]
+          - name: source_extracted_at
+            data_tests: [not_null]
+          - name: ingested_at
+            data_tests: [not_null]
+
+      - name: ticket_events
+        config: {freshness: null}
+        columns:
+          - name: event_id
+            data_tests: [not_null, unique]
+          - name: ticket_id
+            data_tests: [not_null]
+          - name: event_domain
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [sla, escalation]
+          - name: occurred_at
+            data_tests: [not_null]
+          - name: source_available_at
+            data_tests: [not_null]
+
+      - name: spare_parts
+        config: {freshness: null}
+        columns:
+          - name: part_id
+            data_tests: [not_null]
+          - name: part_number
+            data_tests: [not_null]
+          - name: lifecycle_status
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values: [active, inactive, archived]
+          - name: source_available_at
+            data_tests: [not_null]
+
+      - name: inventory_movements
+        config: {freshness: null}
+        columns:
+          - name: movement_id
+            data_tests: [not_null, unique]
+          - name: part_id
+            data_tests: [not_null]
+          - name: quantity
+            data_tests: [not_null]
+          - name: movement_type
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values:
+                      - opening_balance
+                      - receipt
+                      - issue
+                      - return
+                      - transfer_out
+                      - transfer_in
+                      - adjustment_increase
+                      - adjustment_decrease
+                      - damaged_scrapped
+          - name: source_available_at
+            data_tests: [not_null]
+
+      - name: work_order_costs
+        config: {freshness: null}
+        columns:
+          - name: work_order_id
+            data_tests: [not_null]
+          - name: total_estimated_cost
+            data_tests: [not_null]
+          - name: total_actual_cost
+            data_tests: [not_null]
+          - name: cost_variance
+            data_tests: [not_null]
+          - name: source_available_at
+            data_tests: [not_null]

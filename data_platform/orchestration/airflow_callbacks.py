@@ -88,3 +88,62 @@ def record_pipeline_failure(context: Mapping[str, Any]) -> None:
             _sanitize_error(exception),
         ]
     )
+
+
+def record_domain_pipeline_failure(context: Mapping[str, Any]) -> None:
+    """Record a terminal Stage 10 DAG failure in its independent audit table."""
+
+    exception = context.get("exception")
+    run_id = _context_value(context, "run_id", "unknown_run")
+    task_id = str(_task_value(context, "task_id", "dag_run"))
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "data_platform.domain_pipeline",
+                "audit-fail",
+                "--run-id",
+                run_id,
+                "--step",
+                task_id,
+                "--error",
+                _sanitize_error(exception),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_AUDIT_TIMEOUT_SECONDS,
+        )
+        if result.returncode:
+            logger.error("Domain pipeline audit command failed with exit code %s.", result.returncode)
+    except Exception:
+        logger.exception("Unable to invoke the domain pipeline audit command.")
+
+
+def record_domain_task_retry(context: Mapping[str, Any]) -> None:
+    """Persist one sanitized Stage 10 task retry without payloads or credentials."""
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "data_platform.domain_pipeline",
+                "audit-retry",
+                "--run-id",
+                _context_value(context, "run_id", "unknown_run"),
+                "--step",
+                str(_task_value(context, "task_id", "unknown_task")),
+                "--error",
+                _sanitize_error(context.get("exception")),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_AUDIT_TIMEOUT_SECONDS,
+        )
+        if result.returncode:
+            logger.error("Domain retry audit command failed with exit code %s.", result.returncode)
+    except Exception:
+        logger.exception("Unable to invoke the domain retry audit command.")

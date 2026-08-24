@@ -1,0 +1,20 @@
+select
+    movement_id,
+    upper(btrim(movement_number)) as movement_number,
+    operation_id,
+    part_id,
+    stock_location_id,
+    quantity,
+    lower(btrim(movement_type)) as movement_type,
+    btrim(business_reference) as business_reference,
+    actor_user_id,
+    occurred_at,
+    work_order_id,
+    unit_cost_snapshot,
+    resulting_on_hand_quantity,
+    resulting_reserved_quantity,
+    source_available_at,
+    source_extracted_at,
+    ingested_at,
+    ingestion_batch_id
+from {{ source('raw', 'inventory_movements') }}

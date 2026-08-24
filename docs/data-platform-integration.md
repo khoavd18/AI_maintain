@@ -145,3 +145,38 @@ quality hoặc business impact. Xem runbook đầy đủ tại
 [scale-test-1m.md](scale-test-1m.md), measured report tại
 [benchmark-results-1m.md](benchmark-results-1m.md), và boundary AI tại
 [structured-data-vs-rag.md](structured-data-vs-rag.md).
+
+## Stage 10 extension
+
+Stage 10 supersedes only the Stage 9 “not ingested” analytical limitations; it
+does not change application ownership. Data Platform revision `20260824_dp0003`
+adds compatibility contracts for synthetic status history, ticket/work-order
+links and work-order costs, plus six source/raw/staging pipelines with independent
+watermarks.
+
+| Domain | Analytical path | Final grain/count |
+|---|---|---:|
+| Status history | `analytics_compat` → source/raw/staging → `fact_work_order_status_duration` | event / 3.300.000 |
+| Tickets/events | source/raw/staging → `fact_ticket_sla` | ticket 300.000; event 900.000 staging |
+| Spare parts | source/raw/staging → `dim_spare_part` | part / 25.000 |
+| Inventory | source/raw/staging → `fact_inventory_movement` | movement / 1.500.000 |
+| Costs | `analytics_compat` → source/raw/staging → `fact_work_order_cost` | work order / 1.100.000 |
+
+Các cost/status records này là synthetic analytical compatibility data trong
+database scale; chúng không tuyên bố application ORM đã có canonical cost ledger
+hay canonical work-order event store. Application Alembic vẫn ở `20260726_0008`.
+
+DAG `maintenance_domain_scale_pipeline` có 19 task instances: sáu extractors,
+sáu raw loaders, dbt/reconciliation và atomic watermark/audit gates. XCom chỉ giữ
+metadata nhỏ. Watermark version 2 ở cả sáu domain sau baseline + incremental;
+empty run không advance.
+
+Read boundary mới là `DomainAnalyticsAdapter` và authenticated route
+`/analytics/domain/{query_name}`. Catalog có sáu exact names, parameter binding,
+read-only transaction, 366-day/200-row bounds, 30-second statement timeout và
+per-worker concurrency guard. Không có arbitrary hoặc model-generated SQL.
+
+Measured counts, recovery và load results ở
+[stage10-domain-scale.md](stage10-domain-scale.md),
+[reliability-failure-recovery.md](reliability-failure-recovery.md) và
+[analytics-api-load-test.md](analytics-api-load-test.md).

@@ -1,0 +1,218 @@
+{
+  "schema_version": "stage10-benchmark-results-v1",
+  "status": "complete",
+  "branch": "feat/stage10-domain-scale",
+  "stage9_ancestor": "9d556946d33bb7340dc28feee33b2fb5cebc5c02",
+  "database": "maintenance_copilot_benchmark_scale",
+  "dataset_run_id": "stage10-domain-seed-20260824",
+  "seed": 20260824,
+  "synthetic_data": true,
+  "counts": {
+    "work_orders": 1100000,
+    "work_order_status_history": 3300000,
+    "tickets": 300000,
+    "ticket_events": 900000,
+    "spare_parts": 25000,
+    "inventory_movements": 1500000,
+    "work_order_costs": 1100000
+  },
+  "layer_reconciliation": {
+    "source_raw_unique_staging_fact_or_dimension_equal": true,
+    "ticket_events_fact_not_applicable": "ticket SLA fact uses ticket grain",
+    "integrity_violations": {
+      "status_final_mismatch": 0,
+      "status_consecutive_duplicates": 0,
+      "status_negative_duration": 0,
+      "ticket_resolution_evidence": 0,
+      "ticket_orphan_events": 0,
+      "inventory_operation_mismatch": 0,
+      "inventory_invalid_balance": 0,
+      "cost_reconciliation": 0
+    }
+  },
+  "generation": {
+    "baseline": {
+      "duration_seconds": 423.151899,
+      "rows_per_second": 18072.04,
+      "manifest_rows": 7647217,
+      "file_count": 87,
+      "bytes": 2084094135
+    },
+    "incremental": {
+      "duration_seconds": 121.751656,
+      "rows_per_second": 667.34,
+      "manifest_rows": 81250,
+      "file_count": 58,
+      "bytes": 22470540
+    }
+  },
+  "copy_load": {
+    "baseline": {
+      "rows": 7647217,
+      "duration_seconds": 706.494767,
+      "rows_per_second": 10824.17
+    },
+    "incremental": {
+      "rows": 81250,
+      "duration_seconds": 15.494502,
+      "rows_per_second": 5243.8
+    }
+  },
+  "airflow": {
+    "dag_id": "maintenance_domain_scale_pipeline",
+    "task_instances_per_run": 19,
+    "runs": [
+      {
+        "run_id": "stage10_baseline_20260824T103700Z",
+        "phase": "baseline",
+        "state": "success",
+        "tasks_success": 19,
+        "retries": 0,
+        "duration_seconds": 886.6,
+        "dbt_run_seconds": 103.882218,
+        "dbt_test_seconds": 92.222716,
+        "reconcile_seconds": 4.727941
+      },
+      {
+        "run_id": "stage10_incremental_fault_20260824T105500Z",
+        "phase": "incremental",
+        "state": "success",
+        "tasks_success": 19,
+        "retries": 3,
+        "resumed_duration_seconds": 235.6,
+        "audit_wall_duration_seconds": 412.9,
+        "dbt_run_seconds": 60.721042,
+        "dbt_test_seconds": 159.1,
+        "reconcile_seconds": 8.6503,
+        "fault_step": "load_raw_ticket_events",
+        "watermark_advanced_once": true
+      },
+      {
+        "run_id": "stage10_empty_20260824T110200Z",
+        "phase": "empty",
+        "state": "success",
+        "tasks_success": 19,
+        "retries": 0,
+        "duration_seconds": 223.9,
+        "dbt_run_seconds": 51.348109,
+        "dbt_test_seconds": 136.175247,
+        "reconcile_seconds": 11.205003,
+        "all_extracted_and_inserted_counts": 0,
+        "watermark_version": 2
+      }
+    ]
+  },
+  "dbt": {
+    "incremental_models": 6,
+    "table_models": 10,
+    "view_models": 10,
+    "data_tests": 433,
+    "build_total_nodes": 459,
+    "passed": 459,
+    "warned": 0,
+    "errored": 0,
+    "skipped": 0,
+    "duration_seconds": 154.21
+  },
+  "query_benchmark": {
+    "repeats": 5,
+    "latency_ms": {
+      "latest_status": {"before_p50": 1.0409, "before_p95": 2.3899, "after_p50": 0.737, "after_p95": 1.7355},
+      "time_in_status": {"before_p50": 23.9848, "before_p95": 25.4687, "after_p50": 9.9713, "after_p95": 10.9847},
+      "ticket_sla_breaches": {"before_p50": 6.7151, "before_p95": 8.2124, "after_p50": 3.0165, "after_p95": 3.9122},
+      "escalated_unresolved_tickets": {"before_p50": 76.0729, "before_p95": 78.9693, "after_p50": 1.0649, "after_p95": 1.6225},
+      "inventory_balance": {"before_p50": 13.735, "before_p95": 14.3788, "after_p50": 6.3534, "after_p95": 7.4945},
+      "high_consumption_parts": {"before_p50": 198.3775, "before_p95": 268.947, "after_p50": 8.1481, "after_p95": 9.6309},
+      "work_order_cost_variance": {"before_p50": 5.0286, "before_p95": 9.7354, "after_p50": 1.5167, "after_p95": 1.8832},
+      "site_reliability": {"before_p50": 6.7456, "before_p95": 8.7562, "after_p50": 1.0767, "after_p95": 1.3361},
+      "combined_work_order_ticket_cost": {"before_p50": 407.7664, "before_p95": 840.3066, "after_p50": 21.4518, "after_p95": 23.7709}
+    },
+    "partitioning_implemented": false,
+    "before_artifact_sha256": "5684e094c384320125b58ea7507dd9631b507774e37ef1a621d0838a43e57fa7",
+    "after_artifact_sha256": "c180e2b15fdf7e60134a28b99b12e0639410d6728a9b6228f01d4bb29fb19c0d"
+  },
+  "api_benchmark": {
+    "authentication": "real bearer token from /auth/login",
+    "site_scope": "00020000-0000-0000-0000-000000000001",
+    "date_range": ["2024-01-01", "2024-12-31"],
+    "pipeline_state": "idle",
+    "production_sla_claim": false,
+    "scenarios": [
+      {
+        "clients": 25,
+        "requests": 100,
+        "duration_seconds": 3.313968,
+        "requests_per_second": 30.1753,
+        "p50_ms": 1651.3223,
+        "p95_ms": 2814.8447,
+        "p99_ms": 3090.798,
+        "maximum_ms": 3092.6758,
+        "success": 100,
+        "errors": 0,
+        "postgres_connections_maximum_observed": 27
+      },
+      {
+        "clients": 50,
+        "requests": 200,
+        "duration_seconds": 8.441171,
+        "requests_per_second": 23.6934,
+        "p50_ms": 4237.2542,
+        "p95_ms": 7588.8775,
+        "p99_ms": 7889.8302,
+        "maximum_ms": 8003.7568,
+        "success": 200,
+        "errors": 0,
+        "postgres_connections_maximum_observed": 30
+      }
+    ],
+    "artifact_sha256": "17e6dd96066e619a934cfe773d762306921332a7d6affd8f5b482c07b98774a8"
+  },
+  "rag_evidence_export": {
+    "candidate_count": 5,
+    "max_candidates": 1000,
+    "embedding_calls": 0,
+    "external_api_calls": 0,
+    "sha256": "fdb722a7b3150e18a31a8b841587889c3576202f30a0b6db7c91ad71a9831da9"
+  },
+  "storage": {
+    "database_bytes_after_query_build": 10945451699,
+    "database_bytes_final_audit": 10945558195,
+    "docker_images": "17.77GB",
+    "docker_local_volumes": "15.52GB",
+    "docker_build_cache": "11.94GB",
+    "host_c_free_gib": 26.91,
+    "host_d_free_gib": 44.78
+  },
+  "verification": {
+    "backend_passed": 1365,
+    "backend_skipped": 87,
+    "postgres_integration_passed": 87,
+    "frontend_passed": 141,
+    "dbt_passed": 459,
+    "automated_checks_passed": 2052,
+    "ruff": "pass",
+    "compileall": "pass",
+    "frontend_lint": "pass",
+    "frontend_typecheck": "pass",
+    "frontend_build": "pass",
+    "compose_configs_passed": 4,
+    "airflow_import_errors": 0,
+    "application_alembic_head": "20260726_0008",
+    "application_alembic_check": "pass",
+    "data_platform_alembic_head": "20260824_dp0003",
+    "data_platform_alembic_check": "not_applicable_target_metadata_none",
+    "secret_scan_files": 1021,
+    "secret_scan_high_confidence_findings": 0,
+    "gitignore_validation": "pass"
+  },
+  "safety": {
+    "aws_mutations": "none",
+    "external_llm_calls": 0,
+    "embedding_calls": 0,
+    "qdrant_bulk_load": false,
+    "volumes_deleted": false,
+    "commit_created": false,
+    "tag_created": false,
+    "push_executed": false
+  }
+}

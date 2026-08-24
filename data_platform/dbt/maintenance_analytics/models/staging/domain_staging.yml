@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: stg_work_order_status_history
+    columns:
+      - name: event_id
+        data_tests: [not_null, unique]
+      - name: work_order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('stg_work_orders'), field: work_order_id}
+      - name: sequence_number
+        data_tests: [not_null]
+      - name: status
+        data_tests: [not_null]
+      - name: duration_seconds
+        data_tests: [not_null]
+
+  - name: stg_tickets
+    columns:
+      - name: ticket_id
+        data_tests: [not_null, unique]
+      - name: asset_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('stg_assets'), field: asset_id}
+      - name: site_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('stg_sites'), field: site_id}
+      - name: work_order_id
+        data_tests:
+          - relationships:
+              arguments: {to: ref('stg_work_orders'), field: work_order_id}
+
+  - name: stg_ticket_events
+    columns:
+      - name: event_id
+        data_tests: [not_null, unique]
+      - name: ticket_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('stg_tickets'), field: ticket_id}
+
+  - name: stg_spare_parts
+    columns:
+      - name: part_id
+        data_tests: [not_null, unique]
+      - name: part_number
+        data_tests: [not_null, unique]
+
+  - name: stg_inventory_movements
+    columns:
+      - name: movement_id
+        data_tests: [not_null, unique]
+      - name: part_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('stg_spare_parts'), field: part_id}
+      - name: quantity
+        data_tests: [not_null]
+
+  - name: stg_work_order_costs
+    columns:
+      - name: work_order_id
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments: {to: ref('stg_work_orders'), field: work_order_id}
