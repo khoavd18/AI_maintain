@@ -23,6 +23,9 @@ class DataPlatformSettings:
     connect_timeout_seconds: int = 10
     statement_timeout_seconds: int = 1_800
     batch_size: int = 50_000
+    api_query_slots: int = 8
+    api_cache_ttl_seconds: int = 0
+    api_cache_max_entries: int = 256
     data_root: Path = Path("data/scale")
     object_store: str = "local"
     s3_bucket: str | None = None
@@ -42,6 +45,13 @@ class DataPlatformSettings:
                 os.getenv("DATA_PLATFORM_STATEMENT_TIMEOUT_SECONDS", "1800")
             ),
             batch_size=int(os.getenv("DATA_PLATFORM_BATCH_SIZE", "50000")),
+            api_query_slots=int(os.getenv("DATA_PLATFORM_API_QUERY_SLOTS", "8")),
+            api_cache_ttl_seconds=int(
+                os.getenv("DATA_PLATFORM_API_CACHE_TTL_SECONDS", "0")
+            ),
+            api_cache_max_entries=int(
+                os.getenv("DATA_PLATFORM_API_CACHE_MAX_ENTRIES", "256")
+            ),
             data_root=Path(os.getenv("DATA_PLATFORM_DATA_ROOT", "data/scale")),
             object_store=os.getenv("DATA_PLATFORM_OBJECT_STORE", "local").lower(),
             s3_bucket=os.getenv("DATA_PLATFORM_S3_BUCKET") or None,
@@ -62,6 +72,16 @@ class DataPlatformSettings:
             raise ValueError("Data Platform database port is invalid.")
         if self.batch_size < 1_000 or self.batch_size > 200_000:
             raise ValueError("DATA_PLATFORM_BATCH_SIZE must be between 1,000 and 200,000.")
+        if not 1 <= self.api_query_slots <= 32:
+            raise ValueError("DATA_PLATFORM_API_QUERY_SLOTS must be between 1 and 32.")
+        if not 0 <= self.api_cache_ttl_seconds <= 60:
+            raise ValueError(
+                "DATA_PLATFORM_API_CACHE_TTL_SECONDS must be between 0 and 60."
+            )
+        if not 1 <= self.api_cache_max_entries <= 4_096:
+            raise ValueError(
+                "DATA_PLATFORM_API_CACHE_MAX_ENTRIES must be between 1 and 4,096."
+            )
         if self.object_store not in {"local", "s3"}:
             raise ValueError("DATA_PLATFORM_OBJECT_STORE must be 'local' or 's3'.")
         if self.object_store == "s3" and not self.s3_bucket:

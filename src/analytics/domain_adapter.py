@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager
+from collections import OrderedDict
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, RLock
+import time
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -19,7 +21,133 @@ MAX_DOMAIN_RESULTS = 200
 MAX_DATE_RANGE_DAYS = 366
 DOMAIN_STATEMENT_TIMEOUT_MS = 30_000
 MAX_CONCURRENT_DOMAIN_QUERIES_PER_PROCESS = 8
-_DOMAIN_QUERY_SLOTS = BoundedSemaphore(MAX_CONCURRENT_DOMAIN_QUERIES_PER_PROCESS)
+
+_CacheKey = tuple[str, str, str, str, str, int]
+
+
+class DomainAnalyticsRuntime:
+    """Own bounded per-process query concurrency, cache, and safe metrics."""
+
+    def __init__(
+        self,
+        *,
+        query_slots: int,
+        cache_ttl_seconds: int,
+        cache_max_entries: int,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if not 1 <= query_slots <= 32:
+            raise ValueError("query_slots must be between 1 and 32.")
+        if not 0 <= cache_ttl_seconds <= 60:
+            raise ValueError("cache_ttl_seconds must be between 0 and 60.")
+        if not 1 <= cache_max_entries <= 4_096:
+            raise ValueError("cache_max_entries must be between 1 and 4,096.")
+        self.query_slots = query_slots
+        self.cache_ttl_seconds = cache_ttl_seconds
+        self.cache_max_entries = cache_max_entries
+        self._clock = clock
+        self._slots = BoundedSemaphore(query_slots)
+        self._lock = RLock()
+        self._cache: OrderedDict[
+            _CacheKey, tuple[float, tuple[dict[str, Any], ...]]
+        ] = OrderedDict()
+        self._active_queries = 0
+        self._peak_active_queries = 0
+        self._slot_acquisitions = 0
+        self._slot_wait_ms = 0.0
+        self._query_executions = 0
+        self._query_time_ms = 0.0
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._cache_evictions = 0
+
+    @property
+    def cache_enabled(self) -> bool:
+        return self.cache_ttl_seconds > 0
+
+    def cached(self, key: _CacheKey) -> list[dict[str, Any]] | None:
+        if not self.cache_enabled:
+            return None
+        now = self._clock()
+        with self._lock:
+            entry = self._cache.get(key)
+            if entry is None:
+                return None
+            expires_at, rows = entry
+            if expires_at <= now:
+                del self._cache[key]
+                return None
+            self._cache.move_to_end(key)
+            self._cache_hits += 1
+            return [dict(row) for row in rows]
+
+    def record_cache_miss(self) -> None:
+        with self._lock:
+            self._cache_misses += 1
+
+    def store(self, key: _CacheKey, rows: list[dict[str, Any]]) -> None:
+        if not self.cache_enabled:
+            return
+        expires_at = self._clock() + self.cache_ttl_seconds
+        stored = tuple(dict(row) for row in rows)
+        with self._lock:
+            expired = [
+                cached_key
+                for cached_key, (cached_until, _) in self._cache.items()
+                if cached_until <= self._clock()
+            ]
+            for cached_key in expired:
+                del self._cache[cached_key]
+            self._cache[key] = (expires_at, stored)
+            self._cache.move_to_end(key)
+            while len(self._cache) > self.cache_max_entries:
+                self._cache.popitem(last=False)
+                self._cache_evictions += 1
+
+    @contextmanager
+    def query_slot(self) -> Iterator[None]:
+        waiting_at = self._clock()
+        self._slots.acquire()
+        waited_ms = (self._clock() - waiting_at) * 1_000
+        with self._lock:
+            self._slot_acquisitions += 1
+            self._slot_wait_ms += waited_ms
+            self._active_queries += 1
+            self._peak_active_queries = max(
+                self._peak_active_queries, self._active_queries
+            )
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._active_queries -= 1
+            self._slots.release()
+
+    def record_query(self, duration_ms: float) -> None:
+        with self._lock:
+            self._query_executions += 1
+            self._query_time_ms += duration_ms
+
+    def snapshot(self) -> dict[str, object]:
+        with self._lock:
+            return {
+                "query_slots": self.query_slots,
+                "active_queries": self._active_queries,
+                "peak_active_queries": self._peak_active_queries,
+                "slot_acquisitions": self._slot_acquisitions,
+                "slot_wait_ms": round(self._slot_wait_ms, 3),
+                "query_executions": self._query_executions,
+                "query_time_ms": round(self._query_time_ms, 3),
+                "cache": {
+                    "enabled": self.cache_enabled,
+                    "ttl_seconds": self.cache_ttl_seconds,
+                    "max_entries": self.cache_max_entries,
+                    "entries": len(self._cache),
+                    "hits": self._cache_hits,
+                    "misses": self._cache_misses,
+                    "evictions": self._cache_evictions,
+                },
+            }
 
 
 class DomainAnalyticsQuery(StrEnum):
@@ -263,9 +391,15 @@ class DomainAnalyticsAdapter:
         connection_factory: Callable[..., AbstractContextManager[_Connection]] = (
             _connection_factory
         ),
+        runtime: DomainAnalyticsRuntime | None = None,
     ) -> None:
         self._settings = settings.validated()
         self._connection_factory = connection_factory
+        self._runtime = runtime or DomainAnalyticsRuntime(
+            query_slots=self._settings.api_query_slots,
+            cache_ttl_seconds=self._settings.api_cache_ttl_seconds,
+            cache_max_entries=self._settings.api_cache_max_entries,
+        )
 
     def execute(
         self,
@@ -275,6 +409,7 @@ class DomainAnalyticsAdapter:
         start_date: date | str,
         end_date: date | str,
         limit: int = 100,
+        authorization_scope: UUID | str | None = None,
     ) -> list[dict[str, Any]]:
         selected = _select_query(query)
         parameters = {
@@ -289,16 +424,74 @@ class DomainAnalyticsAdapter:
             raise InvalidDomainQueryError(
                 f"Date range must not exceed {MAX_DATE_RANGE_DAYS} days."
             )
-        with _DOMAIN_QUERY_SLOTS:
-            with self._connection_factory(self._settings, read_only=True) as connection:
-                connection.execute(
-                    "SELECT set_config('statement_timeout', %(timeout_ms)s, true)",
-                    {"timeout_ms": str(DOMAIN_STATEMENT_TIMEOUT_MS)},
+        cache_key = (
+            _cache_key(selected, parameters, authorization_scope)
+            if self._runtime.cache_enabled
+            else None
+        )
+        if cache_key is not None:
+            cached = self._runtime.cached(cache_key)
+            if cached is not None:
+                return cached
+        with self._runtime.query_slot():
+            if cache_key is not None:
+                cached = self._runtime.cached(cache_key)
+                if cached is not None:
+                    return cached
+                self._runtime.record_cache_miss()
+            query_started = time.perf_counter()
+            try:
+                with self._connection_factory(self._settings, read_only=True) as connection:
+                    connection.execute(
+                        "SELECT set_config('statement_timeout', %(timeout_ms)s, true)",
+                        {"timeout_ms": str(DOMAIN_STATEMENT_TIMEOUT_MS)},
+                    )
+                    cursor = connection.execute(_QUERY_SPECS[selected].statement, parameters)
+                    rows = list(cursor.fetchmany(parameters["limit"] + 1))[
+                        : parameters["limit"]
+                    ]
+                    columns = _column_names(cursor.description)
+            finally:
+                self._runtime.record_query(
+                    (time.perf_counter() - query_started) * 1_000
                 )
-                cursor = connection.execute(_QUERY_SPECS[selected].statement, parameters)
-                rows = list(cursor.fetchmany(parameters["limit"] + 1))[: parameters["limit"]]
-                columns = _column_names(cursor.description)
-        return [dict(zip(columns, row, strict=True)) for row in rows]
+            result = [dict(zip(columns, row, strict=True)) for row in rows]
+            if cache_key is not None:
+                self._runtime.store(cache_key, result)
+            return result
+
+    def runtime_snapshot(self) -> dict[str, object]:
+        """Return aggregate process-local metrics without query or identity labels."""
+
+        return self._runtime.snapshot()
+
+
+def _cache_key(
+    query: DomainAnalyticsQuery,
+    parameters: Mapping[str, object],
+    authorization_scope: UUID | str | None,
+) -> _CacheKey | None:
+    if authorization_scope is None:
+        return None
+    scope = str(authorization_scope).strip()
+    if not scope or len(scope) > 200:
+        raise InvalidDomainQueryError("authorization_scope must be a bounded identity.")
+    site_id = parameters["site_id"]
+    start_date = parameters["start_date"]
+    end_date = parameters["end_date"]
+    limit = parameters["limit"]
+    if not isinstance(start_date, date) or not isinstance(end_date, date):
+        raise RuntimeError("Validated analytics cache dates are invalid.")
+    if not isinstance(limit, int):
+        raise RuntimeError("Validated analytics cache limit is invalid.")
+    return (
+        scope,
+        query.value,
+        str(site_id or ""),
+        start_date.isoformat(),
+        end_date.isoformat(),
+        limit,
+    )
 
 
 def _select_query(query: DomainAnalyticsQuery | str) -> DomainAnalyticsQuery:
@@ -362,7 +555,9 @@ __all__ = [
     "APPROVED_DOMAIN_QUERIES",
     "DomainAnalyticsAdapter",
     "DomainAnalyticsQuery",
+    "DomainAnalyticsRuntime",
     "InvalidDomainQueryError",
+    "MAX_CONCURRENT_DOMAIN_QUERIES_PER_PROCESS",
     "MAX_DATE_RANGE_DAYS",
     "MAX_DOMAIN_RESULTS",
     "UnsupportedDomainQueryError",

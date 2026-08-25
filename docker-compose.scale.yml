@@ -227,14 +227,14 @@ services:
       - --port
       - "8000"
       - --workers
-      - "2"
+      - ${STAGE11_API_WORKERS:-2}
     environment:
       APP_ENVIRONMENT: development
       STORAGE_BACKEND: postgresql
       DATABASE_URL: postgresql+psycopg://maintenance_scale:${DATA_PLATFORM_DB_PASSWORD:-maintenance_scale_local_only}@scale-postgres:5432/${DATA_PLATFORM_DB_NAME:-maintenance_copilot_scale}
       DATABASE_CONNECT_TIMEOUT_SECONDS: "10"
-      DATABASE_POOL_SIZE: "8"
-      DATABASE_MAX_OVERFLOW: "4"
+      DATABASE_POOL_SIZE: ${STAGE11_API_DATABASE_POOL_SIZE:-6}
+      DATABASE_MAX_OVERFLOW: ${STAGE11_API_DATABASE_MAX_OVERFLOW:-0}
       DATABASE_POOL_TIMEOUT_SECONDS: "30"
       DATABASE_STATEMENT_TIMEOUT_SECONDS: "30"
       TOKEN_SIGNING_SECRET: ${STAGE10_TOKEN_SIGNING_SECRET:-stage10-local-token-signing-secret-change-before-sharing}
@@ -247,6 +247,9 @@ services:
       DATA_PLATFORM_DB_USER: ${DATA_PLATFORM_DB_USER:-maintenance_scale}
       DATA_PLATFORM_DB_PASSWORD: ${DATA_PLATFORM_DB_PASSWORD:-maintenance_scale_local_only}
       DATA_PLATFORM_STATEMENT_TIMEOUT_SECONDS: "30"
+      DATA_PLATFORM_API_QUERY_SLOTS: ${STAGE11_API_QUERY_SLOTS:-6}
+      DATA_PLATFORM_API_CACHE_TTL_SECONDS: ${STAGE11_API_CACHE_TTL_SECONDS:-5}
+      DATA_PLATFORM_API_CACHE_MAX_ENTRIES: ${STAGE11_API_CACHE_MAX_ENTRIES:-256}
       DATA_PLATFORM_DATA_ROOT: /app/data/scale
       DATA_PLATFORM_OBJECT_STORE: local
     depends_on:

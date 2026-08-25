@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import date
+from threading import Event, Lock
 from typing import Any
 
 import pytest
@@ -11,6 +13,7 @@ from data_platform.config import DataPlatformSettings
 from src.analytics.domain_adapter import (
     APPROVED_DOMAIN_QUERIES,
     DomainAnalyticsAdapter,
+    DomainAnalyticsRuntime,
     InvalidDomainQueryError,
     UnsupportedDomainQueryError,
 )
@@ -137,6 +140,8 @@ def test_endpoint_requires_authentication_and_uses_adapter_override() -> None:
         params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
     )
     assert response.status_code in {401, 403}
+    metrics = unauthenticated.get("/analytics/domain/metrics/runtime")
+    assert metrics.status_code in {401, 403}
 
     authorize_app(app)
     authenticated = TestClient(app)
@@ -146,3 +151,161 @@ def test_endpoint_requires_authentication_and_uses_adapter_override() -> None:
     )
     assert response.status_code == 200
     assert response.json() == [{"site_id": "site-1", "ticket_count": 7}]
+
+    metrics = authenticated.get("/analytics/domain/metrics/runtime")
+    assert metrics.status_code == 200
+    assert metrics.json()["query_slots"] == 8
+
+
+def test_cache_is_bounded_by_identity_site_and_ttl() -> None:
+    now = [100.0]
+    runtime = DomainAnalyticsRuntime(
+        query_slots=2,
+        cache_ttl_seconds=5,
+        cache_max_entries=3,
+        clock=lambda: now[0],
+    )
+    factory = _Factory([("site-1", 7)])
+    adapter = DomainAnalyticsAdapter(
+        DataPlatformSettings(api_cache_ttl_seconds=5, api_cache_max_entries=3),
+        connection_factory=factory,
+        runtime=runtime,
+    )
+    arguments = {
+        "query": "ticket_sla",
+        "start_date": "2026-01-01",
+        "end_date": "2026-01-31",
+        "limit": 25,
+    }
+
+    adapter.execute(
+        **arguments,
+        site_id="00000000-0000-0000-0000-000000000001",
+        authorization_scope="user-a",
+    )
+    adapter.execute(
+        **arguments,
+        site_id="00000000-0000-0000-0000-000000000001",
+        authorization_scope="user-a",
+    )
+    assert len(factory.read_only) == 1
+
+    adapter.execute(
+        **arguments,
+        site_id="00000000-0000-0000-0000-000000000001",
+        authorization_scope="user-b",
+    )
+    adapter.execute(
+        **arguments,
+        site_id="00000000-0000-0000-0000-000000000002",
+        authorization_scope="user-a",
+    )
+    assert len(factory.read_only) == 3
+
+    adapter.execute(
+        **arguments,
+        site_id="00000000-0000-0000-0000-000000000003",
+        authorization_scope="user-a",
+    )
+    assert len(factory.read_only) == 4
+    cache = adapter.runtime_snapshot()["cache"]
+    assert isinstance(cache, dict)
+    assert cache["entries"] == 3
+    assert cache["evictions"] == 1
+
+    now[0] += 6
+    adapter.execute(
+        **arguments,
+        site_id="00000000-0000-0000-0000-000000000001",
+        authorization_scope="user-a",
+    )
+    assert len(factory.read_only) == 5
+    snapshot = adapter.runtime_snapshot()
+    assert snapshot["cache"] == {
+        "enabled": True,
+        "ttl_seconds": 5,
+        "max_entries": 3,
+        "entries": 1,
+        "hits": 1,
+        "misses": 5,
+        "evictions": 1,
+    }
+
+
+def test_cache_is_skipped_without_an_authorization_scope() -> None:
+    factory = _Factory([("site-1", 7)])
+    adapter = DomainAnalyticsAdapter(
+        DataPlatformSettings(api_cache_ttl_seconds=5),
+        connection_factory=factory,
+    )
+
+    for _ in range(2):
+        adapter.execute(
+            "ticket_sla",
+            site_id="00000000-0000-0000-0000-000000000001",
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+        )
+
+    assert len(factory.read_only) == 2
+    cache = adapter.runtime_snapshot()["cache"]
+    assert isinstance(cache, dict)
+    assert cache["entries"] == 0
+
+
+class _ConcurrentFactory:
+    def __init__(self) -> None:
+        self.lock = Lock()
+        self.release = Event()
+        self.two_active = Event()
+        self.active = 0
+        self.peak = 0
+
+    @contextmanager
+    def __call__(self, settings: DataPlatformSettings, *, read_only: bool):
+        assert read_only is True
+        with self.lock:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+            if self.active == 2:
+                self.two_active.set()
+        try:
+            assert self.release.wait(timeout=5)
+            yield _Connection([("site-1", 7)])
+        finally:
+            with self.lock:
+                self.active -= 1
+
+
+def test_runtime_enforces_query_slots_under_concurrency() -> None:
+    runtime = DomainAnalyticsRuntime(
+        query_slots=2,
+        cache_ttl_seconds=0,
+        cache_max_entries=10,
+    )
+    factory = _ConcurrentFactory()
+    adapter = DomainAnalyticsAdapter(
+        DataPlatformSettings(api_query_slots=2),
+        connection_factory=factory,
+        runtime=runtime,
+    )
+
+    def execute() -> list[dict[str, Any]]:
+        return adapter.execute(
+            "ticket_sla",
+            site_id=None,
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(execute) for _ in range(4)]
+        assert factory.two_active.wait(timeout=5)
+        assert runtime.snapshot()["active_queries"] == 2
+        factory.release.set()
+        assert all(future.result() for future in futures)
+
+    assert factory.peak == 2
+    snapshot = runtime.snapshot()
+    assert snapshot["peak_active_queries"] == 2
+    assert snapshot["query_executions"] == 4

@@ -1,0 +1,297 @@
+{
+  "stage": 11,
+  "benchmark": "authenticated_site_scoped_analytics_api_performance",
+  "recorded_at": "2026-08-24",
+  "production_sla_claim": false,
+  "repository": {
+    "branch": "feat/stage11-api-performance",
+    "starting_head": "3de9e53d072097665c9ecf718ddd4c22d418b4e6",
+    "direct_parent": "9d556946d33bb7340dc28feee33b2fb5cebc5c02"
+  },
+  "environment": {
+    "kind": "synthetic laptop benchmark",
+    "api_container": "stage10-api",
+    "postgres_container": "stage9-scale-postgres",
+    "api_memory_limit": "1 GiB",
+    "postgres_memory_limit": "2 GiB",
+    "postgres_max_connections_actual": 50,
+    "postgres_max_connections_changed_by_stage11": false,
+    "pipeline_state": "idle",
+    "database_bytes_at_benchmark_checkpoint": 10945558195,
+    "dataset_counts": {
+      "work_orders": 1100000,
+      "work_order_status_history": 3300000,
+      "tickets": 300000,
+      "spare_parts": 25000,
+      "inventory_movements": 1500000,
+      "work_order_costs": 1100000
+    },
+    "six_domain_watermark_versions": [2, 2, 2, 2, 2, 2],
+    "running_pipeline_count": 0
+  },
+  "workload": {
+    "authentication": "real bearer token from POST /auth/login",
+    "credential_persisted": false,
+    "site_id": "00020000-0000-0000-0000-000000000001",
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-31",
+    "limit": 25,
+    "routes": [
+      "/health",
+      "/analytics/domain/maintenance_summary",
+      "/analytics/domain/site_reliability",
+      "/analytics/domain/ticket_sla",
+      "/analytics/domain/technician_workload",
+      "/analytics/domain/inventory_consumption",
+      "/analytics/domain/maintenance_cost_variance"
+    ],
+    "requests_per_client": 4,
+    "scenarios": [
+      {"clients": 25, "requests": 100, "analytics_requests": 87},
+      {"clients": 50, "requests": 200, "analytics_requests": 171}
+    ],
+    "warmups_per_configuration": 1,
+    "measured_runs_per_accepted_configuration": 3,
+    "stabilization_seconds_between_scenarios": 10,
+    "stabilization_seconds_between_measured_pairs": 10,
+    "aggregation": "median of each metric across three measured runs"
+  },
+  "historical_stage10": {
+    "label": "historical only; not rerun as Stage 11 evidence",
+    "scenarios": [
+      {
+        "clients": 25,
+        "requests": 100,
+        "requests_per_second": 30.1753,
+        "latency_ms": {"p50": 1651.3223, "p95": 2814.8447, "p99": 3090.798},
+        "errors": 0,
+        "postgres_connections_maximum_observed": 27
+      },
+      {
+        "clients": 50,
+        "requests": 200,
+        "requests_per_second": 23.6934,
+        "latency_ms": {"p50": 4237.2542, "p95": 7588.8775, "p99": 7889.8302},
+        "errors": 0,
+        "postgres_connections_maximum_observed": 30
+      }
+    ]
+  },
+  "diagnosis": {
+    "primary_root_cause": "worker, application-pool, and direct-query fan-out caused connection and transaction queueing under concurrency",
+    "slow_sql_primary_cause": false,
+    "all_representative_plans_shared_reads": 0,
+    "representative_idle_timings": [
+      {"query": "ticket_sla", "direct_sql_p50_ms": 4.98, "adapter_p50_ms": 21.85},
+      {"query": "technician_workload", "direct_sql_p50_ms": 21.78, "adapter_p50_ms": 26.78},
+      {"query": "site_reliability", "direct_sql_p50_ms": 26.82, "adapter_p50_ms": 51.10},
+      {"query": "inventory_consumption", "direct_sql_p50_ms": 37.37, "adapter_p50_ms": 38.74},
+      {"query": "maintenance_cost_variance", "direct_sql_p50_ms": 45.81, "adapter_p50_ms": 38.95},
+      {"query": "maintenance_summary", "direct_sql_p50_ms": 47.67, "adapter_p50_ms": 91.79}
+    ],
+    "baseline_connection_budget": {
+      "sqlalchemy": "2 * (8 + 4) = 24",
+      "direct_analytics": "2 * 8 = 16",
+      "theoretical_total": 40
+    },
+    "final_connection_budget": {
+      "sqlalchemy": "2 * (6 + 0) = 12",
+      "direct_analytics": "2 * 6 = 12",
+      "theoretical_total": 24,
+      "headroom_below_actual_postgres_limit": 26
+    }
+  },
+  "experiment_matrix": [
+    {
+      "configuration": "reproduced_baseline",
+      "workers": 2,
+      "sqlalchemy_pool_size_per_worker": 8,
+      "sqlalchemy_max_overflow_per_worker": 4,
+      "direct_analytics_slots_per_worker": 8,
+      "cache_ttl_seconds": 0,
+      "theoretical_connections": 40,
+      "decision": "baseline"
+    },
+    {
+      "configuration": "candidate_1_pool_4_0",
+      "workers": 2,
+      "sqlalchemy_pool_size_per_worker": 4,
+      "sqlalchemy_max_overflow_per_worker": 0,
+      "direct_analytics_slots_per_worker": 8,
+      "cache_ttl_seconds": 0,
+      "theoretical_connections": 24,
+      "decision": "rejected",
+      "reason": "first measured 50-client run had 7/200 errors and 6.1256 RPS"
+    },
+    {
+      "configuration": "candidate_2_worker_1",
+      "workers": 1,
+      "sqlalchemy_pool_size_per_worker": 8,
+      "sqlalchemy_max_overflow_per_worker": 4,
+      "direct_analytics_slots_per_worker": 8,
+      "cache_ttl_seconds": 0,
+      "theoretical_connections": 20,
+      "decision": "rejected_after_warmup",
+      "reason": "50-client warmup reached only 12.9589 RPS with p95 13625.7958 ms"
+    },
+    {
+      "configuration": "final_combined",
+      "workers": 2,
+      "sqlalchemy_pool_size_per_worker": 6,
+      "sqlalchemy_max_overflow_per_worker": 0,
+      "direct_analytics_slots_per_worker": 6,
+      "cache_ttl_seconds": 5,
+      "cache_max_entries_per_worker": 256,
+      "theoretical_connections": 24,
+      "decision": "accepted"
+    }
+  ],
+  "candidate_observations": {
+    "candidate_1_pool_4_0": [
+      {"kind": "warmup", "clients": 25, "requests_per_second": 20.1935, "p95_ms": 4295.987, "errors": 0, "postgres_connections_maximum_observed": 14},
+      {"kind": "warmup", "clients": 50, "requests_per_second": 20.3592, "p95_ms": 8709.9898, "errors": 0, "postgres_connections_maximum_observed": 22},
+      {"kind": "measured_1", "clients": 25, "requests_per_second": 23.8778, "p95_ms": 3679.3484, "errors": 0, "postgres_connections_maximum_observed": 18},
+      {"kind": "measured_1", "clients": 50, "requests_per_second": 6.1256, "p95_ms": 31614.1563, "errors": 7, "postgres_connections_maximum_observed": 18},
+      {"kind": "diagnostic_repeat", "clients": 25, "requests_per_second": 30.5668, "p95_ms": 2761.2973, "errors": 0, "postgres_connections_maximum_observed": 15},
+      {"kind": "diagnostic_repeat", "clients": 50, "requests_per_second": 19.0057, "p95_ms": 9467.8698, "errors": 0, "postgres_connections_maximum_observed": 18}
+    ],
+    "candidate_2_worker_1": [
+      {"kind": "warmup", "clients": 25, "requests_per_second": 26.2164, "p95_ms": 3443.106, "errors": 0, "postgres_connections_maximum_observed": 21},
+      {"kind": "warmup", "clients": 50, "requests_per_second": 12.9589, "p95_ms": 13625.7958, "errors": 0, "postgres_connections_maximum_observed": 23}
+    ]
+  },
+  "measured_samples": {
+    "reproduced_baseline": [
+      {"run": 1, "clients": 25, "requests": 100, "duration_seconds": 2.022455, "requests_per_second": 49.4449, "latency_ms": {"p50": 1076.9253, "p95": 1649.8996, "p99": 1821.1465, "maximum": 1837.8593}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 87, "analytics_requests": 87, "postgres_connections_maximum_observed": 25},
+      {"run": 1, "clients": 50, "requests": 200, "duration_seconds": 5.370551, "requests_per_second": 37.2401, "latency_ms": {"p50": 2591.4497, "p95": 4645.7713, "p99": 4790.116, "maximum": 4957.5738}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 171, "analytics_requests": 171, "postgres_connections_maximum_observed": 32},
+      {"run": 2, "clients": 25, "requests": 100, "duration_seconds": 2.261028, "requests_per_second": 44.2277, "latency_ms": {"p50": 1222.8907, "p95": 1894.5687, "p99": 2024.4138, "maximum": 2038.3953}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 87, "analytics_requests": 87, "postgres_connections_maximum_observed": 33},
+      {"run": 2, "clients": 50, "requests": 200, "duration_seconds": 4.780941, "requests_per_second": 41.8328, "latency_ms": {"p50": 2221.5076, "p95": 4284.3778, "p99": 4404.4391, "maximum": 4479.6253}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 171, "analytics_requests": 171, "postgres_connections_maximum_observed": 32},
+      {"run": 3, "clients": 25, "requests": 100, "duration_seconds": 2.000686, "requests_per_second": 49.9829, "latency_ms": {"p50": 976.5716, "p95": 1734.9344, "p99": 1808.7198, "maximum": 1813.1963}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 87, "analytics_requests": 87, "postgres_connections_maximum_observed": 29},
+      {"run": 3, "clients": 50, "requests": 200, "duration_seconds": 4.807933, "requests_per_second": 41.5979, "latency_ms": {"p50": 2132.2304, "p95": 4231.6284, "p99": 4357.0098, "maximum": 4503.9862}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 171, "analytics_requests": 171, "postgres_connections_maximum_observed": 31}
+    ],
+    "final": [
+      {"run": 1, "clients": 25, "requests": 100, "duration_seconds": 1.415259, "requests_per_second": 70.6584, "latency_ms": {"p50": 711.6275, "p95": 1082.3887, "p99": 1203.3534, "maximum": 1210.7626}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 87, "analytics_requests": 87, "postgres_connections_maximum_observed": 20},
+      {"run": 1, "clients": 50, "requests": 200, "duration_seconds": 3.325562, "requests_per_second": 60.1402, "latency_ms": {"p50": 1500.1213, "p95": 2717.3636, "p99": 2854.0897, "maximum": 2881.122}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 171, "analytics_requests": 171, "postgres_connections_maximum_observed": 23},
+      {"run": 2, "clients": 25, "requests": 100, "duration_seconds": 1.549633, "requests_per_second": 64.5314, "latency_ms": {"p50": 661.6862, "p95": 1154.0085, "p99": 1305.3856, "maximum": 1343.8769}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 87, "analytics_requests": 87, "postgres_connections_maximum_observed": 23},
+      {"run": 2, "clients": 50, "requests": 200, "duration_seconds": 3.459375, "requests_per_second": 57.8139, "latency_ms": {"p50": 1669.5379, "p95": 2805.6529, "p99": 3074.9623, "maximum": 3166.1152}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 171, "analytics_requests": 171, "postgres_connections_maximum_observed": 20},
+      {"run": 3, "clients": 25, "requests": 100, "duration_seconds": 2.817049, "requests_per_second": 35.4981, "latency_ms": {"p50": 1585.6972, "p95": 2238.1546, "p99": 2563.0454, "maximum": 2574.9101}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 87, "analytics_requests": 87, "postgres_connections_maximum_observed": 21},
+      {"run": 3, "clients": 50, "requests": 200, "duration_seconds": 3.960241, "requests_per_second": 50.502, "latency_ms": {"p50": 1774.0425, "p95": 3396.833, "p99": 3545.4673, "maximum": 3650.8611}, "errors": 0, "timeouts": 0, "valid_nonempty_analytics": 171, "analytics_requests": 171, "postgres_connections_maximum_observed": 20}
+    ]
+  },
+  "median_comparison": [
+    {
+      "clients": 25,
+      "baseline": {"requests_per_second": 49.4449, "p50_ms": 1076.9253, "p95_ms": 1734.9344, "p99_ms": 1821.1465},
+      "final": {"requests_per_second": 64.5314, "p50_ms": 711.6275, "p95_ms": 1154.0085, "p99_ms": 1305.3856},
+      "change_percent": {"requests_per_second": 30.5117, "p50_ms": -33.9204, "p95_ms": -33.484, "p99_ms": -28.3207}
+    },
+    {
+      "clients": 50,
+      "baseline": {"requests_per_second": 41.5979, "p50_ms": 2221.5076, "p95_ms": 4284.3778, "p99_ms": 4404.4391},
+      "final": {"requests_per_second": 57.8139, "p50_ms": 1669.5379, "p95_ms": 2805.6529, "p99_ms": 3074.9623},
+      "change_percent": {"requests_per_second": 38.9827, "p50_ms": -24.8466, "p95_ms": -34.5143, "p99_ms": -30.1849}
+    }
+  ],
+  "connections": {
+    "reproduced_baseline": {
+      "clients_25_median_run_maximum": 29,
+      "clients_25_overall_maximum": 33,
+      "clients_50_median_run_maximum": 32,
+      "clients_50_overall_maximum": 32
+    },
+    "final": {
+      "clients_25_median_run_maximum": 21,
+      "clients_25_overall_maximum": 23,
+      "clients_50_median_run_maximum": 20,
+      "clients_50_overall_maximum": 23
+    }
+  },
+  "resource_observations": {
+    "method": "docker stats snapshots immediately before and after each scenario; not time-series maxima",
+    "baseline_api": {"cpu_percent_snapshot_range": [0.39, 15.97], "memory_mib_snapshot_range": [349.9, 393.4], "pids_range": [38, 86]},
+    "final_api": {"cpu_percent_snapshot_range": [0.39, 20.58], "memory_mib_snapshot_range": [358.0, 386.7], "pids_range": [38, 86]},
+    "interpretation": "instantaneous CPU samples are noisy; memory did not increase materially and neither container limit changed"
+  },
+  "accepted_cache": {
+    "scope": "per API worker process",
+    "key_fields": ["authorization user id", "site id", "exact query name", "start date", "end date", "limit"],
+    "ttl_seconds": 5,
+    "maximum_entries_per_process": 256,
+    "eviction": "LRU after expired-entry removal",
+    "invalidation": "TTL expiry only; no cross-process invalidation",
+    "disabled_default_outside_explicit_scale_compose": true,
+    "skipped_without_authorization_scope": true,
+    "sensitive_metric_labels": false
+  },
+  "acceptance": {
+    "zero_final_errors": true,
+    "zero_final_timeouts": true,
+    "all_final_analytics_payloads_nonempty": true,
+    "final_nonempty_analytics_payloads": 774,
+    "final_analytics_requests": 774,
+    "authorization_regressions": 0,
+    "final_postgres_connections_at_or_below_27": true,
+    "pool_exhaustion_errors": 0,
+    "clients_25_not_degraded_over_10_percent": true,
+    "clients_50_material_improvement": true,
+    "clients_50_p95_improvement_percent": 34.5143,
+    "clients_50_rps_improvement_percent": 38.9827,
+    "accepted": true
+  },
+  "verification": {
+    "focused_stage11_tests_passed": 26,
+    "affected_backend_tests_passed": 102,
+    "affected_backend_tests_skipped": 9,
+    "isolated_postgres_tests_passed": 87,
+    "isolated_postgres_tests_deselected": 1374,
+    "ruff": "pass",
+    "compileall": "pass",
+    "compose_config": "pass",
+    "api_import": "pass",
+    "api_liveness": "alive",
+    "public_health": "ok",
+    "site_1_ticket_sla_rows": 4,
+    "site_2_ticket_sla_rows": 4,
+    "site_isolation": "pass",
+    "repeated_response_byte_equivalent": true,
+    "runtime_pool": {"size": 6, "checked_out": 0, "overflow": 0},
+    "runtime_cache": {"enabled": true, "ttl_seconds": 5, "max_entries": 256, "hits": 1, "misses": 2},
+    "application_alembic_head": "20260726_0008",
+    "data_platform_alembic_head": "20260824_dp0003",
+    "airflow_dag_import_errors": 0,
+    "dbt_parse": "pass",
+    "benchmark_json_consistency": "pass",
+    "markdown_links_and_fences": "pass",
+    "high_confidence_secret_scan_files": 11,
+    "high_confidence_secret_scan_findings": 0,
+    "public_ip_scan_findings": 0
+  },
+  "raw_artifact_sha256": {
+    "baseline_repeat_warmup": "4ae209a2fd4cb192e61ceda5638a89295f07edc10b5528249f5cad4183bb5167",
+    "baseline_repeat_run_1": "f9cfd0c921428234e125e8c35f23891e4eb3aad44a4c84b8c2664375bd3729a6",
+    "baseline_repeat_run_2": "0beef9ce24f189f23ba2bb41719b6619aceab761f6edbc84ded09bdf3f1332fe",
+    "baseline_repeat_run_3": "2fc13e557fdf98ae6c9802d1a61932539155f61618be590e1585624cbe1e8aa3",
+    "candidate_1_warmup": "95fa72de0f992f766b5cf2ad1624e05946ba37ffbe163516d15e57701f80e9f8",
+    "candidate_1_run_1": "ecb60fcb95ae293b2523d5bc2db795855a6c38890739bc7c95f59f8eff2aad6d",
+    "candidate_1_run_2": "eb3a38dd2614223723852d90aaeddda520b9fe22f82e4b853e0a96950cdd585a",
+    "candidate_2_warmup": "acae485b486eab5193f5de136c84f598d4f37a8b216b76ad027b6dafa0262a8b",
+    "final_warmup": "0793f8d873c8b2020018a63431adbc1069c15b8469fbd21d72aa30ef8cb5008c",
+    "final_run_1": "8bb296b376f419915b543fcc400fc8b3f80081425d2ce0453381719a34647e9b",
+    "final_run_2": "5fbda5aecd0bfd7dc4b9dcfceb8303208170c1b7b82ab364ac6b62ca17604075",
+    "final_run_3": "ee2d847845b7a349bf3d4b31214d60239ebfd676fba893385dbaef623584f5e5"
+  },
+  "safety": {
+    "dataset_reset_or_reseed": false,
+    "watermark_advanced": false,
+    "postgres_or_airflow_container_recreated": false,
+    "postgres_limit_raised": false,
+    "aws_mutations": 0,
+    "external_llm_calls": 0,
+    "embedding_calls": 0,
+    "qdrant_bulk_loads": 0,
+    "docker_volumes_deleted": 0,
+    "commit_created": false,
+    "tag_created": false,
+    "push_executed": false
+  }
+}
