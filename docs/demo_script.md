@@ -1,5 +1,8 @@
 # Kịch Bản Demo Product 15–18 Phút
 
+> Extended operational workflow script. The canonical final project walkthrough
+> is [demo-runbook.md](demo-runbook.md).
+
 Kịch bản dùng PostgreSQL làm transactional source of truth cho asset, ticket/SLA, work order, inventory, background execution, outbox và in-app notification; CSV làm synthetic seed + batch analytics contract. Đây là internal pilot demo, không phải production deployment, procurement suite hoặc complete CMMS.
 
 ## Chuẩn Bị Trước Demo

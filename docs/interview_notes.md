@@ -1,5 +1,9 @@
 # Ghi Chú Phỏng Vấn
 
+> Historical operational/AI interview notes. The canonical combined Software,
+> Data Platform, and RAG guide is
+> [portfolio/interview-guide.md](portfolio/interview-guide.md).
+
 ## Vì Sao Chọn Bài Toán Bảo Trì?
 
 Bảo trì có business workflow rõ: dữ liệu vận hành, ticket, lịch preventive và tài liệu kỹ thuật phải được tổng hợp để quyết định thiết bị nào cần kiểm tra trước. Bài toán cho phép trình bày data engineering, explainable ML, API, dashboard và RAG trong một flow có human-in-the-loop.

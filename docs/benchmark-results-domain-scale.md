@@ -31,7 +31,7 @@ mismatch, invalid inventory balance và cost reconciliation.
 
 | Phase | Generator time | Generator rows/s | COPY rows | COPY time | COPY rows/s | CSV bytes |
 |---|---:|---:|---:|---:|---:|---:|
-| Baseline | 423,152 s | 18.072,04 | 7.647.217 | 706,495 s | 10.824,17 | 2.084.094.135 |
+| Baseline | 423,152 s | 18.072,04 | 7.647.217 | 706,495 s | 10.824,17 | 2,084,094,135 |
 | Incremental | 121,752 s | 667,34 | 81.250 | 15,495 s | 5.243,80 | 22.470.540 |
 
 Generator throughput incremental thấp hơn vì phase này deterministic-select và

@@ -1,5 +1,8 @@
 # AI Maintenance Copilot — Vietnamese Predictive Maintenance Decision Support
 
+> Historical product-only CV material. Use the metric-traceable final package
+> at [portfolio/cv-bullets.md](portfolio/cv-bullets.md).
+
 Built a PostgreSQL-backed maintenance decision-support MVP that prioritizes facility equipment risk, controls work-order spare-parts usage and retrieves Vietnamese SOP/checklist guidance for technicians. Integrated transactional workflows, explainable batch analytics, FastAPI, Streamlit/Next.js frontends and Qdrant-backed RAG with human safety controls.
 
 ## CV Bullets

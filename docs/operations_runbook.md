@@ -1,5 +1,9 @@
 # Operations Runbook
 
+> Historical PM7-PM9 application/pilot operations detail. The canonical final
+> offline-first and Data Platform operations guide is
+> [operations-runbook.md](operations-runbook.md).
+
 ## Mục Tiêu
 
 Runbook này dành cho local/internal-pilot operator của PM7–PM9. Nó không thay

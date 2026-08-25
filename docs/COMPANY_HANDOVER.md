@@ -1,5 +1,8 @@
 # Company Handover
 
+> Historical engineering/pilot handover evidence. The canonical Stage 12
+> project handover is [project-handover.md](project-handover.md).
+
 ## Handover Status
 
 This repository is suitable for developer handover and controlled local demonstration after the documented setup. PostgreSQL integration, live Qdrant, a real Ollama provider, the full development Compose stack, and the authenticated multi-role workflow were exercised on an isolated local `_test` environment. It is still not a production acceptance package. Company owner assignments, approved secrets/provider, intended-host rehearsal, recovery evidence, support coverage, dependency remediation, and known-limitation acceptance remain external gates.

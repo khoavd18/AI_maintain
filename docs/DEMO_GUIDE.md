@@ -1,5 +1,8 @@
 # Graduation Demo Guide
 
+> Extended product demo support. Use [demo-runbook.md](demo-runbook.md) as the
+> canonical 5-10 minute final portfolio demo with offline fallbacks.
+
 ## Demo Goal
 
 Show that the system joins transactional maintenance workflows, batch analytics, real RAG retrieval, a real optional LLM generation stage, validated citations, and human-controlled execution without claiming automatic diagnosis or production readiness.

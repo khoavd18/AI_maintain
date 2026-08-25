@@ -1,0 +1,211 @@
+{
+  "schema_version": "stage12-release-manifest-v1",
+  "project_name": "AI Maintenance Copilot and Maintenance Data Platform",
+  "stage": 12,
+  "release_status": "final_portfolio_candidate",
+  "base_commit": "33ac82efbe5f37ed07d412ba2554fd94bde0b6f3",
+  "checkpoint_lineage": {
+    "stage9": "9d556946d33bb7340dc28feee33b2fb5cebc5c02",
+    "stage10": "3de9e53d072097665c9ecf718ddd4c22d418b4e6",
+    "stage11": "33ac82efbe5f37ed07d412ba2554fd94bde0b6f3"
+  },
+  "migration_heads": {
+    "application": "20260726_0008",
+    "data_platform": "20260824_dp0003",
+    "data_platform_version_table": "data_platform_alembic_version"
+  },
+  "dataset": {
+    "classification": "local synthetic benchmark",
+    "production_data": false,
+    "stage9": {
+      "unique_work_orders": 1100000,
+      "raw_work_order_versions": 1110000,
+      "update_versions": 10000,
+      "maintenance_logs": 549230,
+      "source_raw_staging_fact_reconciled_rows": 1100000
+    },
+    "stage10": {
+      "generated_chunks": 145,
+      "generated_and_copied_rows": 7728467,
+      "generated_bytes": 2106564675,
+      "database_bytes_at_final_audit": 10945558195,
+      "domains": {
+        "work_orders": 1100000,
+        "work_order_status_history": 3300000,
+        "tickets": 300000,
+        "ticket_events": 900000,
+        "spare_parts": 25000,
+        "inventory_movements": 1500000,
+        "work_order_costs": 1100000
+      },
+      "integrity_checks": 8,
+      "integrity_violations": 0,
+      "watermark_count": 6,
+      "watermark_version": 2,
+      "retry_duplicate_insertions": 0
+    }
+  },
+  "orchestration": {
+    "stage9_airflow_tasks": 9,
+    "stage10_airflow_tasks": 19,
+    "stage10_runs": [
+      "baseline",
+      "controlled_failure_retry",
+      "empty_rerun"
+    ],
+    "raw_commit_precedes_watermark_finalization": true,
+    "tuple_watermark_fields": [
+      "updated_at",
+      "entity_id"
+    ]
+  },
+  "dbt": {
+    "stage9": {
+      "models": 11,
+      "data_tests": 307,
+      "build_nodes_passed": 318,
+      "build_nodes_total": 318
+    },
+    "stage10": {
+      "models": 26,
+      "data_tests": 433,
+      "build_nodes_passed": 459,
+      "build_nodes_total": 459
+    }
+  },
+  "testing": {
+    "stage10_historical": {
+      "classification": "historical Stage 10 validation evidence",
+      "backend": 1365,
+      "postgresql_integration": 87,
+      "frontend": 141,
+      "dbt": 459,
+      "total": 2052
+    },
+    "stage11": {
+      "focused_passed": 26,
+      "affected_backend_passed": 102,
+      "affected_backend_skipped": 9
+    }
+  },
+  "performance": {
+    "stage9_watermark_index": {
+      "p50_speedup": 24.33,
+      "p95_speedup": 13.41
+    },
+    "stage10_queries_ms": {
+      "combined_query_p95_before": 840.3066,
+      "combined_query_p95_after": 23.7709,
+      "high_consumption_parts_p95_before": 268.947,
+      "high_consumption_parts_p95_after": 9.6309,
+      "escalated_unresolved_p95_before": 78.9693,
+      "escalated_unresolved_p95_after": 1.6225
+    },
+    "stage11_api": {
+      "configuration": {
+        "workers": 2,
+        "pool_size_per_worker": 6,
+        "max_overflow_per_worker": 0,
+        "analytics_slots_per_worker": 6,
+        "cache_ttl_seconds": 5,
+        "cache_max_entries_per_worker": 256,
+        "authorization_safe_cache_key": true
+      },
+      "clients_25": {
+        "baseline_rps": 49.4449,
+        "final_rps": 64.5314,
+        "rps_change_percent": 30.5117,
+        "baseline_p95_ms": 1734.9344,
+        "final_p95_ms": 1154.0085,
+        "p95_change_percent": -33.484
+      },
+      "clients_50": {
+        "baseline_rps": 41.5979,
+        "final_rps": 57.8139,
+        "rps_change_percent": 38.9827,
+        "baseline_p95_ms": 4284.3778,
+        "final_p95_ms": 2805.6529,
+        "p95_change_percent": -34.5143
+      },
+      "requests": 900,
+      "errors": 0,
+      "timeouts": 0,
+      "valid_nonempty_analytics_payloads": 774,
+      "analytics_requests": 774,
+      "postgres_connections_baseline_max": 33,
+      "postgres_connections_final_max": 23
+    }
+  },
+  "evidence_documents": {
+    "architecture": "docs/architecture.md",
+    "data_platform_integration": "docs/data-platform-integration.md",
+    "structured_data_vs_rag": "docs/structured-data-vs-rag.md",
+    "stage9_report": "docs/benchmark-results-1m.json",
+    "stage9_runbook": "docs/scale-test-1m.md",
+    "stage10_report": "docs/benchmark-results-domain-scale.json",
+    "stage10_manifest": "docs/benchmark-manifest-domain-scale.json",
+    "stage10_recovery": "docs/reliability-failure-recovery.md",
+    "stage11_report": "docs/benchmark-results-api-stage11.json",
+    "stage11_runbook": "docs/stage11-api-performance.md",
+    "demo": "docs/demo-runbook.md",
+    "operations": "docs/operations-runbook.md",
+    "portfolio": "docs/portfolio/project-summary.md",
+    "portfolio_cv": "docs/portfolio/cv-bullets.md",
+    "portfolio_interview": "docs/portfolio/interview-guide.md",
+    "handover": "docs/project-handover.md",
+    "release_checklist": "docs/final-release-checklist.md",
+    "offline_verifier": "scripts/verify_final_release.ps1"
+  },
+  "historical_evidence": [
+    {
+      "label": "Stage 9 local synthetic scale run",
+      "path": "docs/benchmark-results-1m.json",
+      "rerun_by_stage12": false
+    },
+    {
+      "label": "Stage 10 multi-domain scale and 2052-check validation",
+      "path": "docs/benchmark-results-domain-scale.json",
+      "rerun_by_stage12": false
+    },
+    {
+      "label": "Stage 11 authenticated Analytics API load benchmark",
+      "path": "docs/benchmark-results-api-stage11.json",
+      "rerun_by_stage12": false
+    }
+  ],
+  "security_boundaries": [
+    "FastAPI authentication and RBAC remain the serving boundary",
+    "Analytics cache keys include authorization identity and site scope",
+    "Structured relational analytics are not embedded into RAG",
+    "Generated scale data and runtime artifacts are ignored",
+    "No external LLM, embedding, Qdrant bulk, or AWS calls occurred in Stages 9 through 11"
+  ],
+  "limitations": [
+    "Synthetic laptop evidence is not a production capacity claim or SLA",
+    "No real-company users, usage, uptime, or business impact were measured",
+    "The five-second analytics cache is process-local and TTL-only",
+    "No multi-host high availability, failover, or coherent distributed cache was validated",
+    "Scale reproduction is disk-, memory-, and time-intensive",
+    "Docker availability is optional for Offline verification"
+  ],
+  "prohibited_public_claims": [
+    "production deployment",
+    "live RDS deployment",
+    "company business impact",
+    "production SLA or uptime",
+    "real-user adoption",
+    "prevented failures or guaranteed predictions"
+  ],
+  "protected_file_exclusions": [
+    {
+      "path": "src/llm/prompt_builder.py",
+      "sha256": "22a1300d658ae04a2f48f13c27e6407ec17d13fc56ca274ddb43b4c7063b64ff",
+      "included_in_stage9_to_stage12_lineage": false
+    },
+    {
+      "path": "tests/test_grounded_generation_repair.py",
+      "sha256": "663a59b8e564ee1392f955c124d077a9e8599c5ddd33a9e7bf4f5719c13b7836",
+      "included_in_stage9_to_stage12_lineage": false
+    }
+  ]
+}
