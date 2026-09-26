@@ -37,14 +37,15 @@ describe("live Copilot workspace", () => {
     expect(screen.getByText("Lỗi điện")).toBeInTheDocument();
   });
 
-  it("submits the exact context, renders checklist, sources and safety, then clears the question", async () => {
+  it("submits the exact context, renders a clean answer with sources and safety, then clears the question", async () => {
     const fetchMock = mockContextApi(copilotResponseFixture);
     renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" initialTicketId="TCK-000041" />);
     const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
 
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
 
-    expect(await screen.findByText("Câu trả lời có nguồn tham khảo")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tóm tắt" })).toBeInTheDocument();
+    expect(screen.queryByText("Câu trả lời có nguồn tham khảo")).not.toBeInTheDocument();
     expect(screen.getByText("Bằng chứng tốt")).toBeInTheDocument();
     expect(screen.getByText("Trích dẫn [S1]")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Tóm tắt" })).toBeInTheDocument();
@@ -94,6 +95,7 @@ describe("live Copilot workspace", () => {
     expect(JSON.parse(String(followUpCall?.[1]?.body))).toMatchObject({
       question: "Cảnh báo trước áp dụng thế nào?",
       conversation_context: {
+        resolved_asset_id: "GENERATOR_002",
         resolved_asset_type: "Máy phát điện dự phòng",
         resolved_failure_category: "Lỗi điện",
         previous_source_ids: ["S1"],
@@ -248,14 +250,19 @@ describe("live Copilot workspace", () => {
     const fetchMock = mockContextApi(() => new Promise((resolve) => { resolveCopilot = resolve; }));
     renderWithQuery(<CopilotWorkspace initialAssetId="GENERATOR_002" />);
     const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
+    const originalQuestion = (textarea as HTMLTextAreaElement).value;
 
     fireEvent.keyDown(textarea, { key: "Enter" });
     fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(screen.getByText(originalQuestion)).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Trợ lý đang suy nghĩ" })).toBeInTheDocument();
+    expect(textarea).toHaveValue("");
     await waitFor(() => {
       expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
     });
     resolveCopilot(copilotResponseFixture);
-    expect(await screen.findByText("Câu trả lời có nguồn tham khảo")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tóm tắt" })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Trợ lý đang suy nghĩ" })).not.toBeInTheDocument();
   });
 
   it("does not restore cleared history or hidden context from a delayed response", async () => {
@@ -271,7 +278,7 @@ describe("live Copilot workspace", () => {
     const textarea = await screen.findByLabelText("Câu hỏi bảo trì");
 
     fireEvent.keyDown(textarea, { key: "Enter" });
-    expect(await screen.findByText("Câu trả lời có nguồn tham khảo")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tóm tắt" })).toBeInTheDocument();
     fireEvent.change(textarea, { target: { value: "Cảnh báo trước thì sao?" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
     await waitFor(() => expect(postRequests(fetchMock)).toHaveLength(2));

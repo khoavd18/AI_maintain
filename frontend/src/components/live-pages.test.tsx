@@ -134,6 +134,10 @@ describe("live API screens", () => {
     expect(await screen.findByText("Máy phát điện dự phòng 002")).toBeInTheDocument();
     expect(screen.getByText("63.89")).toBeInTheDocument();
     expect(screen.getByText("Điều cần chú ý")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Báo sự cố" })).toHaveAttribute(
+      "href",
+      "/tickets/new?asset=GENERATOR_002",
+    );
     first.unmount();
 
     mockApi({

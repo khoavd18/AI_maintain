@@ -119,7 +119,7 @@ Average/median resolution time không được gọi là MTTR vì ticket data kh
 
 Preventive plans và work orders là PostgreSQL transactional views, không thay formula analytics ở trên.
 
-- Mỗi plan giữ `next_due_date` riêng. Transactional `assets.next_maintenance_date` là ngày sớm nhất của active plans sau verified maintenance; nếu không có active plan, service giữ legacy interval/log fallback.
+- Mỗi plan giữ `next_due_date` riêng. Sau verified maintenance, transactional `assets.next_maintenance_date` là ngày sớm nhất của active plans không sớm hơn maintenance date vừa xác nhận; nếu không có ngày plan hợp lệ, service giữ legacy interval/log fallback. Plan overdue vẫn là lịch vận hành riêng để PM7 xử lý backlog.
 - Work-order completion tạo một MaintenanceLog nhưng chưa đổi Risk Score/KPI processed CSV. Verification cập nhật transactional asset maintenance dates, nhưng analytics chỉ thấy dữ liệu sau `export_snapshot` và full batch run.
 - Existing CSV validator yêu cầu fixed interval. Vì vậy `export_snapshot` tạo compatibility projection: asset `next_maintenance_date = last_maintenance_date + maintenance_interval_days`, và log `next_maintenance_date = maintenance_date + maintenance_interval_days`. PostgreSQL vẫn giữ nguyên plan-derived operational dates.
 - Preventive plan/work-order calendar và work-order metrics là operational views từ PostgreSQL. Existing batch preventive/KPI formulas tiếp tục dùng legacy interval projection trong milestone này; không diễn giải hai view là cùng một scheduling metric.

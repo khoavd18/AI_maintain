@@ -6,6 +6,7 @@ import { WorkOrderDetail } from "@/components/work-order-detail";
 import { permissions } from "@/lib/auth";
 import type { UserResponse } from "@/lib/api/schemas";
 import { assetCatalogFixture } from "@/test/fixtures";
+import { workOrderPartsFixture } from "@/test/inventory-fixtures";
 import { mockApi, renderWithQuery } from "@/test/test-utils";
 
 vi.mock("next/navigation", () => ({
@@ -85,14 +86,80 @@ describe("work-order technician workflow", () => {
       expect.objectContaining({ method: "POST" }),
     ));
   });
+
+  it("marks the parts step complete when all required stock is settled", async () => {
+    const inProgressWorkOrder = {
+      ...workOrderFixture,
+      status: "in_progress" as const,
+      status_display: "Đang thực hiện",
+      started_at: "2026-07-20T02:00:00Z",
+    };
+    mockWorkOrderApi(inProgressWorkOrder, undefined, {
+      ...workOrderPartsFixture,
+      total_planned_quantity: 1,
+      total_issued_quantity: 1,
+      net_consumed_quantity: 1,
+      open_shortage_count: 0,
+      has_unresolved_issued_stock: false,
+      completion_warning: null,
+    });
+    renderWithQuery(
+      <WorkOrderDetail workOrderId={workOrderId} />,
+      {
+        ...technicianUser,
+        permissions: [
+          ...technicianUser.permissions,
+          permissions.workOrderPartsRead,
+        ],
+      },
+    );
+
+    const partsStep = (await screen.findByText("Phụ tùng")).closest("li");
+    await waitFor(() => expect(partsStep).toHaveClass("border-primary"));
+    expect(partsStep).toHaveTextContent("✓");
+  });
+
+  it("derives follow-up from a non-resolved completion result", async () => {
+    const inProgressWorkOrder = {
+      ...workOrderFixture,
+      status: "in_progress" as const,
+      status_display: "Đang thực hiện",
+      started_at: "2026-07-20T02:00:00Z",
+    };
+    const fetchMock = mockWorkOrderApi(inProgressWorkOrder);
+    renderWithQuery(<WorkOrderDetail workOrderId={workOrderId} />, technicianUser);
+
+    fireEvent.change(await screen.findByLabelText("Kết quả kiểm tra"), { target: { value: "Dây curoa hoạt động ổn định." } });
+    fireEvent.change(screen.getByLabelText("Hành động đã thực hiện"), { target: { value: "Thay dây curoa và chạy thử HVAC." } });
+    fireEvent.change(screen.getByLabelText("Ghi chú kỹ thuật viên"), { target: { value: "Thiết bị đã vận hành bình thường." } });
+    fireEvent.change(screen.getByLabelText("Tóm tắt hoàn thành"), { target: { value: "Đã thay dây curoa HVAC A42." } });
+    fireEvent.click(document.getElementById("completion-result")!);
+    fireEvent.click(await screen.findByRole("option", { name: "Xử lý một phần" }));
+    expect(screen.getByText("Có", { selector: "span" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Gửi hoàn thành" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(`/work-orders/${workOrderId}/complete`),
+      expect.objectContaining({ method: "POST" }),
+    ));
+    const completionCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes(`/work-orders/${workOrderId}/complete`),
+    );
+    expect(JSON.parse(String(completionCall?.[1]?.body))).toMatchObject({
+      maintenance_result: "partially_resolved",
+      follow_up_required: true,
+    });
+  });
 });
 
-function mockWorkOrderApi(workOrder: typeof workOrderFixture, transitionResponse: unknown = { ...workOrderFixture, status: "in_progress", status_display: "Đang thực hiện", started_at: "2026-07-20T02:00:00Z", version: 2 }) {
+function mockWorkOrderApi(workOrder: unknown, transitionResponse: unknown = { ...workOrderFixture, status: "in_progress", status_display: "Đang thực hiện", started_at: "2026-07-20T02:00:00Z", version: 2 }, partsSummary: unknown = workOrderPartsFixture, completionResponse: unknown = { ...workOrderFixture, status: "completed", status_display: "Đã hoàn thành", started_at: "2026-07-20T02:00:00Z", completed_at: "2026-07-20T03:00:00Z", completion_summary: "Đã hoàn thành.", labor_minutes: 60, version: 2 }) {
   return mockApi({
     [`/work-orders/${workOrderId}`]: workOrder,
     "/maintenance/options": maintenanceOptions,
     [`/work-orders/${workOrderId}/attachments`]: [],
+    [`/work-orders/${workOrderId}/parts`]: partsSummary,
     [`POST /work-orders/${workOrderId}/transition`]: transitionResponse,
+    [`POST /work-orders/${workOrderId}/complete`]: completionResponse,
   });
 }
 

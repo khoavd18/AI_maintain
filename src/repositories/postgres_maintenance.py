@@ -634,6 +634,8 @@ class PostgresMaintenancePlanningRepository:
                         PreventiveMaintenancePlan.asset_id == asset.asset_id,
                         PreventiveMaintenancePlan.status == "active",
                         PreventiveMaintenancePlan.next_due_date.is_not(None),
+                        PreventiveMaintenancePlan.next_due_date
+                        >= maintenance_log.maintenance_date,
                     )
                 )
                 asset.next_maintenance_date = (

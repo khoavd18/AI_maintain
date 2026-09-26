@@ -2,13 +2,11 @@
 
 import Link from "next/link";
 import { Activity, Bot, CalendarClock, MapPin, TicketPlus, Wrench } from "lucide-react";
-import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { AssetDetailTabs } from "@/components/asset-detail-tabs";
 import { AssetManagementTabs } from "@/components/asset-management-tabs";
 import { PageHeader } from "@/components/page-header";
-import { TicketCreateSheet } from "@/components/ticket-create-sheet";
 import { LifecycleBadge, MaintenanceBadge, OperationalBadge, RiskBadge } from "@/components/status-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,8 +21,6 @@ export function AssetDetailView({ assetId }: { assetId: string }) {
   const auth = useAuth();
   const detailsQuery = useAssetDetailsQuery(assetId, 20);
   const profileQuery = useAssetProfileQuery(assetId);
-  const [ticketFormOpen, setTicketFormOpen] = useState(false);
-  const [analyticsStale, setAnalyticsStale] = useState(false);
 
   if (profileQuery.isPending) {
     return <LoadingSkeleton />;
@@ -69,15 +65,13 @@ export function AssetDetailView({ assetId }: { assetId: string }) {
         ]}
         actions={
           <>
-            {auth.can(permissions.ticketsCreate) && ticketCreationAllowed && <Button type="button" onClick={() => setTicketFormOpen(true)}><TicketPlus aria-hidden="true" />Báo sự cố</Button>}
+            {auth.can(permissions.ticketsCreate) && ticketCreationAllowed && <Button asChild><Link href={`/tickets/new?asset=${encodeURIComponent(profile.asset_id)}`}><TicketPlus aria-hidden="true" />Báo sự cố</Link></Button>}
             {auth.can(permissions.copilotUse) && <Button asChild variant="outline">
               <Link href={`/copilot?asset=${asset.id}`}><Bot aria-hidden="true" />Hỏi trợ lý bảo trì</Link>
             </Button>}
           </>
         }
       />
-
-      {analyticsStale && <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-950">Chỉ số ưu tiên chưa được cập nhật lại. Kết quả hiện tại vẫn thuộc đợt phân tích gần nhất.</div>}
 
       <Card className="overflow-visible">
         <CardContent className="space-y-5">
@@ -122,13 +116,6 @@ export function AssetDetailView({ assetId }: { assetId: string }) {
           <AssetManagementTabs profile={profile} onReload={() => void profileQuery.refetch()} />
         </div>
       </details>
-      {auth.can(permissions.ticketsCreate) && ticketCreationAllowed && <TicketCreateSheet
-        asset={asset}
-        latestAnomaly={details?.recent_anomalies[0]?.anomaly_reasons}
-        open={ticketFormOpen}
-        onOpenChange={setTicketFormOpen}
-        onCreated={() => setAnalyticsStale(true)}
-      />}
     </>
   );
 }

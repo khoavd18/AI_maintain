@@ -8,7 +8,7 @@ import pendulum
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.sdk import DAG
 
-from data_platform.domain_pipeline import DOMAINS
+from data_platform.ingestion.domains.catalog import DOMAINS
 from data_platform.orchestration.airflow_callbacks import (
     record_domain_pipeline_failure,
     record_domain_task_retry,

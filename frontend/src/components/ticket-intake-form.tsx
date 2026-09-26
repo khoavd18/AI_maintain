@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth-provider";
 import {
   TicketOperationsPriorityBadge,
 } from "@/components/ticket-operations-badges";
+import { MaintenanceBadge, RiskBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ import {
   useTicketPriorityPreviewQuery,
 } from "@/hooks/use-ticketing";
 import { getApiErrorMessage, UserSafeApiError } from "@/lib/api/errors";
+import type { AssetOverviewRecord } from "@/lib/api/schemas";
 import {
   ticketIntakeRequestSchema,
   type TicketImpact,
@@ -92,6 +94,10 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
   const categorySubcategories = options.data.subcategories.filter(
     (item) => item.category_id === form.category_id,
   );
+  const selectedAsset = assets.data.find((asset) => asset.asset_id === form.asset_id);
+  const selectedAssignee = options.data.assignees.find(
+    (item) => item.id === form.assigned_user_id,
+  );
   const canAssign = auth.can(permissions.ticketsAssign);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -105,6 +111,15 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
         formRef.current
           ?.querySelector<HTMLElement>('[aria-invalid="true"]')
           ?.focus();
+      }, 0);
+      return;
+    }
+    if (!selectedAsset) {
+      setFieldErrors({
+        asset_id: "Chọn một thiết bị đang có trong danh sách.",
+      });
+      window.setTimeout(() => {
+        formRef.current?.querySelector<HTMLElement>("#ticket-asset")?.focus();
       }, 0);
       return;
     }
@@ -137,9 +152,13 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
             >
               <Select
                 value={form.asset_id || "none"}
-                onValueChange={(asset_id) =>
-                  setForm({ ...form, asset_id: asset_id === "none" ? "" : asset_id })
-                }
+                onValueChange={(asset_id) => {
+                  setForm({ ...form, asset_id: asset_id === "none" ? "" : asset_id });
+                  setFieldErrors((current) => {
+                    const { asset_id: _assetError, ...remaining } = current;
+                    return remaining;
+                  });
+                }}
               >
                 <SelectTrigger id="ticket-asset" className="w-full" aria-invalid={Boolean(fieldErrors.asset_id)} aria-describedby={fieldErrors.asset_id ? "ticket-asset-error" : undefined}>
                   <SelectValue placeholder="Chọn thiết bị" />
@@ -155,6 +174,7 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
               </Select>
             </Field>
           </div>
+          {selectedAsset && <SelectedAssetContext asset={selectedAsset} />}
           <div className="mt-4">
             <Field
               id="ticket-description"
@@ -270,7 +290,43 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <ReferenceSelect id="ticket-source" label="Nguồn tiếp nhận" value={form.intake_source_id} items={options.data.intake_sources} onChange={(intake_source_id) => setForm({ ...form, intake_source_id })} />
               <ReferenceSelect id="ticket-group" label="Nhóm xử lý" value={form.support_group_id} items={options.data.support_groups} onChange={(support_group_id) => setForm({ ...form, support_group_id })} />
-              {canAssign && <Field id="ticket-assignee" label="Người được phân công"><Select value={form.assigned_user_id ?? "none"} onValueChange={(assigned_user_id) => setForm({ ...form, assigned_user_id: assigned_user_id === "none" ? null : assigned_user_id })}><SelectTrigger id="ticket-assignee" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Chưa phân công</SelectItem>{options.data.assignees.map((item) => <SelectItem key={item.id} value={item.id}>{item.display_name}</SelectItem>)}</SelectContent></Select></Field>}
+              {canAssign && (
+                <div className="space-y-1.5">
+                  <Field id="ticket-assignee" label="Người được phân công">
+                    <Select
+                      value={form.assigned_user_id ?? "none"}
+                      onValueChange={(assigned_user_id) =>
+                        setForm({
+                          ...form,
+                          assigned_user_id:
+                            assigned_user_id === "none" ? null : assigned_user_id,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="ticket-assignee" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Chưa phân công</SelectItem>
+                        {options.data.assignees.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.display_name}
+                            {item.technician_id ? ` · ${item.technician_id}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  {selectedAssignee && (
+                    <p className="text-xs text-muted-foreground">
+                      Đã chọn: {selectedAssignee.display_name}
+                      {selectedAssignee.technician_id
+                        ? ` · ${selectedAssignee.technician_id}`
+                        : ""}
+                    </p>
+                  )}
+                </div>
+              )}
               <Field id="ticket-manager-note" label="Ghi chú quản lý"><Textarea id="ticket-manager-note" rows={3} value={form.manager_note ?? ""} onChange={(event) => setForm({ ...form, manager_note: event.target.value })} /></Field>
             </div>
           </section>
@@ -334,6 +390,49 @@ export function TicketIntakeForm({ initialAssetId = "" }: TicketIntakeFormProps)
         )}
       </aside>
     </div>
+  );
+}
+
+function SelectedAssetContext({ asset }: { asset: AssetOverviewRecord }) {
+  return (
+    <section
+      aria-labelledby="ticket-asset-context"
+      className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3"
+    >
+      <h3 id="ticket-asset-context" className="text-sm font-semibold text-blue-950">
+        Ngữ cảnh thiết bị đã chọn
+      </h3>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div>
+          <p className="text-xs text-blue-800">Thiết bị</p>
+          <p className="mt-1 font-mono text-sm font-semibold text-blue-950">{asset.asset_id}</p>
+          <p className="mt-1 text-xs text-blue-900">{asset.asset_name} · {asset.location}</p>
+        </div>
+        <div>
+          <p className="text-xs text-blue-800">Risk Score (batch gần nhất)</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-blue-950">
+            <span>{asset.risk_score?.toFixed(2) ?? "Chưa có dữ liệu"}</span>
+            {asset.risk_level && <RiskBadge level={asset.risk_level} />}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs text-blue-800">Bảo trì</p>
+          <div className="mt-1">
+            {asset.maintenance_status_display ? (
+              <MaintenanceBadge status={asset.maintenance_status_display} />
+            ) : (
+              <span className="text-sm text-blue-950">Chưa có lịch</span>
+            )}
+          </div>
+        </div>
+      </div>
+      {asset.contributing_factors && (
+        <p className="mt-3 text-xs leading-5 text-blue-950">{asset.contributing_factors}</p>
+      )}
+      <p className="mt-3 text-xs leading-5 text-blue-900">
+        Risk Score hỗ trợ ưu tiên kiểm tra; mức ưu tiên ticket vẫn do backend tính từ mức ảnh hưởng và độ khẩn cấp.
+      </p>
+    </section>
   );
 }
 

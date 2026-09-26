@@ -138,7 +138,10 @@ describe("asset management UI", () => {
 
     expect(await screen.findByRole("heading", { name: "Máy phát điện dự phòng 002" })).toBeInTheDocument();
     expect(screen.getByText(locationFixture.breadcrumb)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tạo ticket" })).toBeEnabled();
+    expect(screen.getByRole("link", { name: "Tạo ticket" })).toHaveAttribute(
+      "href",
+      "/tickets/new?asset=GENERATOR_002",
+    );
     expect(screen.getByRole("link", { name: "Mở Copilot" })).toHaveAttribute("href", "/copilot?asset=GENERATOR_002");
     expect(container.firstElementChild).toHaveClass("overflow-x-hidden");
   });

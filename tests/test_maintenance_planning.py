@@ -13,7 +13,14 @@ from sqlalchemy.orm import Session
 
 from src.api.main import create_app
 from src.asset_management.storage import LocalAttachmentStorage
-from src.database.models import Asset, AuditLog, MaintenanceLog, Ticket, WorkOrder
+from src.database.models import (
+    Asset,
+    AuditLog,
+    MaintenanceLog,
+    PreventiveMaintenancePlan,
+    Ticket,
+    WorkOrder,
+)
 from src.database.session import build_engine, get_session_factory
 from src.maintenance_management.routes import get_maintenance_planning_service
 from src.maintenance_management.service import (
@@ -229,6 +236,13 @@ def test_preventive_generation_execution_verification_is_atomic_and_idempotent(
             actor=technician,
             audit_context=technician_audit,
         )
+    engine = build_engine(planning_context["database_url"])
+    with Session(engine) as session, session.begin():
+        stored_plan = session.get(PreventiveMaintenancePlan, UUID(plan["id"]))
+        assert stored_plan is not None
+        stored_plan.start_date = today - timedelta(days=2)
+        stored_plan.last_generated_due_date = today - timedelta(days=2)
+        stored_plan.next_due_date = today - timedelta(days=1)
     verified = service.verify_work_order(
         UUID(completed["id"]),
         expected_version=completed["version"],
@@ -237,13 +251,17 @@ def test_preventive_generation_execution_verification_is_atomic_and_idempotent(
     )
     assert verified["status"] == "verified"
 
-    engine = build_engine(planning_context["database_url"])
     with Session(engine) as session:
         assert session.scalar(select(func.count()).select_from(WorkOrder)) == 1
         assert session.scalar(select(func.count()).select_from(MaintenanceLog)) == 1
         asset = session.get(Asset, "GENERATOR_002")
         assert asset is not None
         assert asset.last_maintenance_date == today
+        maintenance_log = session.scalar(
+            select(MaintenanceLog).where(MaintenanceLog.work_order_id == UUID(completed["id"]))
+        )
+        assert maintenance_log is not None
+        assert asset.next_maintenance_date == maintenance_log.next_maintenance_date
         actions = set(session.scalars(select(AuditLog.action)).all())
         assert {
             "maintenance_plan.created",

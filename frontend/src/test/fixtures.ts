@@ -483,6 +483,7 @@ export const copilotResponseFixture = {
   context_warnings: [],
   conversation_state: {
     recent_intent: "troubleshooting",
+    resolved_asset_id: "GENERATOR_002",
     resolved_asset_type: "Máy phát điện dự phòng",
     resolved_failure_category: "Lỗi điện",
     previous_source_ids: ["S1"],

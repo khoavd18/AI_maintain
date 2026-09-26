@@ -36,7 +36,21 @@ describe("PM5 ticket intake and queues", () => {
     expect(
       await screen.findByText("Tính từ ảnh hưởng và độ khẩn cấp"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Ngữ cảnh thiết bị đã chọn" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Risk Score (batch gần nhất)")).toBeInTheDocument();
+    expect(screen.getByText("63.89")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Risk Score hỗ trợ ưu tiên kiểm tra/),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Trung bình").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText("Thông tin bổ sung"));
+    fireEvent.click(screen.getByRole("combobox", { name: "Người được phân công" }));
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Kỹ thuật viên test · TECH_002" }),
+    );
+    expect(screen.getByText("Đã chọn: Kỹ thuật viên test · TECH_002")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Lưu phiếu sự cố" }));
     expect(
       await screen.findByText("Mô tả cần ít nhất 5 ký tự."),
@@ -59,7 +73,30 @@ describe("PM5 ticket intake and queues", () => {
       asset_id: "GENERATOR_002",
       impact: "medium",
       urgency: "medium",
+      assigned_user_id: technicianId,
     });
+  });
+
+  it("blocks an unavailable asset from a ticket-create link", async () => {
+    const fetchMock = mockApi({
+      "/ticketing/options": ticketingOptionsFixture,
+      "/assets": assetsFixture,
+      "/ticketing/priority-preview": priorityPreviewFixture,
+    });
+    renderWithQuery(<TicketIntakeForm initialAssetId="MISSING_ASSET" />);
+
+    await screen.findByText("Tính từ ảnh hưởng và độ khẩn cấp");
+    fireEvent.change(screen.getByLabelText("Mô tả sự cố"), {
+      target: { value: "Cần kiểm tra thiết bị từ liên kết không còn hiệu lực." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu phiếu sự cố" }));
+
+    expect(
+      await screen.findByText("Chọn một thiết bị đang có trong danh sách."),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "POST"),
+    ).toBe(false);
   });
 
   it("sends queue and search filters to the server", async () => {

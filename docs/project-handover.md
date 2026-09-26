@@ -2,13 +2,14 @@
 
 ## Status
 
-Roadmap Stages 1-12 are complete at the working-tree level. Stage 12 is an
-uncommitted final portfolio candidate on branch
+Roadmap Stages 1-12 are complete. Stage 12 is committed at
+`cfdfa21a384073740d41528f470029a9746fce46` on branch
 `release/stage12-final-portfolio`, based on the approved Stage 11 checkpoint
 `33ac82efbe5f37ed07d412ba2554fd94bde0b6f3`.
 
-No Stage 12 commit, tag, push, or public release is included in this handover.
-Those remain separate approval gates. There is no Stage 13.
+At the 2026-08-27 local review, no tag pointed at that Stage 12 commit and the
+branch had no configured upstream. A remote push or public release was not
+verified and must not be inferred from the local commit. There is no Stage 13.
 
 ## Checkpoint lineage
 
@@ -17,7 +18,7 @@ Those remain separate approval gates. There is no Stage 13.
 | Stage 9 | `9d556946d33bb7340dc28feee33b2fb5cebc5c02` | 1.1M-work-order Data Platform integration and scale evidence |
 | Stage 10 | `3de9e53d072097665c9ecf718ddd4c22d418b4e6` | Multi-domain scale, reliability, dbt, and concurrent analytics |
 | Stage 11 | `33ac82efbe5f37ed07d412ba2554fd94bde0b6f3` | Analytics API connection/contention optimization and evidence |
-| Stage 12 | uncommitted | Final README, architecture, runbooks, portfolio, manifest, verification |
+| Stage 12 | `cfdfa21a384073740d41528f470029a9746fce46` | Final README, architecture, runbooks, portfolio, manifest, verification |
 
 Two protected local modifications are explicitly outside the Stage 9-12
 release lineage:
@@ -27,6 +28,56 @@ release lineage:
 
 Their required hashes are recorded in [release-manifest.json](release-manifest.json).
 They must remain unstaged and uncommitted unless separately reviewed.
+This is the historical hash-protected exception list, not an exhaustive account
+of the current working tree.
+
+## Post-Stage-12 Data Platform ownership checkpoint — 2026-08-27
+
+This is an unnumbered, **uncommitted working-tree maintenance checkpoint** after
+the committed Stage 12 portfolio record. It is not a Stage 13 and does not
+change the Stage 9-12 lineage, benchmark JSON, release manifest, or historical
+validation totals. Its changes require their own review and commit decision.
+
+The multi-domain ingestion implementation is now organized by capability under
+`data_platform/ingestion/domains/`: catalogue, input safety, extraction, raw
+loading, source counts/integrity validation, reconciliation/watermark
+finalization, durable run tracking, and CLI dispatch.
+`data_platform/domain_pipeline.py` remains the historical facade for existing
+imports and `python -m data_platform.domain_pipeline` commands. The Airflow DAG
+ID, command surface, database schema, migration head, dbt project, and
+documented transaction boundaries remain compatibility seams.
+
+Current maintainer guidance is in
+[Data Platform Code Ownership](data-platform-code-ownership.md). It records the
+whole raw-load and all-domain watermark transactions, the safe procedure for
+adding a domain, and five deferred correctness findings. Those findings were not
+fixed or reclassified by the structural move. Validation for this checkpoint
+must be reported from commands actually executed against the current tree; none
+of the historical Stage 9-11 benchmark or test totals may be presented as a new
+run.
+
+### Validation executed for this checkpoint
+
+The following checks were executed on 2026-08-27 against this uncommitted
+structural-refactor tree:
+
+| Check | Current result |
+|---|---|
+| Data Platform tests | `94 passed`, with the existing Starlette/httpx deprecation warning |
+| Architecture boundaries | `19 passed` |
+| Complete repository test suite | `1,410 passed, 87 skipped`, with the same existing warning |
+| Ruff | `python -m ruff check .` passed |
+| Python compilation | `data_platform` and `src/analytics` passed `compileall` |
+| Scale Compose definition | `docker compose -f docker-compose.scale.yml config --quiet` passed |
+| Historical CLI facade | `python -m data_platform.domain_pipeline --help` passed |
+| Live Airflow import check | Existing `stage9-airflow-api-server` returned `[]` import errors |
+| Documentation checks | Link and release-document selection passed; `git diff --check` passed |
+
+The PostgreSQL data, Docker volumes, historical benchmark artifacts, DAG runs,
+and dbt warehouse were not mutated. No DAG, dbt build, fixture regeneration, or
+destructive PostgreSQL setup was run for this structural checkpoint. The 87
+skips include environment-gated PostgreSQL integration tests and are not
+presented as newly executed database validation.
 
 ## Implemented capabilities
 
@@ -55,8 +106,11 @@ They must remain unstaged and uncommitted unless separately reviewed.
 - Stage 9 nine-task and Stage 10 nineteen-task Airflow DAGs.
 - dbt staging, dimensions, facts, marts, generic tests, and singular integrity
   assertions.
-- Controlled failure recovery, empty rerun, cross-layer reconciliation, and six
-  atomic domain watermarks.
+- Historical Stage 10 evidence includes a controlled failure/retry run and an
+  empty rerun, plus cross-layer reconciliation and six atomic domain watermarks.
+  The current controlled-failure marker persistence limitation is documented in
+  [Data Platform Code Ownership](data-platform-code-ownership.md#deferred-correctness-findings);
+  recovery is not presented as a current unconditional guarantee.
 - Authenticated site-scoped Analytics API with an exact query catalogue,
   read-only transactions, bounded concurrency, pool observability, and a short
   authorization-safe cache.
@@ -76,6 +130,10 @@ They must remain unstaged and uncommitted unless separately reviewed.
 | Final verifier | `scripts/verify_final_release.ps1` |
 | Application migrations | `migrations/versions/` |
 | Data Platform migrations | `data_platform/migrations/versions/` |
+| Scale Docker topology | `docker-compose.scale.yml` |
+| Current multi-domain ingestion owner | `data_platform/ingestion/domains/` |
+| Historical Stage 9 work-order ingestion | `data_platform/pipeline.py` |
+| Data Platform ownership guide | `docs/data-platform-code-ownership.md` |
 | Airflow DAGs | `data_platform/airflow/dags/` |
 | dbt project | `data_platform/dbt/maintenance_analytics/` |
 | Analytics adapter/API | `src/analytics/domain_adapter.py`, `src/api/routers/domain_analytics.py` |
@@ -96,7 +154,8 @@ Core verified metrics:
 
 - 1,100,000 final work orders and 1,110,000 raw versions;
 - 7,728,467 generated/copied Stage 10 rows across 145 chunks;
-- seven final domain counts reconciled, eight integrity checks at zero;
+- seven final count keys reconciled (legacy Stage 9 `work_orders` plus six
+  Stage 10 domains), eight integrity checks at zero;
 - 19 Airflow tasks with baseline, controlled retry, and empty rerun evidence;
 - 26 dbt models + 433 data tests, `459/459 PASS`;
 - 2,052 historical Stage 10 validation checks;
@@ -215,5 +274,6 @@ dataset.
 ## Release governance
 
 The final checklist is [final-release-checklist.md](final-release-checklist.md).
-A Stage 12 commit, optional tag, and push require explicit future approvals.
-Do not combine them into this documentation stage.
+Stage 12 is already committed locally. A future tag, push, or public release,
+and any commit for the current uncommitted Data Platform checkpoint, remain
+separate approval gates.

@@ -107,10 +107,10 @@ IMPLEMENTATION_PACKAGE_PATHS = (
 
 PROTECTED_REPOSITORY_AST_SHA256 = {
     "src/repositories/postgres_inventory.py": (
-        "248c3662da1c0066f1005ab0b1636e22c68366038adb2f6fc3e775093b028ace"
+        "71ca7d16c572d9f15c1355a5ca89a2de0c24df0e9d7ae3f268e1d3775613e91f"
     ),
     "src/repositories/postgres_maintenance.py": (
-        "38512788a40f065c953d705cbf88b02a1de615793e4575a0d2c2ce8474b4c056"
+        "85bbe06b4bb1231976e693d453de85a5456a2e9d13086f9b79c4edd49db13be4"
     ),
     "src/repositories/postgres_operations.py": (
         "c57aef33797d073d326f41863daad1100da4cf0c58ac876deb4660cce9683a65"

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "Maintenance Analytics",
+    "description": "Báo cáo tổng hợp cho Data Platform bảo trì."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "3d4513f0-9b07-5eb5-a56e-a33df930759c"
+  }
+}

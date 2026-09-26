@@ -1,0 +1,125 @@
+table 'Daily Work Orders'
+	lineageTag: ff3ff8bb-95e7-550d-a5cb-da92e6c75f1f
+
+	column site_id
+		dataType: string
+		isHidden
+		lineageTag: aa7b458c-0de8-517a-aa7f-8e8ef18d907a
+		summarizeBy: none
+		sourceColumn: site_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column created_date
+		dataType: dateTime
+		isHidden
+		formatString: dd/MM/yyyy
+		lineageTag: 07037080-bbbe-5c74-827e-7a097920bbbf
+		summarizeBy: none
+		sourceColumn: created_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column total_work_orders
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: 8bd1d53a-2341-563c-b58b-5a45664d6c06
+		summarizeBy: none
+		sourceColumn: total_work_orders
+
+		annotation SummarizationSetBy = Automatic
+
+	column completed_work_orders
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: 72cdcf33-cde2-5c8e-9bf4-5f1fc0957fc9
+		summarizeBy: none
+		sourceColumn: completed_work_orders
+
+		annotation SummarizationSetBy = Automatic
+
+	column critical_work_orders
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: e71566d4-327f-504b-ba94-a00f162639d8
+		summarizeBy: none
+		sourceColumn: critical_work_orders
+
+		annotation SummarizationSetBy = Automatic
+
+	column unassigned_work_orders
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: a271ac84-6c07-5cdf-be3a-c4f7e37acdd5
+		summarizeBy: none
+		sourceColumn: unassigned_work_orders
+
+		annotation SummarizationSetBy = Automatic
+
+	column total_repair_hours
+		dataType: double
+		isHidden
+		formatString: 0.00
+		lineageTag: d1403923-db71-5675-bad1-1d51209061e6
+		summarizeBy: none
+		sourceColumn: total_repair_hours
+
+		annotation SummarizationSetBy = Automatic
+
+	column repair_duration_work_orders
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: cee94dfc-5611-5c57-b9de-d5be2e338b02
+		summarizeBy: none
+		sourceColumn: repair_duration_work_orders
+
+		annotation SummarizationSetBy = Automatic
+
+	measure 'Total Work Orders' = SUM('Daily Work Orders'[total_work_orders])
+		formatString: #,0
+		description: Tổng work order trong phạm vi lọc.
+		lineageTag: da964dda-4188-5139-994d-8475860bb27b
+
+	measure 'Completed Work Orders' = SUM('Daily Work Orders'[completed_work_orders])
+		formatString: #,0
+		description: Tổng work order completed hoặc verified.
+		lineageTag: 05fff6f4-112e-5c88-9154-682f4ec64b9e
+
+	measure 'Completion Rate' = DIVIDE([Completed Work Orders], [Total Work Orders])
+		formatString: 0.0%
+		description: Tỷ lệ work order đã hoàn thành.
+		lineageTag: 0fea8f87-5dde-5a85-820d-068c6ecbe64d
+
+	measure 'Critical Work Orders' = SUM('Daily Work Orders'[critical_work_orders])
+		formatString: #,0
+		description: Tổng work order priority critical.
+		lineageTag: f3a9838b-ce50-5983-968b-e60e54421b9d
+
+	measure 'Unassigned Work Orders' = SUM('Daily Work Orders'[unassigned_work_orders])
+		formatString: #,0
+		description: Tổng work order chưa phân công.
+		lineageTag: b79cb6fe-5d24-5232-abdc-448cad50822e
+
+	measure 'Average Repair Hours' = DIVIDE(SUM('Daily Work Orders'[total_repair_hours]), SUM('Daily Work Orders'[repair_duration_work_orders]))
+		formatString: 0.00
+		description: Số giờ sửa chữa trung bình trên work order có duration.
+		lineageTag: 49ebce73-6faa-5cd4-a19a-53660f669d07
+
+	partition 'Daily Work Orders' = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database("127.0.0.1:25432", "maintenance_copilot_benchmark_scale", [CreateNavigationProperties=false]),
+				Data = Source{[Schema="analytics_marts", Item="daily_site_work_orders"]}[Data],
+				SelectedColumns = Table.SelectColumns(Data, {"site_id", "created_date", "total_work_orders", "completed_work_orders", "critical_work_orders", "unassigned_work_orders", "total_repair_hours", "repair_duration_work_orders"})
+			in
+				SelectedColumns
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

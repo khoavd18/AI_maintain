@@ -1,0 +1,106 @@
+table Date
+	lineageTag: 96f08076-a698-506f-8c90-1291ea00faec
+
+	column date_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 847632bd-ba0c-5858-88c0-84fdda4aaaa7
+		summarizeBy: none
+		sourceColumn: date_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column date
+		dataType: dateTime
+		formatString: dd/MM/yyyy
+		lineageTag: 5868c721-a8d3-553a-a075-11c3cb3518eb
+		summarizeBy: none
+		sourceColumn: date_day
+
+		annotation SummarizationSetBy = Automatic
+
+	column year
+		dataType: int64
+		formatString: 0
+		lineageTag: 8980da86-7dc9-512a-9838-aea696b50ad4
+		summarizeBy: none
+		sourceColumn: year_number
+
+		annotation SummarizationSetBy = Automatic
+
+	column quarter
+		dataType: int64
+		formatString: 0
+		lineageTag: 6e72b724-d200-57a3-91a3-47c1fe4a26da
+		summarizeBy: none
+		sourceColumn: quarter_number
+
+		annotation SummarizationSetBy = Automatic
+
+	column month_number
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 950afaf6-4d1f-56e8-bca8-8110faa92ef6
+		summarizeBy: none
+		sourceColumn: month_number
+
+		annotation SummarizationSetBy = Automatic
+
+	column month
+		dataType: string
+		lineageTag: c6d4c50c-98b1-5420-9fe0-e6e43b1bd24f
+		summarizeBy: none
+		sourceColumn: month_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column month_start_date
+		dataType: dateTime
+		formatString: MM/yyyy
+		lineageTag: 236b6a92-4ab5-58e6-aca2-9acda2083cf8
+		summarizeBy: none
+		sourceColumn: month_start_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column week
+		dataType: int64
+		formatString: 0
+		lineageTag: 98174cc5-cef5-5a29-ac42-73eee3f3b12b
+		summarizeBy: none
+		sourceColumn: week_number
+
+		annotation SummarizationSetBy = Automatic
+
+	column day
+		dataType: int64
+		formatString: 0
+		lineageTag: a122c85f-dc1c-51f3-8879-4955185295f6
+		summarizeBy: none
+		sourceColumn: day_of_month
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_weekend
+		dataType: boolean
+		lineageTag: 427b91c2-61d5-527a-81f2-0121c6789555
+		summarizeBy: none
+		sourceColumn: is_weekend
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Date = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database("127.0.0.1:25432", "maintenance_copilot_benchmark_scale", [CreateNavigationProperties=false]),
+				Data = Source{[Schema="analytics_warehouse", Item="dim_date"]}[Data],
+				SelectedColumns = Table.SelectColumns(Data, {"date_key", "date_day", "year_number", "quarter_number", "month_number", "month_name", "month_start_date", "week_number", "day_of_month", "is_weekend"})
+			in
+				SelectedColumns
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

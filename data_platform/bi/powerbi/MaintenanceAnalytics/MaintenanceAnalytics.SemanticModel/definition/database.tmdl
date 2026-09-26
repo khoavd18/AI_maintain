@@ -1,0 +1,4 @@
+database
+	compatibilityLevel: 1601
+
+	annotation PBI_QueryOrder = ["Date","Site","Daily Work Orders","Site Reliability","Ticket SLA","Inventory Consumption","Technician Workload"]

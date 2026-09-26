@@ -1,0 +1,23 @@
+relationship 7a780bef-39bb-5e4d-8c45-ac093b2df4f5
+	fromColumn: 'Daily Work Orders'.created_date
+	toColumn: Date.date
+
+relationship 85689c24-2239-5180-a066-5524f2485cb6
+	fromColumn: 'Daily Work Orders'.site_id
+	toColumn: Site.site_id
+
+relationship 4d7288e4-361f-518e-8841-972778314523
+	fromColumn: 'Site Reliability'.site_id
+	toColumn: Site.site_id
+
+relationship ddde111c-ab29-5025-b80a-32f0177d3eea
+	fromColumn: 'Ticket SLA'.site_id
+	toColumn: Site.site_id
+
+relationship 2181010d-f51d-5360-b1e8-f7dec5fb687c
+	fromColumn: 'Inventory Consumption'.site_id
+	toColumn: Site.site_id
+
+relationship c32425a8-6743-5587-b4e2-1cf8783b6f65
+	fromColumn: 'Technician Workload'.site_id
+	toColumn: Site.site_id

@@ -13,7 +13,13 @@ import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "
 
 import { useCopilotStatus } from "@/components/copilot-status-provider";
 import { SafetyNotice } from "@/components/safety-notice";
-import { ContextRow, ConversationResponse, RequestFailure, type ConversationTurn } from "@/components/copilot/response-view";
+import {
+  ContextRow,
+  ConversationResponse,
+  PendingConversationResponse,
+  RequestFailure,
+  type ConversationTurn,
+} from "@/components/copilot/response-view";
 import {
   MaintenanceBadge,
   PriorityBadge,
@@ -62,6 +68,10 @@ export function CopilotWorkspace({
   );
   const [validationError, setValidationError] = useState<string | null>(null);
   const [history, setHistory] = useState<ConversationTurn[]>([]);
+  const [pendingQuestion, setPendingQuestion] = useState<{
+    requestId: number;
+    question: string;
+  } | null>(null);
   const turnSequence = useRef(0);
   const submitting = useRef(false);
   const conversationEpoch = useRef(0);
@@ -101,6 +111,7 @@ export function CopilotWorkspace({
     conversationEpoch.current += 1;
     activeRequestId.current = null;
     submitting.current = false;
+    setPendingQuestion(null);
   }
 
   function isCurrentRequest(
@@ -159,6 +170,8 @@ export function CopilotWorkspace({
     const submittedAssetId = selectedAssetId;
     const submittedTicketId = selectedTicketId;
     activeRequestId.current = requestId;
+    setPendingQuestion({ requestId, question: normalizedQuestion });
+    setQuestion("");
     try {
       const previousTurn = history.at(-1);
       const conversationContext = previousTurn
@@ -184,7 +197,6 @@ export function CopilotWorkspace({
         ...current,
         { id: turnSequence.current, question: normalizedQuestion, response },
       ].slice(-maximumHistory));
-      setQuestion("");
       const nextRagStatus = ragStatusFromResponse(response);
       if (nextRagStatus) setRagStatus(nextRagStatus);
     } catch (error) {
@@ -199,10 +211,12 @@ export function CopilotWorkspace({
       if (error instanceof UserSafeApiError && error.code === "rag_unavailable") {
         setRagStatus("unavailable");
       }
+      setQuestion((current) => current.trim() ? current : normalizedQuestion);
     } finally {
       if (activeRequestId.current === requestId) {
         activeRequestId.current = null;
         submitting.current = false;
+        setPendingQuestion((current) => current?.requestId === requestId ? null : current);
         if (mounted.current) window.setTimeout(() => textareaRef.current?.focus(), 0);
       }
     }
@@ -337,12 +351,12 @@ export function CopilotWorkspace({
         <SafetyNotice compact />
       </aside>
 
-      <section aria-labelledby="copilot-conversation" className="min-w-0 overflow-hidden rounded-lg border bg-white">
+      <section aria-labelledby="copilot-conversation" className="min-w-0 overflow-hidden rounded-xl border bg-white shadow-sm">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Bot className="size-4" aria-hidden="true" /></span>
             <div className="min-w-0">
-              <h2 id="copilot-conversation" className="text-sm font-semibold">Trợ lý bảo trì</h2>
+              <h2 id="copilot-conversation" className="text-base font-semibold tracking-tight">Trợ lý bảo trì</h2>
               <p className="text-xs leading-5 text-muted-foreground">Hướng dẫn dựa trên tài liệu bảo trì đã kiểm soát</p>
             </div>
           </div>
@@ -351,7 +365,7 @@ export function CopilotWorkspace({
             role="status"
             className={cn("shrink-0", mutation.isPending && "animate-pulse motion-reduce:animate-none")}
           >
-            {mutation.isPending ? "Đang chuẩn bị" : "Sẵn sàng"}
+            {mutation.isPending ? "Đang suy nghĩ" : "Sẵn sàng"}
           </Badge>
         </header>
 
@@ -377,26 +391,21 @@ export function CopilotWorkspace({
           </div>
         </div>
 
-        <ScrollArea className="h-[min(54dvh,620px)] min-h-[320px] sm:min-h-[360px]">
+        <ScrollArea className="h-[min(54dvh,620px)] min-h-[320px] bg-slate-50/60 sm:min-h-[360px]">
           <div className="space-y-6 p-4 sm:p-6" aria-live="polite" aria-busy={mutation.isPending}>
-            {history.length === 0 && !mutation.isPending && (
+            {history.length === 0 && !pendingQuestion && (
               <div className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center">
                 <CircleHelp className="size-7 text-blue-700" aria-hidden="true" />
                 <h3 className="mt-3 text-sm font-semibold">Bạn cần hỗ trợ việc gì?</h3>
                 <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
-                  Hỏi về nguyên nhân, lưu ý an toàn hoặc các bước nên kiểm tra. Nguồn tham khảo sẽ được hiển thị khi có tài liệu phù hợp.
+                  Hỏi về nguyên nhân, lưu ý an toàn hoặc các bước nên kiểm tra cho thiết bị.
                 </p>
               </div>
             )}
 
             {history.map((turn) => <ConversationResponse key={turn.id} turn={turn} onRetry={submitQuestion} />)}
 
-            {mutation.isPending && (
-              <div role="status" className="flex items-center gap-3 rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                Đang đối chiếu tài liệu và chuẩn bị câu trả lời...
-              </div>
-            )}
+            {pendingQuestion && <PendingConversationResponse question={pendingQuestion.question} />}
 
             {mutation.isError && (
               <RequestFailure error={mutation.error} onRetry={() => void submitQuestion()} />

@@ -565,6 +565,7 @@ export const copilotEvidenceStatusSchema = z.enum([
 
 const copilotConversationContextSchema = z.object({
   recent_intent: z.string().trim().max(40).nullable().optional(),
+  resolved_asset_id: z.string().trim().max(128).nullable().optional(),
   resolved_asset_type: z.string().trim().max(80).nullable().optional(),
   resolved_failure_category: z.string().trim().max(80).nullable().optional(),
   previous_source_ids: z.array(z.string().regex(/^S[1-9][0-9]{0,2}$/)).max(10).default([]),

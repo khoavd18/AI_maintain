@@ -1,0 +1,113 @@
+table 'Ticket SLA'
+	lineageTag: a7daa56c-04c6-545d-b101-6eb3352f3d77
+
+	column site_id
+		dataType: string
+		isHidden
+		lineageTag: 6befe217-d2a8-51d8-ad2c-19df89ef0fe8
+		summarizeBy: none
+		sourceColumn: site_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column priority
+		dataType: string
+		lineageTag: 607455af-4fed-58de-9ced-c0002c250afd
+		summarizeBy: none
+		sourceColumn: priority
+
+		annotation SummarizationSetBy = Automatic
+
+	column ticket_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: 74e836d6-2497-56a9-9b2b-ef647d91fa7b
+		summarizeBy: none
+		sourceColumn: ticket_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column unresolved_ticket_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: 4f9457a6-9ef9-5ce8-bc6b-4d788864c3f2
+		summarizeBy: none
+		sourceColumn: unresolved_ticket_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column first_response_met_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: a2b16d94-762d-5715-ac57-cedabf3d9029
+		summarizeBy: none
+		sourceColumn: first_response_met_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column resolution_breach_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: c97ce880-3b3a-59e8-93c6-db87266dbdf9
+		summarizeBy: none
+		sourceColumn: resolution_breach_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column escalated_ticket_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: a118439c-2dca-5a58-a41b-ff0424aa56ee
+		summarizeBy: none
+		sourceColumn: escalated_ticket_count
+
+		annotation SummarizationSetBy = Automatic
+
+	measure Tickets = SUM('Ticket SLA'[ticket_count])
+		formatString: #,0
+		description: Tổng ticket.
+		lineageTag: 607cfe3b-9012-5147-9214-7e13f01e48fa
+
+	measure 'Unresolved Tickets' = SUM('Ticket SLA'[unresolved_ticket_count])
+		formatString: #,0
+		description: Tổng ticket chưa resolved.
+		lineageTag: 1eb4ed58-67f4-59f7-b84f-93f8a3f72dfa
+
+	measure 'SLA Breaches' = SUM('Ticket SLA'[resolution_breach_count])
+		formatString: #,0
+		description: Tổng ticket breach resolution SLA.
+		lineageTag: a595d1fc-8606-53bd-aad2-1bee83a974ce
+
+	measure 'SLA Breach Rate' = DIVIDE([SLA Breaches], [Tickets])
+		formatString: 0.0%
+		description: Tỷ lệ breach resolution SLA.
+		lineageTag: d6b33675-83ec-5cb6-b8c2-e999230183ad
+
+	measure 'Escalated Tickets' = SUM('Ticket SLA'[escalated_ticket_count])
+		formatString: #,0
+		description: Tổng ticket đã escalation.
+		lineageTag: ec261045-32d6-5ef5-a27f-0e883d2bbaf7
+
+	measure 'First Response Met Rate' = DIVIDE(SUM('Ticket SLA'[first_response_met_count]), [Tickets])
+		formatString: 0.0%
+		description: Tỷ lệ đáp ứng first-response SLA.
+		lineageTag: 1affe304-4e5e-5206-aeb3-b403768cc37f
+
+	partition 'Ticket SLA' = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database("127.0.0.1:25432", "maintenance_copilot_benchmark_scale", [CreateNavigationProperties=false]),
+				Data = Source{[Schema="analytics_marts", Item="ticket_sla"]}[Data],
+				SelectedColumns = Table.SelectColumns(Data, {"site_id", "priority", "ticket_count", "unresolved_ticket_count", "first_response_met_count", "resolution_breach_count", "escalated_ticket_count"})
+			in
+				SelectedColumns
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

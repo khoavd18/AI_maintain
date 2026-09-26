@@ -11,7 +11,24 @@ Platform tests. Exact timings, sizes và plans ở
 Không suy diễn từ local synthetic benchmark rằng hệ thống production-ready,
 chịu được production traffic hoặc đã được sử dụng tại doanh nghiệp.
 
-## Kiến trúc tích hợp
+## Current code ownership — post-Stage 12
+
+The current multi-domain implementation is capability-owned under
+`data_platform/ingestion/domains/`; `data_platform/domain_pipeline.py` remains
+the historical import and CLI facade. See
+[Data Platform Code Ownership](data-platform-code-ownership.md) for the module
+map, whole transaction boundaries, domain-extension checklist, safe validation,
+and correctness findings that remain explicitly deferred. This organization
+change does not alter or rerun the Stage 9-12 evidence below.
+
+The current Stage 10 domain path uses tuple
+`(source_available_at, source_id)`, commits raw rows before a separate
+reconciliation/finalization gate, and runs the 19-task
+`maintenance_domain_scale_pipeline`. The next sections through the Stage 9
+evidence table describe the historical Stage 9 work-order contract; do not apply
+its single-watermark transaction rules to the Stage 10 domain package.
+
+## Kiến trúc tích hợp — historical Stage 9 contract
 
 ```text
 isolated scale PostgreSQL / public (OLTP fixture)
@@ -43,7 +60,8 @@ thúc bằng `_scale`, user không phải scale-specific, batch size ngoài gi�
 hoặc S3 được bật mà thiếu bucket. S3 là optional adapter và bị tắt trong local
 benchmark; AWS/RDS không được gọi hoặc mutate.
 
-Scale Compose dùng các service, network và volume chuyên biệt:
+Scale topology được định nghĩa bởi `docker-compose.scale.yml` và dùng các
+service, network và volume chuyên biệt:
 
 - `stage9-scale-postgres`, host port mặc định `25432`, database
   `maintenance_copilot_scale`;
@@ -54,6 +72,39 @@ Scale Compose dùng các service, network và volume chuyên biệt:
   `ai_maintenance_copilot_stage9_airflow_logs_v1`.
 
 Không volume nào của normal application Compose được mount hoặc reused.
+
+Hai tên database xuất hiện trong tài liệu vì chúng phục vụ hai trường hợp khác
+nhau:
+
+| Trường hợp | Database | Quy tắc |
+|---|---|---|
+| Fresh/default Compose | `maintenance_copilot_scale` | Đây là default của cả `DATA_PLATFORM_DB_NAME` và `STAGE9_POSTGRES_INITIAL_DB` trong `docker-compose.scale.yml`. |
+| Preserved historical benchmark | `maintenance_copilot_benchmark_scale` | Read-only SQL trong operations runbook chủ đích trỏ vào database benchmark đã được tạo trong preserved volume. Phải chọn tên này rõ ràng; không suy ra nó tồn tại trong một fresh volume. |
+
+Khi tạo volume lần đầu, giữ `DATA_PLATFORM_DB_NAME` và
+`STAGE9_POSTGRES_INITIAL_DB` cùng một giá trị. Thay `POSTGRES_DB` sau khi volume
+đã được khởi tạo không tự tạo hoặc rename database. Trước mọi read-only check,
+inspect database hiện có và không chạy reset/generator chỉ để làm cho tên khớp.
+
+### dbt source code và runtime storage
+
+dbt SQL nằm trong repository, còn relation đã materialize nằm trong PostgreSQL;
+không có database staging/warehouse riêng trong local scale topology:
+
+| Layer | Source code | Runtime location |
+|---|---|---|
+| Staging | `data_platform/dbt/maintenance_analytics/models/staging/` | Views trong schema `analytics_staging` của database được chọn bởi `DATA_PLATFORM_DB_NAME`. |
+| Warehouse | `data_platform/dbt/maintenance_analytics/models/warehouse/` | Tables/incremental facts trong schema `analytics_warehouse` của cùng database. |
+| Marts | `data_platform/dbt/maintenance_analytics/models/marts/` | Tables trong schema `analytics_marts` của cùng database. |
+| dbt compiled artifacts/logs | Generated, không phải business data | Host `data/scale/dbt/target/` và `data/scale/dbt/logs/`, bind-mounted vào Airflow và phải remain ignored. |
+
+`analytics_staging`, `analytics_warehouse`, và `analytics_marts` được tạo từ dbt
+base schema `analytics` cộng custom schema `staging`, `warehouse`, và `marts`.
+PostgreSQL lưu bytes của các relation này trong volume
+`ai_maintenance_copilot_stage9_scale_pgdata_v1`. Airflow metadata nằm riêng ở
+`stage9-airflow-postgres`/
+`ai_maintenance_copilot_stage9_airflow_pgdata_v1`; nó không chứa dbt warehouse
+data.
 
 ## Source-to-warehouse mapping
 
@@ -171,12 +222,19 @@ sáu raw loaders, dbt/reconciliation và atomic watermark/audit gates. XCom ch�
 metadata nhỏ. Watermark version 2 ở cả sáu domain sau baseline + incremental;
 empty run không advance.
 
+“Sáu domain” ở đây là sáu independent Stage 10 watermarks. Historical
+seven-count evidence gồm legacy `work_orders` của Stage 9 cộng sáu count keys của
+Stage 10; nó không có nghĩa là có watermark thứ bảy.
+
 Read boundary mới là `DomainAnalyticsAdapter` và authenticated route
 `/analytics/domain/{query_name}`. Catalog có sáu exact names, parameter binding,
 read-only transaction, 366-day/200-row bounds, 30-second statement timeout và
 per-worker concurrency guard. Không có arbitrary hoặc model-generated SQL.
 
-Measured counts, recovery và load results ở
+Historical measured counts, controlled-retry evidence và load results ở
 [stage10-domain-scale.md](stage10-domain-scale.md),
 [reliability-failure-recovery.md](reliability-failure-recovery.md) và
-[analytics-api-load-test.md](analytics-api-load-test.md).
+[analytics-api-load-test.md](analytics-api-load-test.md). Current code retains
+the deferred controlled-failure marker persistence limitation documented in
+[Data Platform Code Ownership](data-platform-code-ownership.md#deferred-correctness-findings);
+the historical run is not a guarantee for every current retry path.

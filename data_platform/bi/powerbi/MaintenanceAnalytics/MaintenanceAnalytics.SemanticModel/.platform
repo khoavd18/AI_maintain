@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "Maintenance Analytics Model",
+    "description": "Batch analytics semantic model for maintenance reporting."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "767b9bee-7579-5557-a0ab-e1640fd5d0a5"
+  }
+}

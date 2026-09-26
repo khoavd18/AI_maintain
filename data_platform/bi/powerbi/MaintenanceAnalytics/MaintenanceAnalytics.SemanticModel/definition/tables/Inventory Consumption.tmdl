@@ -1,0 +1,105 @@
+table 'Inventory Consumption'
+	lineageTag: 5fbfa2ee-0225-515c-853d-38bb9062223a
+
+	column part_id
+		dataType: string
+		isHidden
+		lineageTag: 3665473a-04d7-56a4-9ea4-96528dfa23c1
+		summarizeBy: none
+		sourceColumn: part_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column site_id
+		dataType: string
+		isHidden
+		lineageTag: afe05dcb-74ed-53be-b92d-a1cda6efca3b
+		summarizeBy: none
+		sourceColumn: site_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column part_number
+		dataType: string
+		lineageTag: 1578b0e4-dd58-5598-a82c-eefc79654b7e
+		summarizeBy: none
+		sourceColumn: part_number
+
+		annotation SummarizationSetBy = Automatic
+
+	column part_name
+		dataType: string
+		lineageTag: fcc3f092-14a9-56a0-9cdc-e2cf3d7434fd
+		summarizeBy: none
+		sourceColumn: part_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column issue_movement_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: d2375096-8864-5de0-a723-bd048ca5e5a1
+		summarizeBy: none
+		sourceColumn: issue_movement_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column issued_quantity
+		dataType: double
+		isHidden
+		formatString: #,0.00
+		lineageTag: c0da5b55-e7ae-5d63-a650-550bf898970a
+		summarizeBy: none
+		sourceColumn: issued_quantity
+
+		annotation SummarizationSetBy = Automatic
+
+	column returned_quantity
+		dataType: double
+		isHidden
+		formatString: #,0.00
+		lineageTag: 9646f752-4231-58ee-8211-312c6b835540
+		summarizeBy: none
+		sourceColumn: returned_quantity
+
+		annotation SummarizationSetBy = Automatic
+
+	column net_consumed_quantity
+		dataType: double
+		isHidden
+		formatString: #,0.00
+		lineageTag: 82093c36-4b16-5ba8-b2a1-c1c50859c705
+		summarizeBy: none
+		sourceColumn: net_consumed_quantity
+
+		annotation SummarizationSetBy = Automatic
+
+	measure 'Issued Quantity' = SUM('Inventory Consumption'[issued_quantity])
+		formatString: #,0.00
+		description: Tổng số lượng đã issue.
+		lineageTag: ffb4621a-7c41-55d0-85f4-8024530f97f8
+
+	measure 'Returned Quantity' = SUM('Inventory Consumption'[returned_quantity])
+		formatString: #,0.00
+		description: Tổng số lượng đã return.
+		lineageTag: 648b6f9a-ffeb-5bd4-af26-5c13b9029e0f
+
+	measure 'Net Consumed Quantity' = SUM('Inventory Consumption'[net_consumed_quantity])
+		formatString: #,0.00
+		description: Số lượng issue trừ return.
+		lineageTag: 5a941391-7556-5843-8ca7-0d836210b8a9
+
+	partition 'Inventory Consumption' = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database("127.0.0.1:25432", "maintenance_copilot_benchmark_scale", [CreateNavigationProperties=false]),
+				Data = Source{[Schema="analytics_marts", Item="inventory_consumption"]}[Data],
+				SelectedColumns = Table.SelectColumns(Data, {"part_id", "site_id", "part_number", "part_name", "issue_movement_count", "issued_quantity", "returned_quantity", "net_consumed_quantity"})
+			in
+				SelectedColumns
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

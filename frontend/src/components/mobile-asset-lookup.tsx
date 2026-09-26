@@ -2,16 +2,14 @@
 
 import { Bot, CalendarClock, ExternalLink, Loader2, MapPin, TicketPlus, Wrench } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { LifecycleBadge, OperationalBadge, TicketStatusBadge } from "@/components/status-badges";
-import { TicketCreateSheet } from "@/components/ticket-create-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState, RetryButton } from "@/components/ui-states";
-import { useAssetDetailsQuery, useQrLookupQuery, useTicketsQuery } from "@/hooks/use-api-queries";
-import { adaptAssetDetails, adaptAssetProfile, adaptTicket } from "@/lib/adapters";
+import { useQrLookupQuery, useTicketsQuery } from "@/hooks/use-api-queries";
+import { adaptTicket } from "@/lib/adapters";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import type { AssetProfile } from "@/lib/api/schemas";
 import { permissions } from "@/lib/auth";
@@ -31,10 +29,7 @@ export function MobileAssetLookup({ lookupToken }: { lookupToken: string }) {
 
 function MobileAssetLookupContent({ profile }: { profile: AssetProfile }) {
   const auth = useAuth();
-  const details = useAssetDetailsQuery(profile.asset_id, 20);
   const tickets = useTicketsQuery({ asset_id: profile.asset_id, limit: 50 });
-  const [ticketOpen, setTicketOpen] = useState(false);
-  const asset = details.data ? adaptAssetDetails(details.data) : adaptAssetProfile(profile);
   const openTickets = (tickets.data ?? []).filter((ticket) => ticket.status !== "Đã xử lý");
   const canCreateTicket = auth.can(permissions.ticketsCreate) && !["retired", "archived"].includes(profile.lifecycle_status);
 
@@ -55,7 +50,7 @@ function MobileAssetLookupContent({ profile }: { profile: AssetProfile }) {
 
     <div className="grid gap-2 sm:grid-cols-3">
       <Button asChild><Link href={`/assets/${profile.asset_id}`}><ExternalLink aria-hidden="true" />Mở hồ sơ đầy đủ</Link></Button>
-      {canCreateTicket && <Button type="button" variant="outline" onClick={() => setTicketOpen(true)}><TicketPlus aria-hidden="true" />Tạo ticket</Button>}
+      {canCreateTicket && <Button asChild variant="outline"><Link href={`/tickets/new?asset=${encodeURIComponent(profile.asset_id)}`}><TicketPlus aria-hidden="true" />Tạo ticket</Link></Button>}
       {auth.can(permissions.copilotUse) && <Button asChild variant="outline"><Link href={`/copilot?asset=${profile.asset_id}`}><Bot aria-hidden="true" />Mở Copilot</Link></Button>}
     </div>
 
@@ -65,8 +60,6 @@ function MobileAssetLookupContent({ profile }: { profile: AssetProfile }) {
     </section>
 
     <p className="text-xs leading-5 text-muted-foreground">QR hỗ trợ nhận diện và truy cập nhanh. Trạng thái và lịch sử vẫn phải được xác minh trước khi thực hiện bảo trì.</p>
-
-    {canCreateTicket && <TicketCreateSheet asset={asset} latestAnomaly={details.data?.recent_anomalies[0]?.anomaly_reasons} open={ticketOpen} onOpenChange={setTicketOpen} />}
   </div>;
 }
 

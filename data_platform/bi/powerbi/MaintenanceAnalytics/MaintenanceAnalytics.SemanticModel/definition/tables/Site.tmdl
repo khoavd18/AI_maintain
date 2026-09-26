@@ -1,0 +1,57 @@
+table Site
+	lineageTag: f10675fd-df98-5997-b142-38dc4a0a61b2
+
+	column site_id
+		dataType: string
+		isHidden
+		lineageTag: 1f2980bd-9062-57e1-8281-d2c68f3808a3
+		summarizeBy: none
+		sourceColumn: site_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column site_code
+		dataType: string
+		lineageTag: bb4b2b5f-d4d3-5eb5-abd7-f1fdab491d34
+		summarizeBy: none
+		sourceColumn: site_code
+
+		annotation SummarizationSetBy = Automatic
+
+	column site_name
+		dataType: string
+		lineageTag: 85d6335d-a456-5411-b7fb-96495afc72f1
+		summarizeBy: none
+		sourceColumn: site_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column location_type
+		dataType: string
+		lineageTag: fbd1a9ef-2b46-5491-9268-a75626ce21b5
+		summarizeBy: none
+		sourceColumn: location_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_active
+		dataType: boolean
+		lineageTag: 754e6b2a-9df0-5ecb-80a8-7624fe1c9634
+		summarizeBy: none
+		sourceColumn: is_active
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Site = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database("127.0.0.1:25432", "maintenance_copilot_benchmark_scale", [CreateNavigationProperties=false]),
+				Data = Source{[Schema="analytics_warehouse", Item="dim_site"]}[Data],
+				SelectedColumns = Table.SelectColumns(Data, {"site_id", "site_code", "site_name", "location_type", "is_active"})
+			in
+				SelectedColumns
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

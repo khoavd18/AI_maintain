@@ -55,19 +55,15 @@ export function ConversationResponse({
     "llm_unavailable",
     "llm_provider_error",
   ].includes(turn.response.fallback_reason ?? "");
+  const showStatusCallout = !retrievalSucceeded || turn.response.response_mode !== "llm_grounded";
 
   return (
-    <article className="space-y-4" aria-label="Câu hỏi và câu trả lời từ Trợ lý bảo trì">
-      <div className="flex justify-end gap-3">
-        <div className="max-w-[85%] break-words whitespace-pre-wrap rounded-lg bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground">
-          {turn.question}
-        </div>
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700"><UserRound className="size-4" aria-hidden="true" /></span>
-      </div>
+    <article className="space-y-5" aria-label="Câu hỏi và câu trả lời từ Trợ lý bảo trì">
+      <UserMessage question={turn.question} />
       <div className="flex gap-2 sm:gap-3">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Sparkles className="size-4" aria-hidden="true" /></span>
-        <div className="min-w-0 flex-1 space-y-4">
-          <StatusCallout status={retrievalSucceeded ? provenance : status} />
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"><Sparkles className="size-4" aria-hidden="true" /></span>
+        <div className="min-w-0 flex-1 space-y-4 rounded-2xl rounded-tl-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          {showStatusCallout && <StatusCallout status={retrievalSucceeded ? provenance : status} />}
           <div className="flex flex-wrap items-center gap-2" aria-label="Mức độ tài liệu tham khảo">
             {!retrievalSucceeded && turn.response.response_mode !== "llm_grounded" && (
               <Badge variant="outline">{provenance.title}</Badge>
@@ -126,6 +122,48 @@ export function ConversationResponse({
   );
 }
 
+export function PendingConversationResponse({ question }: { question: string }) {
+  return (
+    <article className="space-y-5" aria-label="Câu hỏi đang được Trợ lý bảo trì xử lý">
+      <UserMessage question={question} />
+      <div className="flex gap-2 sm:gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+          <Sparkles className="size-4" aria-hidden="true" />
+        </span>
+        <div
+          role="status"
+          aria-label="Trợ lý đang suy nghĩ"
+          className="flex min-h-12 items-center rounded-2xl rounded-tl-md border border-slate-200 bg-white px-5 shadow-sm"
+        >
+          <span className="sr-only">Trợ lý đang suy nghĩ...</span>
+          <span aria-hidden="true" className="flex items-center gap-1.5">
+            {[-0.3, -0.15, 0].map((delay) => (
+              <span
+                key={delay}
+                className="size-2 animate-bounce rounded-full bg-blue-600 motion-reduce:animate-none"
+                style={{ animationDelay: `${delay}s` }}
+              />
+            ))}
+          </span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function UserMessage({ question }: { question: string }) {
+  return (
+    <div className="flex items-end justify-end gap-2 sm:gap-3">
+      <div className="max-w-[85%] break-words whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-3 text-[0.9375rem] font-medium leading-6 text-primary-foreground shadow-sm">
+        {question}
+      </div>
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700">
+        <UserRound className="size-4" aria-hidden="true" />
+      </span>
+    </div>
+  );
+}
+
 function AnswerSection({
   section,
   summary = false,
@@ -137,7 +175,7 @@ function AnswerSection({
   return (
     <section className={cn("min-w-0", summary && "rounded-lg bg-muted/40 p-4")}>
       <h3 className="text-sm font-semibold">{copilotSectionTitle(section.title)}</h3>
-      <div className="mt-2 space-y-2 break-words text-sm leading-6">
+      <div className="mt-2 space-y-2 break-words text-[0.9375rem] leading-7">
         {section.paragraphs.map((paragraph, index) => (
           <p key={`${paragraph}-${index}`}>{copilotUserText(paragraph)}</p>
         ))}

@@ -22,6 +22,7 @@ from src.database.models import (
     AuditLog,
     InventoryMovement,
     InventoryOperation,
+    WorkOrderPartRequirement,
 )
 from src.database.session import build_engine, get_session_factory
 from src.inventory_management.service import (
@@ -375,6 +376,144 @@ def test_requirement_reservation_issue_consumption_and_return_are_distinct(
     assert summary["net_consumed_quantity"] == Decimal("2.000")
     assert summary["total_returned_quantity"] == Decimal("1.000")
     assert summary["has_unresolved_issued_stock"] is False
+
+
+@pytest.mark.postgres
+def test_full_consumption_marks_requirement_fulfilled(
+    inventory_context: dict[str, object],
+) -> None:
+    service = _service(inventory_context)
+    storekeeper = _user(inventory_context, "storekeeper")
+    technician = _user(inventory_context, "technician")
+    requirement = dict(inventory_context["requirement"])
+    issue = service.issue_stock(
+        UUID(inventory_context["work_order"]["id"]),
+        {
+            "part_id": inventory_context["part"]["id"],
+            "stock_location_id": inventory_context["main_location"]["id"],
+            "quantity": Decimal("6"),
+            "requirement_id": requirement["id"],
+            "reservation_id": None,
+            "issued_to_user_id": technician.id,
+            "issued_at": None,
+            "reason": "Xuất đủ vật tư để kiểm tra trạng thái hoàn tất",
+        },
+        idempotency_key="test-issue-full-consumption",
+        actor=storekeeper,
+        audit_context=_audit(storekeeper, "issue-full-consumption"),
+    )
+
+    service.consume_issue(
+        UUID(issue["id"]),
+        {
+            "quantity": Decimal("6"),
+            "consumed_at": None,
+            "note": "Đã sử dụng toàn bộ vật tư được xuất.",
+        },
+        idempotency_key="test-consume-full-requirement",
+        actor=technician,
+        audit_context=_audit(technician, "consume-full-requirement"),
+    )
+
+    session_factory = inventory_context["session_factory"]
+    with session_factory() as session:
+        persisted = session.get(WorkOrderPartRequirement, UUID(requirement["id"]))
+        assert persisted is not None
+        assert persisted.status == "fulfilled"
+
+
+@pytest.mark.postgres
+def test_work_order_parts_derives_historical_requirement_status(
+    inventory_context: dict[str, object],
+) -> None:
+    service = _service(inventory_context)
+    storekeeper = _user(inventory_context, "storekeeper")
+    technician = _user(inventory_context, "technician")
+    requirement = dict(inventory_context["requirement"])
+    issue = service.issue_stock(
+        UUID(inventory_context["work_order"]["id"]),
+        {
+            "part_id": inventory_context["part"]["id"],
+            "stock_location_id": inventory_context["main_location"]["id"],
+            "quantity": Decimal("6"),
+            "requirement_id": requirement["id"],
+            "reservation_id": None,
+            "issued_to_user_id": technician.id,
+            "issued_at": None,
+            "reason": "Xuất vật tư để kiểm tra trạng thái lịch sử.",
+        },
+        idempotency_key="test-issue-historical-status",
+        actor=storekeeper,
+        audit_context=_audit(storekeeper, "issue-historical-status"),
+    )
+    service.consume_issue(
+        UUID(issue["id"]),
+        {
+            "quantity": Decimal("6"),
+            "consumed_at": None,
+            "note": "Đã dùng toàn bộ vật tư.",
+        },
+        idempotency_key="test-consume-historical-status",
+        actor=technician,
+        audit_context=_audit(technician, "consume-historical-status"),
+    )
+
+    session_factory = inventory_context["session_factory"]
+    with session_factory() as session, session.begin():
+        persisted = session.get(WorkOrderPartRequirement, UUID(requirement["id"]))
+        assert persisted is not None
+        persisted.status = "issued"
+
+    summary = service.work_order_parts(
+        UUID(inventory_context["work_order"]["id"]), actor=technician
+    )
+    assert summary["requirements"][0]["status"] == "fulfilled"
+    assert summary["requirements"][0]["status_display"] == "Đã sử dụng đủ"
+
+
+@pytest.mark.postgres
+def test_full_return_marks_requirement_planned(
+    inventory_context: dict[str, object],
+) -> None:
+    service = _service(inventory_context)
+    storekeeper = _user(inventory_context, "storekeeper")
+    technician = _user(inventory_context, "technician")
+    requirement = dict(inventory_context["requirement"])
+    issue = service.issue_stock(
+        UUID(inventory_context["work_order"]["id"]),
+        {
+            "part_id": inventory_context["part"]["id"],
+            "stock_location_id": inventory_context["main_location"]["id"],
+            "quantity": Decimal("6"),
+            "requirement_id": requirement["id"],
+            "reservation_id": None,
+            "issued_to_user_id": technician.id,
+            "issued_at": None,
+            "reason": "Xuất vật tư để kiểm tra hoàn trả toàn bộ",
+        },
+        idempotency_key="test-issue-full-return",
+        actor=storekeeper,
+        audit_context=_audit(storekeeper, "issue-full-return"),
+    )
+
+    service.return_issue(
+        UUID(issue["id"]),
+        {
+            "stock_location_id": inventory_context["main_location"]["id"],
+            "quantity": Decimal("6"),
+            "returned_at": None,
+            "reason": "Hoàn trả toàn bộ vật tư chưa sử dụng.",
+        },
+        idempotency_key="test-return-full-requirement",
+        actor=storekeeper,
+        audit_context=_audit(storekeeper, "return-full-requirement"),
+    )
+
+    session_factory = inventory_context["session_factory"]
+    with session_factory() as session:
+        persisted = session.get(WorkOrderPartRequirement, UUID(requirement["id"]))
+        assert persisted is not None
+        assert persisted.status == "planned"
 
 
 @pytest.mark.postgres

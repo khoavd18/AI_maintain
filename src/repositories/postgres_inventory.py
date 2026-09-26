@@ -825,6 +825,7 @@ class PostgresInventoryRepository:
                         occurred_at=values["occurred_at"],
                     )
                 )
+                session.flush()
                 _sync_requirement_status(session, requirement, audit_context.actor_user_id)
                 _complete_operation(operation, "stock_reservation", reservation.id)
                 session.flush()
@@ -941,6 +942,7 @@ class PostgresInventoryRepository:
                         occurred_at=_utc_now(),
                     )
                 )
+                session.flush()
                 requirement = session.get(
                     WorkOrderPartRequirement, reservation.requirement_id
                 )
@@ -1125,6 +1127,7 @@ class PostgresInventoryRepository:
                         ),
                     ]
                 )
+                session.flush()
                 _sync_requirement_status(session, requirement, audit_context.actor_user_id)
                 _complete_operation(operation, "stock_reservation", replacement.id)
                 session.flush()
@@ -1327,6 +1330,7 @@ class PostgresInventoryRepository:
                         )
                     else:
                         reservation.status = ReservationStatus.PARTIALLY_ISSUED
+                session.flush()
                 if requirement is not None:
                     _sync_requirement_status(
                         session, requirement, audit_context.actor_user_id
@@ -1428,6 +1432,10 @@ class PostgresInventoryRepository:
                     note=values.get("note"),
                 )
                 session.add(consumption)
+                # Sessions deliberately disable autoflush. Persist the new
+                # consumption before deriving the requirement lifecycle state
+                # from aggregate issue totals.
+                session.flush()
                 if issue.requirement_id:
                     requirement = session.get(
                         WorkOrderPartRequirement, issue.requirement_id
@@ -1550,6 +1558,10 @@ class PostgresInventoryRepository:
                     movement_id=movement.id,
                 )
                 session.add(returned)
+                # Sessions deliberately disable autoflush. Persist the new
+                # return before deriving the requirement lifecycle state from
+                # aggregate issue totals.
+                session.flush()
                 if issue.requirement_id:
                     requirement = session.get(
                         WorkOrderPartRequirement, issue.requirement_id
@@ -1922,6 +1934,7 @@ def _requirement_record(
     planned = _decimal(entity.planned_quantity)
     covered = totals["reserved"] + totals["outstanding_issued"] + totals["consumed"]
     shortage = max(planned - covered, ZERO)
+    status = _derived_requirement_status(entity, totals)
     return StoredRecord(
         {
             "id": str(entity.id),
@@ -1937,10 +1950,8 @@ def _requirement_record(
             "source_stock_location_id": str(location.id),
             "source_stock_location_code": location.code,
             "source_stock_location_name": location.name,
-            "status": entity.status,
-            "status_display": REQUIREMENT_STATUS_LABELS[
-                RequirementStatus(entity.status)
-            ],
+            "status": status.value,
+            "status_display": REQUIREMENT_STATUS_LABELS[status],
             "notes": entity.notes,
             "reserved_quantity": totals["reserved"],
             "issued_quantity": totals["issued"],
@@ -2465,27 +2476,32 @@ def _sync_requirement_status(
     requirement: WorkOrderPartRequirement,
     actor_user_id: UUID,
 ) -> None:
-    if requirement.status == RequirementStatus.CANCELLED:
-        return
     totals = _requirement_totals(session, requirement.id)
+    requirement.status = _derived_requirement_status(requirement, totals).value
+    requirement.updated_by_user_id = actor_user_id
+
+
+def _derived_requirement_status(
+    requirement: WorkOrderPartRequirement,
+    totals: dict[str, Decimal],
+) -> RequirementStatus:
+    if requirement.status == RequirementStatus.CANCELLED:
+        return RequirementStatus.CANCELLED
     planned = _decimal(requirement.planned_quantity)
     issued_coverage = totals["outstanding_issued"] + totals["consumed"]
     if totals["consumed"] >= planned:
-        target = RequirementStatus.FULFILLED
+        return RequirementStatus.FULFILLED
     elif totals["consumed"] > ZERO:
-        target = RequirementStatus.PARTIALLY_CONSUMED
+        return RequirementStatus.PARTIALLY_CONSUMED
     elif issued_coverage >= planned:
-        target = RequirementStatus.ISSUED
+        return RequirementStatus.ISSUED
     elif issued_coverage > ZERO:
-        target = RequirementStatus.PARTIALLY_ISSUED
+        return RequirementStatus.PARTIALLY_ISSUED
     elif totals["reserved"] >= planned:
-        target = RequirementStatus.RESERVED
+        return RequirementStatus.RESERVED
     elif totals["reserved"] > ZERO:
-        target = RequirementStatus.PARTIALLY_RESERVED
-    else:
-        target = RequirementStatus.PLANNED
-    requirement.status = target.value
-    requirement.updated_by_user_id = actor_user_id
+        return RequirementStatus.PARTIALLY_RESERVED
+    return RequirementStatus.PLANNED
 
 
 def _reservation_quantities(

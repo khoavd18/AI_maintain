@@ -79,6 +79,27 @@ def test_prompt_directs_answer_when_current_evidence_is_adequate() -> None:
     assert "escalation_required là cờ chuyển cấp độc lập" in system_prompt
 
 
+def test_prompt_distinguishes_caution_and_uncertainty_from_missing_facts() -> None:
+    prompt = build_grounded_prompt(
+        question="Tiếng xì sau xả đá có phải hư không?",
+        asset_context=None,
+        retrievals=[_evidence()],
+        max_context_chars=12_000,
+    )
+
+    system_prompt = prompt.system_prompt.casefold()
+    assert "ngôn ngữ thận trọng" in system_prompt
+    assert "thiếu xác nhận tại hiện trường" in system_prompt
+    assert "không thể chẩn đoán toàn bộ thiết bị" in system_prompt
+    assert "không chứa dữ kiện cần thiết" in system_prompt
+    assert "hành vi đó có thể bình thường" in system_prompt
+    assert "ranh giới chuyển cho service" in system_prompt
+    assert "chỉ liên quan chủ đề" in system_prompt
+    assert "không áp dụng cho model hiện tại" in system_prompt
+    assert "thông số số học/an toàn bắt buộc" in system_prompt
+    assert "không suy đoán chẩn đoán, cảnh báo, giá trị số, trình tự" in system_prompt
+
+
 def test_absent_required_evidence_still_remains_fail_closed() -> None:
     provider = _SequenceProvider(_insufficient_answer())
 

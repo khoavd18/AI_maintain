@@ -1,0 +1,120 @@
+table 'Site Reliability'
+	lineageTag: addc9eaf-2213-5c28-97b9-2e25885ebff0
+
+	column site_id
+		dataType: string
+		isHidden
+		lineageTag: d197661b-f1fc-5b35-a00a-93f235255d22
+		summarizeBy: none
+		sourceColumn: site_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column work_order_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: f9ba7bd1-bf69-529a-826c-f1b674e93068
+		summarizeBy: none
+		sourceColumn: work_order_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column completed_work_order_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: e66eb517-85be-56a6-9cb4-ffd239cdf88f
+		summarizeBy: none
+		sourceColumn: completed_work_order_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column cancelled_work_order_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: 86777211-b2e0-59f9-b668-29bcc39db3cf
+		summarizeBy: none
+		sourceColumn: cancelled_work_order_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column average_repair_hours
+		dataType: double
+		isHidden
+		formatString: 0.00
+		lineageTag: baffe9a0-a779-5b60-9144-8c578467f95b
+		summarizeBy: none
+		sourceColumn: average_repair_hours
+
+		annotation SummarizationSetBy = Automatic
+
+	column status_event_count
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: 89c588bf-d76d-5c5e-a683-422bb1d620ac
+		summarizeBy: none
+		sourceColumn: status_event_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column observed_status_seconds
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: 7bcfa0d2-2b20-5612-8eb6-6d3b0161e62a
+		summarizeBy: none
+		sourceColumn: observed_status_seconds
+
+		annotation SummarizationSetBy = Automatic
+
+	column on_hold_seconds
+		dataType: int64
+		isHidden
+		formatString: #,0
+		lineageTag: 52cfc7cf-7d75-5c68-a4f1-a11fdd833359
+		summarizeBy: none
+		sourceColumn: on_hold_seconds
+
+		annotation SummarizationSetBy = Automatic
+
+	measure 'Reliability Work Orders' = SUM('Site Reliability'[work_order_count])
+		formatString: #,0
+		description: Tổng work order trong mart reliability.
+		lineageTag: 43f853d0-674d-5dd6-9d1c-22b251235f21
+
+	measure 'Site Completed Work Orders' = SUM('Site Reliability'[completed_work_order_count])
+		formatString: #,0
+		description: Tổng work order hoàn thành trong mart reliability.
+		lineageTag: 199446d1-0e48-5918-8a34-e9f0c37272a1
+
+	measure 'Site Completion Rate' = DIVIDE([Site Completed Work Orders], [Reliability Work Orders])
+		formatString: 0.0%
+		description: Tỷ lệ hoàn thành tại các site được lọc.
+		lineageTag: 01391584-4b6c-5c56-aae9-fb1c8cf44c07
+
+	measure 'Site Average Repair Hours' = AVERAGE('Site Reliability'[average_repair_hours])
+		formatString: 0.00
+		description: Trung bình repair hours giữa các site có dữ liệu.
+		lineageTag: faabbfb9-4deb-5631-9ce8-8e48cfeb650a
+
+	measure 'On-Hold Hours' = DIVIDE(SUM('Site Reliability'[on_hold_seconds]), 3600)
+		formatString: #,0.0
+		description: Tổng thời gian on-hold quy đổi sang giờ.
+		lineageTag: cf69411e-22ad-57e7-bf2c-e867df27ca67
+
+	partition 'Site Reliability' = m
+		mode: import
+		source =
+			let
+				Source = PostgreSQL.Database("127.0.0.1:25432", "maintenance_copilot_benchmark_scale", [CreateNavigationProperties=false]),
+				Data = Source{[Schema="analytics_marts", Item="site_reliability"]}[Data],
+				SelectedColumns = Table.SelectColumns(Data, {"site_id", "work_order_count", "completed_work_order_count", "cancelled_work_order_count", "average_repair_hours", "status_event_count", "observed_status_seconds", "on_hold_seconds"})
+			in
+				SelectedColumns
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

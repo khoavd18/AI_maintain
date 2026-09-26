@@ -30,6 +30,10 @@ data_platform/dbt/**/logs/
 data_platform/dbt/**/dbt_packages/
 .user.yml
 
+# Power BI Desktop local cache and credentials/settings; PBIP source stays tracked.
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
+
 reports/*
 sop_docs/*
 

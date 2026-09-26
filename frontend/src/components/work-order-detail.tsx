@@ -30,6 +30,7 @@ import {
   useWorkOrderAttachmentsQuery,
   useWorkOrderQuery,
 } from "@/hooks/use-api-queries";
+import { useWorkOrderPartsQuery } from "@/hooks/use-inventory";
 import { maintenanceApi } from "@/lib/api/maintenance-endpoints";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import type { WorkOrder, WorkOrderChecklistUpdateRequest } from "@/lib/api/maintenance-schemas";
@@ -52,7 +53,7 @@ export function WorkOrderDetail({ workOrderId }: { workOrderId: string }) {
   return (
     <div className="space-y-5">
       <WorkOrderSummary workOrder={item} />
-      <WorkOrderProgress status={item.status} />
+      <WorkOrderProgress workOrderId={item.id} status={item.status} />
       <WorkOrderActions workOrder={item} technicians={options.data.technicians} onRefresh={() => void workOrder.refetch()} />
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
         <div className="space-y-5">
@@ -70,13 +71,32 @@ export function WorkOrderDetail({ workOrderId }: { workOrderId: string }) {
   );
 }
 
-function WorkOrderProgress({ status }: { status: WorkOrder["status"] }) {
+function WorkOrderProgress({
+  workOrderId,
+  status,
+}: {
+  workOrderId: string;
+  status: WorkOrder["status"];
+}) {
+  const auth = useAuth();
+  const canReadParts = auth.can(permissions.workOrderPartsRead);
+  const parts = useWorkOrderPartsQuery(workOrderId, canReadParts);
   const steps = ["Chuẩn bị", "Thực hiện", "Phụ tùng", "Hoàn thành", "Xác nhận"];
-  const current = status === "verified" ? steps.length : status === "completed" ? 4 : status === "in_progress" || status === "on_hold" ? 1 : 0;
+  const hasPartRequirements = (parts.data?.requirements.length ?? 0) > 0;
+  const partsSettled = hasPartRequirements &&
+    parts.data?.open_shortage_count === 0 &&
+    parts.data.has_unresolved_issued_stock === false;
+  const completedSteps = [
+    status !== "planned" && status !== "cancelled",
+    ["in_progress", "on_hold", "completed", "verified"].includes(status),
+    partsSettled,
+    ["completed", "verified"].includes(status),
+    status === "verified",
+  ];
   return (
     <section aria-label="Tiến trình lệnh công việc" className="overflow-x-auto rounded-lg border bg-white p-4">
       <ol className="grid min-w-[620px] grid-cols-5 gap-2">
-        {steps.map((step, index) => <li key={step} className={cn("border-t-2 pt-2 text-xs font-medium", index <= current ? "border-primary text-foreground" : "border-border text-muted-foreground")}><span className="mr-1 tabular-nums">{index + 1}.</span>{step}</li>)}
+        {steps.map((step, index) => <li key={step} className={cn("border-t-2 pt-2 text-xs font-medium", completedSteps[index] ? "border-primary text-foreground" : "border-border text-muted-foreground")}><span className="mr-1 tabular-nums">{index + 1}.</span>{step}{index === 2 && hasPartRequirements && partsSettled && <span className="ml-1 text-primary">✓</span>}</li>)}
       </ol>
     </section>
   );
@@ -191,15 +211,16 @@ function ChecklistExecution({ workOrder }: { workOrder: WorkOrder }) {
 
 function CompletionForm({ workOrder }: { workOrder: WorkOrder }) {
   const mutation = useCompleteWorkOrder(workOrder.id);
-  const [form, setForm] = useState({ maintenance_date: todayIso(), inspection_result: "", actions_taken: "", parts_replaced: "", technician_note: "", maintenance_result: "resolved" as "resolved" | "partially_resolved" | "monitoring_required" | "vendor_required", follow_up_required: false, completion_summary: "", safety_notes: "", labor_minutes: "60" });
+  const [form, setForm] = useState({ maintenance_date: todayIso(), inspection_result: "", actions_taken: "", parts_replaced: "", technician_note: "", maintenance_result: "resolved" as "resolved" | "partially_resolved" | "monitoring_required" | "vendor_required", completion_summary: "", safety_notes: "", labor_minutes: "60" });
   const [clientError, setClientError] = useState<string | null>(null);
+  const followUpRequired = form.maintenance_result !== "resolved";
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const currentResponses = workOrder.checklist.filter((item) => item.result_status !== "pending").map((item) => ({ item_id: item.id, result_status: item.result_status as "completed" | "pass" | "fail" | "not_applicable", boolean_value: item.boolean_value, numeric_value: item.numeric_value, text_value: item.text_value, note: item.note }));
     const validation = checklistValidationMessage(workOrder.checklist, currentResponses);
     if (validation) { setClientError(validation); return; }
     setClientError(null);
-    try { await mutation.mutateAsync({ expected_version: workOrder.version, maintenance_date: form.maintenance_date, inspection_result: form.inspection_result.trim(), actions_taken: form.actions_taken.trim(), parts_replaced: form.parts_replaced.trim() || null, technician_note: form.technician_note.trim(), maintenance_result: form.maintenance_result, follow_up_required: form.follow_up_required, completion_summary: form.completion_summary.trim(), safety_notes: form.safety_notes.trim() || null, labor_minutes: Number(form.labor_minutes) }); } catch { /* Render safe error. */ }
+    try { await mutation.mutateAsync({ expected_version: workOrder.version, maintenance_date: form.maintenance_date, inspection_result: form.inspection_result.trim(), actions_taken: form.actions_taken.trim(), parts_replaced: form.parts_replaced.trim() || null, technician_note: form.technician_note.trim(), maintenance_result: form.maintenance_result, follow_up_required: followUpRequired, completion_summary: form.completion_summary.trim(), safety_notes: form.safety_notes.trim() || null, labor_minutes: Number(form.labor_minutes) }); } catch { /* Render safe error. */ }
   }
   if (mutation.isSuccess) return <section className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-900"><div className="flex gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" /><div><h2 className="font-semibold">Đã gửi kết quả hoàn thành</h2><p className="mt-1 text-sm">Công việc đang chờ một người có thẩm quyền khác xác nhận kỹ thuật.</p><p className="mt-2 text-xs">Chỉ số phân tích sẽ được cập nhật trong đợt tiếp theo.</p></div></div></section>;
   return (
@@ -208,7 +229,7 @@ function CompletionForm({ workOrder }: { workOrder: WorkOrder }) {
       <p className="mt-1 text-xs text-muted-foreground">Sau khi gửi, công việc chờ một người khác xác nhận. Ngày bảo trì thiết bị chỉ cập nhật sau bước xác nhận.</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <Field id="completion-date" label="Ngày bảo trì"><Input id="completion-date" type="date" required max={todayIso()} value={form.maintenance_date} onChange={(event) => setForm({ ...form, maintenance_date: event.target.value })} /></Field>
-        <Field id="completion-result" label="Kết quả"><Select value={form.maintenance_result} onValueChange={(value) => setForm({ ...form, maintenance_result: value as typeof form.maintenance_result })}><SelectTrigger id="completion-result" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="resolved">Đã xử lý</SelectItem><SelectItem value="partially_resolved">Xử lý một phần</SelectItem><SelectItem value="monitoring_required">Cần theo dõi</SelectItem><SelectItem value="vendor_required">Cần chuyên gia hỗ trợ</SelectItem></SelectContent></Select></Field>
+        <Field id="completion-result" label="Kết quả"><Select value={form.maintenance_result} onValueChange={(value) => setForm({ ...form, maintenance_result: value as typeof form.maintenance_result })}><SelectTrigger id="completion-result" className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="resolved">Đã xử lý</SelectItem><SelectItem value="partially_resolved">Xử lý một phần</SelectItem><SelectItem value="monitoring_required">Cần theo dõi</SelectItem><SelectItem value="vendor_required">Cần chuyên gia hỗ trợ</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-muted-foreground">Theo dõi sau hoàn thành: <span className="font-medium text-foreground">{followUpRequired ? "Có" : "Không"}</span> (được xác định theo kết quả).</p></Field>
         <Field id="completion-inspection" label="Kết quả kiểm tra"><Textarea id="completion-inspection" required value={form.inspection_result} onChange={(event) => setForm({ ...form, inspection_result: event.target.value })} /></Field>
         <Field id="completion-actions" label="Hành động đã thực hiện"><Textarea id="completion-actions" required value={form.actions_taken} onChange={(event) => setForm({ ...form, actions_taken: event.target.value })} /></Field>
         <Field id="completion-note" label="Ghi chú kỹ thuật viên"><Textarea id="completion-note" required value={form.technician_note} onChange={(event) => setForm({ ...form, technician_note: event.target.value })} /></Field>
@@ -220,7 +241,6 @@ function CompletionForm({ workOrder }: { workOrder: WorkOrder }) {
         <summary className="w-fit cursor-pointer rounded-md text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Thông tin bổ sung</summary>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field id="completion-parts" label="Vật tư đã thay (ghi nhận lịch sử)"><Textarea id="completion-parts" value={form.parts_replaced} onChange={(event) => setForm({ ...form, parts_replaced: event.target.value })} /></Field>
-          <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" checked={form.follow_up_required} onChange={(event) => setForm({ ...form, follow_up_required: event.target.checked })} className="size-4" />Cần theo dõi thêm</label>
         </div>
       </details>
       {(clientError || mutation.error) && <p role="alert" className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">{clientError ?? getApiErrorMessage(mutation.error)}</p>}
